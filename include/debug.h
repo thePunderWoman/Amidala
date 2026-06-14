@@ -15,3 +15,7 @@
 // #define USE_VOLUME_WHEEL_DEBUG
 // #define USE_SERVO_DEBUG
 // #define USE_VERBOSE_SERVO_DEBUG
+
+// Uncomment to enter hall-sensor test mode at boot.
+// Skips all normal init and loops forever printing HIGH/LOW transitions on DOME_HALL_PIN.
+// #define HALL_SENSOR_TEST

@@ -8,35 +8,6 @@
 
 AmidalaController amidala;
 
-// Temporary SPI/SD diagnostic.  Sends CMD0 directly at 400 kHz and prints
-// the raw response so we can tell whether SPI signals are reaching the card.
-// 0x01 = card responded (idle)  |  0xFF = no response (wiring/power issue)
-// Remove once SD card connectivity is confirmed.
-static void spiSdDiag() {
-    SPI.beginTransaction(SPISettings(400000, MSBFIRST, SPI_MODE0));
-    // 80-clock wake-up with CS deasserted (SD spec requirement)
-    digitalWrite(SD_CS_PIN, HIGH);
-    for (int i = 0; i < 10; i++) SPI.transfer(0xFF);
-    // CMD0 GO_IDLE_STATE
-    digitalWrite(SD_CS_PIN, LOW);
-    SPI.transfer(0x40);
-    SPI.transfer(0x00); SPI.transfer(0x00);
-    SPI.transfer(0x00); SPI.transfer(0x00);
-    SPI.transfer(0x95);  // CRC7 for CMD0 + stop bit
-    // Poll up to 8 bytes for a non-0xFF response
-    uint8_t resp = 0xFF;
-    for (int i = 0; i < 8 && resp == 0xFF; i++) {
-        resp = SPI.transfer(0xFF);
-    }
-    digitalWrite(SD_CS_PIN, HIGH);
-    SPI.endTransaction();
-    CONSOLE_SERIAL.printf("[SD diag] CMD0 raw response: 0x%02X  %s\n",
-        resp,
-        resp == 0x01 ? "-> OK, card in idle state" :
-        resp == 0xFF ? "-> no response — check SPI wiring / SD power" :
-                       "-> unexpected value");
-}
-
 void setup() {
   REELTWO_READY();
 
@@ -61,23 +32,44 @@ void setup() {
   // Wait up to 3 s for USB-CDC to connect so boot log messages (including SD
   // init warnings) are visible on the monitor before SD.begin() is called.
   { uint32_t t = millis(); while (!CONSOLE_SERIAL && millis() - t < 3000) delay(10); }
+
+#ifdef HALL_SENSOR_TEST
+  pinMode(DOME_HALL_PIN, INPUT_PULLUP);
+  CONSOLE_SERIAL.println("Hall sensor test — GPIO " + String(DOME_HALL_PIN) + " (move magnet past sensor)");
+  for (int lastState = -1;;) {
+    int state = digitalRead(DOME_HALL_PIN);
+    if (state != lastState) {
+      CONSOLE_SERIAL.println(state == LOW ? "LOW  <- triggered" : "HIGH <- idle");
+      lastState = state;
+    }
+  }
+#endif
+
   // XBee serial init omitted — XBee 3 uses SPI (see PR esp32-2).
 #ifdef VMUSIC_SERIAL
   VMUSIC_SERIAL.begin(9600);
 #endif
 #ifdef DRIVE_SERIAL
-  DRIVE_SERIAL.begin(DRIVE_BAUD_RATE);
+  DRIVE_SERIAL.begin(DRIVE_BAUD_RATE, SERIAL_8N1, SERIAL0_RX_PIN, SERIAL0_TX_PIN);
 #elif defined(DOME_DRIVE_SERIAL)
-  DOME_DRIVE_SERIAL.begin(DRIVE_BAUD_RATE);
+  DOME_DRIVE_SERIAL.begin(DRIVE_BAUD_RATE, SERIAL_8N1, SERIAL0_RX_PIN, SERIAL0_TX_PIN);
 #elif defined(RDH_SERIAL)
-  RDH_SERIAL.begin(RDH_BAUD_RATE);
+  RDH_SERIAL.begin(RDH_BAUD_RATE, SERIAL_8N1, SERIAL0_RX_PIN, SERIAL0_TX_PIN);
 #else
-  SERIAL.begin(115200);
+  SERIAL.begin(115200, SERIAL_8N1, SERIAL0_RX_PIN, SERIAL0_TX_PIN);
+#endif
+#if defined(ROBOCLAW_SERIAL) && DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+  // ROBOCLAW_SERIAL (Serial1) is separate from DRIVE_SERIAL (Serial0) and must
+  // be initialized independently. Explicit pins required: ESP32-S3 UART1 has no
+  // hardware-fixed pins and will not default to GPIO17/18 without them.
+  ROBOCLAW_SERIAL.begin(ROBOCLAW_BAUD_RATE, SERIAL_8N1, ROBOCLAW_RX_PIN, ROBOCLAW_TX_PIN);
 #endif
 
-  SetupEvent::ready();
+  // ESP32 EEPROM emulation requires an explicit begin() before any read/write.
+  // Size covers highest used offset: DOME_ROBOCLAW_EEPROM_ADDR (0x200) + 8 bytes.
+  EEPROM.begin(1024);
 
-  spiSdDiag();
+  SetupEvent::ready();
 }
 
 void loop() { AnimatedEvent::process(); }

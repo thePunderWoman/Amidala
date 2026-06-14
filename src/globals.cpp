@@ -8,13 +8,16 @@
 #include "ServoEasing.h"
 #include "controller.h"
 
-// Group ID is used by the ServoSequencer and some ServoDispatch functions to
-// identify a group of servos.
+// Servo index assignments:
+//   0 (SERVO1_PIN / GPIO3) — Drive Right PWM → Roboteq
+//   1 (SERVO2_PIN / GPIO4) — Drive Left  PWM → Roboteq
+//   2 (SERVO3_PIN / GPIO5) — Throttle / speed-control PWM → Roboteq script
 //
 //   Pin  Group ID,      Min,  Max
 const ServoSettings servoSettings[] = {
-    {SERVO1_PIN, 1000, 2000, 0}, {SERVO2_PIN, 1000, 2000, 0},
-    {SERVO3_PIN, 1000, 2000, 0}, {SERVO4_PIN, 1000, 2000, 0}};
+    {SERVO1_PIN, 1000, 2000, 0},
+    {SERVO2_PIN, 1000, 2000, 0},
+    {SERVO3_PIN, 1000, 2000, 0}};
 
 // The concrete instance lives here — the only TU that includes
 // ServoDispatchDirect.h (and its ISR handlers via ServoDispatchPrivate.h).
@@ -24,13 +27,3 @@ static ServoDispatchDirect<SizeOfArray(servoSettings)> _servoImpl(servoSettings)
 // `extern ServoDispatch& servoDispatch;` so they never need to include
 // ServoDispatchDirect.h and trigger duplicate ISR-definition errors.
 ServoDispatch& servoDispatch = _servoImpl;
-
-// Experimental camera pan/tilt servo PD controllers.
-// Pan and tilt zero positions and +/- angular range, in degrees:
-#define PANZERO  90
-#define PANRANGE 60
-#define TILTZERO 70
-#define TILTRANGE 40
-
-ServoPD panservo(400, 200, PANZERO, PANRANGE);
-ServoPD tiltservo(300, 100, TILTZERO, TILTRANGE);

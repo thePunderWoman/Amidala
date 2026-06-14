@@ -1,12 +1,11 @@
 #include "controller.h"
 #include "dome_position_math.h"
+#include "xbee_spi.h"
 
 // Hardware globals defined in src/globals.cpp.
 // ServoDispatch& avoids including ServoDispatchDirect.h here, which would
 // pull in ServoDispatchPrivate.h and duplicate ISR definitions.
 extern ServoDispatch& servoDispatch;
-extern ServoPD panservo;
-extern ServoPD tiltservo;
 
 AmidalaController::AmidalaController()
     : fConsole(),
@@ -21,9 +20,9 @@ AmidalaController::AmidalaController()
 #if DRIVE_SYSTEM == DRIVE_SYSTEM_SABER
       fTankDrive(128, DRIVE_SERIAL, fDriveStick),
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_PWM
-      fTankDrive(servoDispatch, 1, 0, 4, fDriveStick),
+      fTankDrive(servoDispatch, 1, 0, 2, fDriveStick),
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM
-      fTankDrive(servoDispatch, 1, 0, 4, fDriveStick),
+      fTankDrive(servoDispatch, 1, 0, 2, fDriveStick),
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_SERIAL
       fTankDrive(DRIVE_SERIAL, fDriveStick),
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM_SERIAL
@@ -94,7 +93,7 @@ void AmidalaController::setup() {
     fConsole.println(F("Auto Correct Gestures Enabled"));
 
 #ifdef SERIAL
-  SERIAL.begin(params.serialbaud);
+  SERIAL.begin(params.serialbaud, SERIAL_8N1, SERIAL0_RX_PIN, SERIAL0_TX_PIN);
   sendSerialString(params.serialinit);
   fAudio.init(this);
 #endif
@@ -173,9 +172,8 @@ void AmidalaController::setup() {
 #endif
 #endif
 
-  // Servo GPIO numbers are non-sequential, so use a lookup table.
   static const uint8_t kServoPins[] = {
-      SERVO1_PIN, SERVO2_PIN, SERVO3_PIN, SERVO4_PIN,
+      SERVO1_PIN, SERVO2_PIN, SERVO3_PIN,
   };
   for (unsigned i = 0; i < sizeof(kServoPins) / sizeof(kServoPins[0]); i++) {
     uint16_t minpulse =
@@ -186,11 +184,7 @@ void AmidalaController::setup() {
     float neutral_percent = float(params.S[i].n) / 180.0f;
     bool reversed = params.S[i].r;
 
-    if (i == 3) {
-      if (!params.domeflip) {
-        reversed = !reversed;
-      }
-    } else if (reversed) {
+    if (reversed) {
       uint16_t temp = maxpulse;
       maxpulse = minpulse;
       minpulse = temp;
@@ -262,7 +256,10 @@ void AmidalaController::animate() {
     remote[0]->type = remote[0]->kRC;
     remote[1]->type = remote[1]->kRC;
   }
-  if (checkRCMode() && remote[0]->type == remote[0]->kRC) {
+  xbeeSPIReceiveAll(remote, sizeof(remote) / sizeof(remote[0]));
+
+  if (checkRCMode() && remote[0]->type == remote[0]->kRC &&
+      digitalRead(XBEE_ATTN_PIN) == HIGH) {
     if (fPPMDecoder.decode()) {
       remote[0]->x = fPPMDecoder.channel(0, 0, 1024, 512);
       remote[0]->y = fPPMDecoder.channel(1, 0, 1024, 512);

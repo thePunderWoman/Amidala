@@ -5,6 +5,7 @@
 
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
 
+#include "debug.h"
 #include "dome_drive_roboclaw.h"
 #include "dome_position_math.h"
 #include "ReelTwo.h"   // DEBUG_PRINT / DEBUG_PRINTLN macros

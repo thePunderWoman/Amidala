@@ -11,11 +11,11 @@
 #pragma once
 
 // ---- Servo output pins (LEDC PWM via ServoDispatchESP32) --------------------
-// 4 channels on this PCB (v1.1).
+// 3 active channels: right drive, left drive, throttle. SERVO4 defined but unassigned.
 
-#define SERVO1_PIN  3
-#define SERVO2_PIN  4
-#define SERVO3_PIN  5
+#define SERVO1_PIN  3   // Drive Right
+#define SERVO2_PIN  4   // Drive Left
+#define SERVO3_PIN  5   // Throttle / speed-control
 #define SERVO4_PIN  6
 
 // ---- Digital output pins ----------------------------------------------------
@@ -83,6 +83,13 @@
 // Serial  = USB-CDC console  (ARDUINO_USB_CDC_ON_BOOT=1)
 // Serial0 = UART0 GPIO43/44  WCB / body controller out  (was Serial3 on Mega)
 // Serial1 = UART1 GPIO17/18  RoboClaw dome drive         (see drive_config.h)
+//
+// Always pass explicit pin args to Serial0/Serial1.begin(): on ESP32-S3 the
+// GPIO matrix routes UARTs to whatever pins you specify, and board-variant
+// defaults may not match the Amidala PCB wiring.
+
+#define SERIAL0_RX_PIN  44   // UART0 RX — WCB / body controller out
+#define SERIAL0_TX_PIN  43   // UART0 TX
 
 #define CONSOLE_SERIAL  Serial   // USB-CDC
 

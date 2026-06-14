@@ -294,6 +294,7 @@ void AmidalaConfig::writeCurrentConfiguration() {
     EEPROM.put(offs, params.S[i].maxpulse);
     offs += sizeof(params.S[i].maxpulse);
   }
+  EEPROM.commit();  // required on ESP32 — flushes RAM buffer to NVS flash
   fOutput->println(F("Updated"));
 }
 

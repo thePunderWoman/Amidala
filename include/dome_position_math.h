@@ -334,6 +334,7 @@ static inline void dome_save_calibration(int32_t tpr) {
     EEPROM.write(addr + 2, DOME_ROBOCLAW_EEPROM_SIG2);
     EEPROM.write(addr + 3, DOME_ROBOCLAW_EEPROM_SIG3);
     EEPROM.put(addr + 4, tpr);
+    EEPROM.commit();  // required on ESP32 — flushes RAM buffer to NVS flash
 }
 
 /**

@@ -77,6 +77,8 @@
 // assigns SERIAL = Serial0 for the primary output.
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
 #define ROBOCLAW_SERIAL    Serial1   // UART1, GPIO17/18
+#define ROBOCLAW_RX_PIN    18        // UART1 RX
+#define ROBOCLAW_TX_PIN    17        // UART1 TX
 #define ROBOCLAW_BAUD_RATE 38400
 #endif
 
