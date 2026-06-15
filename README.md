@@ -4,13 +4,13 @@ A firmware control system for an astromech or similar droid that uses dual XBee 
 
 This is a fork of [Skelmir's (rimim) original Amidala Firmware](https://github.com/reeltwo/AmidalaFirmware).
 
-> **This branch (`esp32-port`) targets the ESP32-S3 custom PCB.** The `main` branch targets the Arduino Mega 2560.
+> **`main` targets the ESP32-S3 custom PCB (Amidala PCB v1.1).** The `arduino-mega` branch preserves the legacy Arduino Mega 2560 firmware.
 
 > **Getting Started guide coming soon.** For now, see [example_config.txt](example_config.txt) for a complete, annotated example of every available configuration option.
 
 ## Hardware
 
-- **Microcontroller:** ESP32-S3 WROOM1 N16R8 (16 MB flash, 8 MB OPI PSRAM) on a custom Amidala PCB
+- **Microcontroller:** ESP32-S3 WROOM1 N16R8 (16 MB flash, 8 MB OPI PSRAM) on the [Amidala custom PCB](https://github.com/thePunderWoman/AmidalaBoard)
 - **Console:** USB-CDC (`Serial`) — connect via USB for the configuration console
 - **Configuration storage:** Micro SD card (`config.txt` loaded at startup, CS on GPIO10)
 
@@ -182,9 +182,9 @@ Install [PlatformIO](https://platformio.org/) — it handles all library depende
 
 | Port | GPIO | Function |
 |------|------|----------|
-| `Serial` (USB-CDC) | USB | Configuration console |
 | `Serial0` (UART0) | GPIO43 TX / GPIO44 RX | Primary serial output to downstream devices (WCB, etc.) |
 | `Serial1` (UART1) | GPIO17 TX / GPIO18 RX | RoboClaw dome drive (38400 baud) |
+| `Serial2` (UART2) | GPIO21 TX / GPIO38 RX | Optional AUX serial — enable with `-DESP32_AUX_SERIAL`; mutually exclusive with SEL2 mode-select inputs |
 
 ### XBee 3 (SPI)
 
