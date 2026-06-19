@@ -278,36 +278,19 @@ void AmidalaController::animate() {
       if (r->type == r->kXBee) {
         stickActive = true;
 #ifdef USE_POCKET_REMOTE_DEBUG
-        DEBUG_PRINT('J');
-        DEBUG_PRINT(i + 1);
-        DEBUG_PRINT('[');
-        DEBUG_PRINT(r->y);
-        DEBUG_PRINT(',');
-        DEBUG_PRINT(r->x);
-        DEBUG_PRINT(']');
-        for (unsigned b = 0; b < sizeof(r->button) / sizeof(r->button[0]);
-             b++) {
-          DEBUG_PRINT(" B");
-          DEBUG_PRINT(i * 5 + b + 1);
-          DEBUG_PRINT('=');
-          DEBUG_PRINT(r->button[b]);
+        if (i == 0) {
+          DEBUG_PRINT(F("J1 x="));
+          DEBUG_PRINT(r->x);
+          DEBUG_PRINT(F(" y="));
+          DEBUG_PRINTLN(r->y);
         }
-        DEBUG_PRINT(" W[");
-        DEBUG_PRINT(r->w1);
-        DEBUG_PRINT(",");
-        DEBUG_PRINT(r->w2);
-        DEBUG_PRINT("] ");
 #endif
         if (r->lastPacket + params.fst < millis())
           r->type = r->kFailsafe;
         r->update();
       }
     }
-    if (stickActive) {
-#ifdef USE_POCKET_REMOTE_DEBUG
-      DEBUG_PRINT('\r');
-#endif
-    }
+    (void)stickActive;
     for (unsigned i = 0; i < sizeof(remote) / sizeof(remote[0]); i++) {
       auto r = remote[i];
       if (r->failsafe() != r->failsafeNotice) {
