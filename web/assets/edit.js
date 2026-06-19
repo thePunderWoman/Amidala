@@ -127,7 +127,7 @@ function buildRow(s, val) {
 (function() {
   var b = document.createElement('button');
   b.id = 'estop';
-  b.textContent = 'STOP';
+  b.textContent = 'E-Stop';
   b.title = 'Emergency Stop — halts all motors';
   b.onclick = function() {
     fetch('/api/estop', { method: 'POST' })

@@ -28,7 +28,7 @@ inline String hexStr(uint32_t v) {
 inline String buildInfoJson(const char* drive, const char* dome,
                              const char* audio, const char* ssid,
                              const char* ip,
-                             uint8_t sstrUsed = 0, uint8_t sstrMax = 0) {
+                             uint8_t sstrUsed = 0, uint32_t freeHeap = 0) {
     String driveVal = drive ? (String("\"") + drive + "\"") : String("null");
     String domeVal  = dome  ? (String("\"") + dome  + "\"") : String("null");
 
@@ -43,7 +43,7 @@ inline String buildInfoJson(const char* drive, const char* dome,
     json += "\"wifi_ssid\":\"" + String(ssid ? ssid : "") + "\",";
     json += "\"wifi_ip\":\""   + String(ip   ? ip   : "") + "\",";
     json += "\"sstr_used\":"   + String(sstrUsed) + ",";
-    json += "\"sstr_max\":"    + String(sstrMax);
+    json += "\"free_heap\":"   + String(freeHeap);
     json += "}";
     return json;
 }

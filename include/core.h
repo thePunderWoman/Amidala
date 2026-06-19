@@ -14,7 +14,11 @@
 #endif
 
 #ifndef MAX_SERIAL_STRINGS
-#define MAX_SERIAL_STRINGS 40
+#define MAX_SERIAL_STRINGS 500
+#endif
+
+#ifndef MAX_GESTURES
+#define MAX_GESTURES 100
 #endif
 
 // Portable min/max/constrain for non-Arduino builds (e.g. native unit tests).

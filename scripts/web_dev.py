@@ -117,7 +117,7 @@ _info = {
     "wifi_ssid":  "amidala",
     "wifi_ip":    "192.168.4.1",
     "sstr_used":  3,
-    "sstr_max":   40,
+    "free_heap":  290816,
 }
 
 

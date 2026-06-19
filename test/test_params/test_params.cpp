@@ -41,7 +41,7 @@ void test_button_count() {
 
 void test_gesture_count() {
     AmidalaParameters p;
-    TEST_ASSERT_EQUAL(10, p.getGestureCount());
+    TEST_ASSERT_EQUAL(MAX_GESTURES, p.getGestureCount());
 }
 
 void test_serial_string_count() {

@@ -230,7 +230,7 @@ static void handleApiInfo() {
                       sCtrl->params.wifiSSID,
                       WiFi.softAPIP().toString().c_str(),
                       sCtrl->params.serialcount,
-                      MAX_SERIAL_STRINGS));
+                      ESP.getFreeHeap()));
 }
 
 static void handleApiConfigGet() {

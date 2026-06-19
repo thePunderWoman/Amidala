@@ -125,7 +125,7 @@ header{text-align:center;padding:2rem 1rem 1.5rem;border-bottom:1px solid var(--
   <div class="bi"><div class="lbl">Dome</div><div class="val" id="bi-do">&#8212;</div></div>
   <div class="bi"><div class="lbl">Audio</div><div class="val" id="bi-au">&#8212;</div></div>
   <div class="bi"><div class="lbl">Network</div><div class="val" id="bi-wi">&#8212;</div></div>
-  <div class="bi"><div class="lbl">Serial Cmds</div><div class="val" id="bi-sc">&#8212;</div></div>
+  <div class="bi"><div class="lbl">Free Heap</div><div class="val" id="bi-hp">&#8212;</div></div>
 </div>
 <div class="sh">&#9670;&#9670; Configuration &#9670;&#9670;</div>
 <nav class="grid">
@@ -152,13 +152,13 @@ fetch('/api/info').then(function(r){return r.json();}).then(function(d){
   document.getElementById('bi-do').textContent=d.dome||'none';
   document.getElementById('bi-au').textContent=d.audio;
   document.getElementById('bi-wi').textContent=d.wifi_ssid;
-  if(d.sstr_max) document.getElementById('bi-sc').textContent=d.sstr_used+' / '+d.sstr_max;
+  if(d.free_heap) document.getElementById('bi-hp').textContent=Math.round(d.free_heap/1024)+' KB';
 }).catch(function(){document.getElementById('fwv').textContent='connection error';});
 
 // Emergency stop — always visible on every page
 (function(){
   var b=document.createElement('button');
-  b.id='estop'; b.textContent='STOP'; b.title='Emergency Stop — halts all motors';
+  b.id='estop'; b.textContent='E-Stop'; b.title='Emergency Stop — halts all motors';
   b.onclick=function(){
     fetch('/api/estop',{method:'POST'})
       .then(function(r){if(!r.ok)alert('Stop failed');})
@@ -423,7 +423,7 @@ function buildRow(s, val) {
 (function() {
   var b = document.createElement('button');
   b.id = 'estop';
-  b.textContent = 'STOP';
+  b.textContent = 'E-Stop';
   b.title = 'Emergency Stop — halts all motors';
   b.onclick = function() {
     fetch('/api/estop', { method: 'POST' })
@@ -725,7 +725,7 @@ function buildRow(s, val) {
 (function() {
   var b = document.createElement('button');
   b.id = 'estop';
-  b.textContent = 'STOP';
+  b.textContent = 'E-Stop';
   b.title = 'Emergency Stop — halts all motors';
   b.onclick = function() {
     fetch('/api/estop', { method: 'POST' })
@@ -1021,7 +1021,7 @@ function buildRow(s, val) {
 (function() {
   var b = document.createElement('button');
   b.id = 'estop';
-  b.textContent = 'STOP';
+  b.textContent = 'E-Stop';
   b.title = 'Emergency Stop — halts all motors';
   b.onclick = function() {
     fetch('/api/estop', { method: 'POST' })
@@ -1316,7 +1316,7 @@ function buildRow(s, val) {
 (function() {
   var b = document.createElement('button');
   b.id = 'estop';
-  b.textContent = 'STOP';
+  b.textContent = 'E-Stop';
   b.title = 'Emergency Stop — halts all motors';
   b.onclick = function() {
     fetch('/api/estop', { method: 'POST' })
@@ -1632,7 +1632,7 @@ function buildRow(s, val) {
 (function() {
   var b = document.createElement('button');
   b.id = 'estop';
-  b.textContent = 'STOP';
+  b.textContent = 'E-Stop';
   b.title = 'Emergency Stop — halts all motors';
   b.onclick = function() {
     fetch('/api/estop', { method: 'POST' })
@@ -1938,7 +1938,7 @@ function buildRow(s, val) {
 (function() {
   var b = document.createElement('button');
   b.id = 'estop';
-  b.textContent = 'STOP';
+  b.textContent = 'E-Stop';
   b.title = 'Emergency Stop — halts all motors';
   b.onclick = function() {
     fetch('/api/estop', { method: 'POST' })
@@ -2257,7 +2257,7 @@ function buildRow(s, val) {
 (function() {
   var b = document.createElement('button');
   b.id = 'estop';
-  b.textContent = 'STOP';
+  b.textContent = 'E-Stop';
   b.title = 'Emergency Stop — halts all motors';
   b.onclick = function() {
     fetch('/api/estop', { method: 'POST' })
@@ -2666,7 +2666,7 @@ function buildRow(s, val) {
 (function() {
   var b = document.createElement('button');
   b.id = 'estop';
-  b.textContent = 'STOP';
+  b.textContent = 'E-Stop';
   b.title = 'Emergency Stop — halts all motors';
   b.onclick = function() {
     fetch('/api/estop', { method: 'POST' })
@@ -3059,7 +3059,7 @@ function buildRow(s, val) {
 (function() {
   var b = document.createElement('button');
   b.id = 'estop';
-  b.textContent = 'STOP';
+  b.textContent = 'E-Stop';
   b.title = 'Emergency Stop — halts all motors';
   b.onclick = function() {
     fetch('/api/estop', { method: 'POST' })

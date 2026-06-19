@@ -28,10 +28,6 @@
 
 // ---- Auxiliary string count -------------------------------------------------
 
-#ifndef MAX_SERIAL_STRINGS
-#define MAX_SERIAL_STRINGS 40
-#endif
-
 // ---- AmidalaParameters ------------------------------------------------------
 
 struct AmidalaParameters {
@@ -92,7 +88,7 @@ struct AmidalaParameters {
   ButtonAction B[9];
   ButtonAction LB[9];
   ButtonAction AB[9];   // Alt-button layer (dispatched when altbtn is held)
-  GestureAction G[10];
+  GestureAction G[MAX_GESTURES];
   DigitalOut D[4];
   SerialString Str[MAX_SERIAL_STRINGS];
   uint8_t serialcount;

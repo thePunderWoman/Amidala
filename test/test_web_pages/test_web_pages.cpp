@@ -150,10 +150,11 @@ void test_audio_page_schema_keys() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'ackon'"));
 }
 
-void test_info_json_has_sstr_capacity() {
-    String json = buildInfoJson("pwm", "pwm", "hcr", "amidala", "192.168.4.1", 27, 40);
+void test_info_json_has_free_heap() {
+    String json = buildInfoJson("pwm", "pwm", "hcr", "amidala", "192.168.4.1", 27, 290816);
     TEST_ASSERT_TRUE(contains(json.c_str(), "\"sstr_used\":27"));
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"sstr_max\":40"));
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"free_heap\":290816"));
+    TEST_ASSERT_FALSE(contains(json.c_str(), "sstr_max"));
 }
 
 void test_rc_radio_page_schema_keys() {
@@ -497,7 +498,7 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_info_json_null_drive_emits_null);
     RUN_TEST(test_info_json_ssid_appears);
     RUN_TEST(test_info_json_wraps_in_braces);
-    RUN_TEST(test_info_json_has_sstr_capacity);
+    RUN_TEST(test_info_json_has_free_heap);
 
     return UNITY_END();
 }
