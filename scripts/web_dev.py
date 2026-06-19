@@ -114,8 +114,10 @@ _info = {
     "drive":    "roboteq-pwm",
     "dome":     "roboclaw",
     "audio":    "hcr",
-    "wifi_ssid":"amidala",
-    "wifi_ip":  "192.168.4.1",
+    "wifi_ssid":  "amidala",
+    "wifi_ip":    "192.168.4.1",
+    "sstr_used":  3,
+    "free_heap":  290816,
 }
 
 
@@ -148,14 +150,25 @@ class _Handler(SimpleHTTPRequestHandler):
 
     # ----------------------------------------------------------------- POST --
     def do_POST(self):
-        path = urlparse(self.path).path
+        path   = urlparse(self.path).path
+        length = int(self.headers.get("Content-Length", 0))
+        body   = self.rfile.read(length).decode()
+        params = {k: v[0] for k, v in parse_qs(body).items()}
+        key    = params.get("key", "")
+        value  = params.get("value", "")
+
+        if path == "/api/estop":
+            print("  ESTOP!")
+            _monitor["lines"].append({"t": "! EMERGENCY STOP", "c": "tx"})
+            _monitor["seq"] += 1
+            self._text("OK")
+            return
         if path == "/api/monitor":
             cmd = params.get("cmd", "")
             print(f"  SERIAL  {cmd!r}")
             _monitor["lines"].append({"t": "> " + cmd, "c": "tx"})
             _monitor["lines"].append({"t": "  (echoed by dev server)", "c": "info"})
             _monitor["seq"] += 1
-            # Keep buffer bounded
             if len(_monitor["lines"]) > 32:
                 _monitor["lines"] = _monitor["lines"][-32:]
             self._text("OK")
@@ -163,12 +176,6 @@ class _Handler(SimpleHTTPRequestHandler):
         if path != "/api/config":
             self._text("Not Found", 404)
             return
-
-        length = int(self.headers.get("Content-Length", 0))
-        body   = self.rfile.read(length).decode()
-        params = {k: v[0] for k, v in parse_qs(body).items()}
-        key    = params.get("key", "")
-        value  = params.get("value", "")
 
         print(f"  CONFIG  {key} = {value!r}")
 

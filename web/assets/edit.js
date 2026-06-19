@@ -122,6 +122,21 @@ function buildRow(s, val) {
     + '</div>';
 }
 
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.textContent = 'E-Stop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  document.body.appendChild(b);
+})();
+
 function buildPage(SCHEMA, endpoint) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })

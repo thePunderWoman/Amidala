@@ -69,3 +69,19 @@ button {
   from { opacity: 1 }
   to   { opacity: 0 }
 }
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }

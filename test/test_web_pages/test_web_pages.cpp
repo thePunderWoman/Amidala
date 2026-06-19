@@ -105,12 +105,10 @@ void test_dome_page_uses_config_endpoint() {
 // ---------------------------------------------------------------------------
 
 void test_general_page_schema_keys() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'volume'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'startup'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'rndon'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'mindelay'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'maxdelay'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'ackon'"));
+    // Sound settings moved to audio page
+    TEST_ASSERT_FALSE(contains(WEB_PAGE_GENERAL, "'volume'"));
+    TEST_ASSERT_FALSE(contains(WEB_PAGE_GENERAL, "'startup'"));
+    TEST_ASSERT_FALSE(contains(WEB_PAGE_GENERAL, "'rndon'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'goslow'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'mix12'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'auto'"));
@@ -118,6 +116,13 @@ void test_general_page_schema_keys() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'serialdelim'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'serialeol'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'myi2c'"));
+}
+
+void test_estop_present_on_config_pages() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "/api/estop"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO,   "/api/estop"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_SERVOS,  "/api/estop"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "/api/estop"));
 }
 
 void test_wifi_page_schema_keys() {
@@ -137,6 +142,19 @@ void test_audio_page_schema_keys() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'volumeChB'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'startupem'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'ackem'"));
+    // Sound playback settings moved here from general
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'startup'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'rndon'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'mindelay'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'maxdelay'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'ackon'"));
+}
+
+void test_info_json_has_free_heap() {
+    String json = buildInfoJson("pwm", "pwm", "hcr", "amidala", "192.168.4.1", 27, 290816);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"sstr_used\":27"));
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"free_heap\":290816"));
+    TEST_ASSERT_FALSE(contains(json.c_str(), "sstr_max"));
 }
 
 void test_rc_radio_page_schema_keys() {
@@ -441,6 +459,7 @@ int main(int /*argc*/, char** /*argv*/) {
 
     // Config pages — SCHEMA keys
     RUN_TEST(test_general_page_schema_keys);
+    RUN_TEST(test_estop_present_on_config_pages);
     RUN_TEST(test_wifi_page_schema_keys);
     RUN_TEST(test_xbee_page_schema_keys);
     RUN_TEST(test_audio_page_schema_keys);
@@ -479,6 +498,7 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_info_json_null_drive_emits_null);
     RUN_TEST(test_info_json_ssid_appears);
     RUN_TEST(test_info_json_wraps_in_braces);
+    RUN_TEST(test_info_json_has_free_heap);
 
     return UNITY_END();
 }

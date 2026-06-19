@@ -228,7 +228,9 @@ static void handleApiInfo() {
     sServer.send(200, "application/json",
         buildInfoJson(drive, dome, audio,
                       sCtrl->params.wifiSSID,
-                      WiFi.softAPIP().toString().c_str()));
+                      WiFi.softAPIP().toString().c_str(),
+                      sCtrl->params.serialcount,
+                      ESP.getFreeHeap()));
 }
 
 static void handleApiConfigGet() {
@@ -310,6 +312,12 @@ static void handleApiConfigPost() {
         sServer.send(207, "text/plain", "applied but SD write failed");
         return;
     }
+    sServer.send(200, "text/plain", "OK");
+}
+
+static void handleApiEstop() {
+    monAppend("! EMERGENCY STOP", 't');
+    if (sCtrl) sCtrl->sendSerialString("ESTOP");
     sServer.send(200, "text/plain", "OK");
 }
 
@@ -416,6 +424,7 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
 
     // REST API
     sServer.on("/api/info",   HTTP_GET,  handleApiInfo);
+    sServer.on("/api/estop",  HTTP_POST, handleApiEstop);
     sServer.on("/api/config", HTTP_GET,  handleApiConfigGet);
     sServer.on("/api/config", HTTP_POST, handleApiConfigPost);
 

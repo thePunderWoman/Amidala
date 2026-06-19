@@ -80,6 +80,22 @@ button {
   from { opacity: 1 }
   to   { opacity: 0 }
 }
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }
 </style>
 <style>
 header{text-align:center;padding:2rem 1rem 1.5rem;border-bottom:1px solid var(--border)}
@@ -109,6 +125,7 @@ header{text-align:center;padding:2rem 1rem 1.5rem;border-bottom:1px solid var(--
   <div class="bi"><div class="lbl">Dome</div><div class="val" id="bi-do">&#8212;</div></div>
   <div class="bi"><div class="lbl">Audio</div><div class="val" id="bi-au">&#8212;</div></div>
   <div class="bi"><div class="lbl">Network</div><div class="val" id="bi-wi">&#8212;</div></div>
+  <div class="bi"><div class="lbl">Free Heap</div><div class="val" id="bi-hp">&#8212;</div></div>
 </div>
 <div class="sh">&#9670;&#9670; Configuration &#9670;&#9670;</div>
 <nav class="grid">
@@ -135,7 +152,20 @@ fetch('/api/info').then(function(r){return r.json();}).then(function(d){
   document.getElementById('bi-do').textContent=d.dome||'none';
   document.getElementById('bi-au').textContent=d.audio;
   document.getElementById('bi-wi').textContent=d.wifi_ssid;
+  if(d.free_heap) document.getElementById('bi-hp').textContent=Math.round(d.free_heap/1024)+' KB';
 }).catch(function(){document.getElementById('fwv').textContent='connection error';});
+
+// Emergency stop — always visible on every page
+(function(){
+  var b=document.createElement('button');
+  b.id='estop'; b.textContent='E-Stop'; b.title='Emergency Stop — halts all motors';
+  b.onclick=function(){
+    fetch('/api/estop',{method:'POST'})
+      .then(function(r){if(!r.ok)alert('Stop failed');})
+      .catch(function(){alert('Stop failed');});
+  };
+  document.body.appendChild(b);
+})();
 </script>
 </body>
 </html>
@@ -219,6 +249,22 @@ button {
   from { opacity: 1 }
   to   { opacity: 0 }
 }
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }
 </style>
 <style>
 .page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
@@ -372,6 +418,21 @@ function buildRow(s, val) {
     + '</div>';
 }
 
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.textContent = 'E-Stop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  document.body.appendChild(b);
+})();
+
 function buildPage(SCHEMA, endpoint) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
@@ -395,13 +456,6 @@ function buildPage(SCHEMA, endpoint) {
 </script>
 <script>
 var SCHEMA = [
-  {section:'Sound'},
-  {key:'volume',     label:'Volume',             type:'number', min:0,   max:100},
-  {key:'startup',    label:'Startup Sound',      type:'bool'},
-  {key:'rndon',      label:'Random Sounds',      type:'bool'},
-  {key:'mindelay',   label:'Random Min Delay',   type:'number', min:0,   max:1000, note:'seconds'},
-  {key:'maxdelay',   label:'Random Max Delay',   type:'number', min:0,   max:1000, note:'seconds'},
-  {key:'ackon',      label:'Ack Sounds',         type:'bool'},
   {section:'Drive'},
   {key:'goslow',     label:'Start in Slow Mode', type:'bool'},
   {key:'mix12',      label:'Channel Mixing',     type:'bool'},
@@ -497,6 +551,22 @@ button {
   from { opacity: 1 }
   to   { opacity: 0 }
 }
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }
 </style>
 <style>
 .page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
@@ -650,6 +720,21 @@ function buildRow(s, val) {
     + '</div>';
 }
 
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.textContent = 'E-Stop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  document.body.appendChild(b);
+})();
+
 function buildPage(SCHEMA, endpoint) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
@@ -762,6 +847,22 @@ button {
   from { opacity: 1 }
   to   { opacity: 0 }
 }
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }
 </style>
 <style>
 .page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
@@ -915,6 +1016,21 @@ function buildRow(s, val) {
     + '</div>';
 }
 
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.textContent = 'E-Stop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  document.body.appendChild(b);
+})();
+
 function buildPage(SCHEMA, endpoint) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
@@ -1026,6 +1142,22 @@ button {
   from { opacity: 1 }
   to   { opacity: 0 }
 }
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }
 </style>
 <style>
 .page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
@@ -1179,6 +1311,21 @@ function buildRow(s, val) {
     + '</div>';
 }
 
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.textContent = 'E-Stop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  document.body.appendChild(b);
+})();
+
 function buildPage(SCHEMA, endpoint) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
@@ -1219,7 +1366,13 @@ var SCHEMA = [
   {key:'startuplvl', label:'Level',   type:'select', options:_lvl},
   {section:'Ack Emote'},
   {key:'ackem',  label:'Emotion', type:'select', options:_emo},
-  {key:'acklvl', label:'Level',   type:'select', options:_lvl}
+  {key:'acklvl', label:'Level',   type:'select', options:_lvl},
+  {section:'Sound Playback'},
+  {key:'startup',  label:'Startup Sound',    type:'bool'},
+  {key:'rndon',    label:'Random Sounds',    type:'bool'},
+  {key:'mindelay', label:'Random Min Delay', type:'number', min:0, max:1000, note:'seconds'},
+  {key:'maxdelay', label:'Random Max Delay', type:'number', min:0, max:1000, note:'seconds'},
+  {key:'ackon',    label:'Ack Sounds',       type:'bool'}
 ];
 buildPage(SCHEMA, '/api/config');
 </script>
@@ -1305,6 +1458,22 @@ button {
   from { opacity: 1 }
   to   { opacity: 0 }
 }
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }
 </style>
 <style>
 .page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
@@ -1458,6 +1627,21 @@ function buildRow(s, val) {
     + '</div>';
 }
 
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.textContent = 'E-Stop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  document.body.appendChild(b);
+})();
+
 function buildPage(SCHEMA, endpoint) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
@@ -1580,6 +1764,22 @@ button {
   from { opacity: 1 }
   to   { opacity: 0 }
 }
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }
 </style>
 <style>
 .page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
@@ -1733,6 +1933,21 @@ function buildRow(s, val) {
     + '</div>';
 }
 
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.textContent = 'E-Stop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  document.body.appendChild(b);
+})();
+
 function buildPage(SCHEMA, endpoint) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
@@ -1862,6 +2077,22 @@ button {
   from { opacity: 1 }
   to   { opacity: 0 }
 }
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }
 </style>
 <style>
 .page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
@@ -2020,6 +2251,21 @@ function buildRow(s, val) {
     + '<button class="bc hidden" onclick="doCancel(this)" title="Cancel">&#10005;</button>'
     + '</div>';
 }
+
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.textContent = 'E-Stop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  document.body.appendChild(b);
+})();
 
 function buildPage(SCHEMA, endpoint) {
   fetch(endpoint)
@@ -2242,6 +2488,22 @@ button {
   from { opacity: 1 }
   to   { opacity: 0 }
 }
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }
 </style>
 <style>
 .page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
@@ -2398,6 +2660,21 @@ function buildRow(s, val) {
     + '<button class="bc hidden" onclick="doCancel(this)" title="Cancel">&#10005;</button>'
     + '</div>';
 }
+
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.textContent = 'E-Stop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  document.body.appendChild(b);
+})();
 
 function buildPage(SCHEMA, endpoint) {
   fetch(endpoint)
@@ -2589,6 +2866,22 @@ button {
   from { opacity: 1 }
   to   { opacity: 0 }
 }
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }
 </style>
 <style>
 html,body{height:100%;display:flex;flex-direction:column;overflow:hidden}
@@ -2636,6 +2929,167 @@ main{flex:1;display:flex;flex-direction:column;min-height:0}
     <button id="sbtn" onclick="sendCmd()">Send</button>
   </div>
 </main>
+<script>
+/* Amidala web UI — edit-in-place widget + shared config page helpers.
+   Embed script inlines this into every config sub-page.
+   In dev mode (scripts/web_dev.py) it's served as /assets/edit.js. */
+
+// ------------------------------------------------------------------ toast ---
+
+function showToast(msg, isErr) {
+  var t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' toast-err' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
+}
+
+// -------------------------------------------------------- edit-in-place -----
+
+function startEdit(btn) {
+  var row = btn.closest('.row');
+  row.querySelector('.rv').hidden = true;
+  row.querySelector('.ri').hidden = false;
+  btn.hidden = true;
+  row.querySelector('.bs').hidden = false;
+  row.querySelector('.bc').hidden = false;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  row.querySelector('.rv').hidden = false;
+  row.querySelector('.ri').hidden = true;
+  row.querySelector('.be').hidden = false;
+  row.querySelector('.bs').hidden = true;
+  btn.hidden = true;
+}
+
+async function doSave(btn) {
+  var row = btn.closest('.row');
+  var key = row.dataset.key;
+  var inp = row.querySelector('input,select');
+  var val = inp.value;
+  var prev = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    var r = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'key=' + encodeURIComponent(key) + '&value=' + encodeURIComponent(val)
+    });
+    if (r.ok) {
+      var dv = row.querySelector('.rv');
+      var rt = row.dataset.type;
+      if (rt === 'bool' || rt === 'select') {
+        var sel = row.querySelector('select');
+        dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'password') {
+        dv.textContent = '••••••••';
+      } else {
+        dv.textContent = val;
+      }
+      doCancel(row.querySelector('.bc'));
+      showToast('Saved');
+    } else {
+      showToast('Save failed: ' + await r.text(), true);
+    }
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+// ------------------------------------------------ schema-driven row builder --
+
+function dispValue(s, val) {
+  if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
+  if (s.type === 'select') {
+    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    return found ? found.l : val;
+  }
+  if (s.type === 'password') return '••••••••';
+  return String(val);
+}
+
+function buildInput(s, val) {
+  if (s.type === 'bool') {
+    return '<select>'
+      + '<option value="y"' + (val === 'y' ? ' selected' : '') + '>On</option>'
+      + '<option value="n"' + (val === 'n' ? ' selected' : '') + '>Off</option>'
+      + '</select>';
+  }
+  if (s.type === 'select') {
+    var opts = (s.options || []).map(function(op) {
+      return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
+    }).join('');
+    return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'number') {
+    return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
+  }
+  if (s.type === 'password') {
+    return '<input type="password" value="' + val + '" maxlength="' + (s.maxlength || 64) + '">';
+  }
+  return '<input type="text" value="' + val + '"' + (s.maxlength ? ' maxlength="' + s.maxlength + '"' : '') + '>';
+}
+
+function buildRow(s, val) {
+  var disp = dispValue(s, val);
+  var note = s.note ? '<span style="font-size:.65rem;color:var(--dim);margin-left:.3rem">' + s.note + '</span>' : '';
+  if (s.readOnly) {
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<div class="rv">' + disp + '</div>'
+      + '</div>';
+  }
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    + '<div class="row-label">' + s.label + '</div>'
+    + '<div class="rv">' + disp + '</div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
+    + '<button class="bs hidden" onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc hidden" onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '</div>';
+}
+
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.textContent = 'E-Stop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  document.body.appendChild(b);
+})();
+
+function buildPage(SCHEMA, endpoint) {
+  fetch(endpoint)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var html = '';
+      SCHEMA.forEach(function(s) {
+        if (s.section) {
+          html += '<div class="section-label">' + s.section + '</div>';
+          return;
+        }
+        var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
+        html += buildRow(s, val);
+      });
+      document.querySelector('main').innerHTML = html;
+    })
+    .catch(function() {
+      var el = document.getElementById('status');
+      if (el) el.textContent = 'Failed to load settings.';
+    });
+}
+</script>
 <script>
 var _seq = -1;
 var _paused = false;
@@ -2787,6 +3241,22 @@ button {
   from { opacity: 1 }
   to   { opacity: 0 }
 }
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }
 </style>
 <style>
 body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;text-align:center;gap:1rem}

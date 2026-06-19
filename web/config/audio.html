@@ -52,7 +52,13 @@ var SCHEMA = [
   {key:'startuplvl', label:'Level',   type:'select', options:_lvl},
   {section:'Ack Emote'},
   {key:'ackem',  label:'Emotion', type:'select', options:_emo},
-  {key:'acklvl', label:'Level',   type:'select', options:_lvl}
+  {key:'acklvl', label:'Level',   type:'select', options:_lvl},
+  {section:'Sound Playback'},
+  {key:'startup',  label:'Startup Sound',    type:'bool'},
+  {key:'rndon',    label:'Random Sounds',    type:'bool'},
+  {key:'mindelay', label:'Random Min Delay', type:'number', min:0, max:1000, note:'seconds'},
+  {key:'maxdelay', label:'Random Max Delay', type:'number', min:0, max:1000, note:'seconds'},
+  {key:'ackon',    label:'Ack Sounds',       type:'bool'}
 ];
 buildPage(SCHEMA, '/api/config');
 </script>
