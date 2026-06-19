@@ -52,6 +52,7 @@ class AmidalaController;
 #include "rdh_serial.h"
 #include "xbee_remote.h"
 #include "params.h"
+#include "wifi_ap.h"
 
 class AmidalaController : public SetupEvent, public AnimatedEvent {
 public:
@@ -105,6 +106,7 @@ public:
   AmidalaConsole fConsole;
   AmidalaAudio fAudio;
   AmidalaConfig fConfig;
+  AmidalaWiFiAP fWiFiAP;
 #ifdef VMUSIC_SERIAL
   VMusic fVMusic;
 #else

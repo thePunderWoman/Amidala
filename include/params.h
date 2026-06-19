@@ -183,6 +183,14 @@ struct AmidalaParameters {
   // altbtn — a quick double-tap fires mute while a held press is the alt modifier.
   uint8_t mutebutton;
 
+  // ---- WiFi access point -----------------------------------------------
+  // wifion: enable the on-board WiFi soft-AP (default true).
+  // wifiSSID: network name broadcast by the AP (max 32 chars).
+  // wifiPassword: WPA2 passphrase (min 8, max 64 chars).
+  bool    wifion;
+  char    wifiSSID[33];
+  char    wifiPassword[65];
+
   constexpr unsigned getSoundBankCount() {
     return sizeof(SB) / sizeof(SB[0]);
   }
@@ -263,6 +271,9 @@ struct AmidalaParameters {
       altbtn = 0;
       altdomestick = 0;
       mutebutton = 0;
+      wifion = true;
+      strncpy(wifiSSID, "amidala", sizeof(wifiSSID));
+      strncpy(wifiPassword, "Astromech", sizeof(wifiPassword));
       minpulse = DEFAULT_DOME_MIN_PULSE;
       maxpulse = DEFAULT_DOME_MAX_PULSE;
       sRAMInited = true;

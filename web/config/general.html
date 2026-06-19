@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>General Settings — AMIDALA</title>
+<link rel="stylesheet" href="/assets/common.css">
+<style>
+.page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
+.back{font-size:.8rem;color:var(--dim);letter-spacing:.1em;white-space:nowrap}
+.back:hover{color:var(--gold)}
+.page-title{flex:1;text-align:center;font-size:.9rem;letter-spacing:.25em;text-transform:uppercase}
+main{max-width:660px;margin:0 auto;padding:1rem}
+.section-label{font-size:.6rem;color:var(--dim);letter-spacing:.25em;text-transform:uppercase;padding:.5rem 0 .4rem;border-bottom:1px solid var(--border);margin-bottom:.2rem}
+.row{display:flex;align-items:center;padding:.7rem .2rem;border-bottom:1px solid #0f0f0f;gap:.5rem}
+.row-label{flex:1;font-size:.82rem;color:#ccc}
+.rv{font-size:.82rem;color:var(--gold);min-width:60px;text-align:right}
+.ri{min-width:90px}
+.ri input,.ri select{width:100%;background:#111;border:1px solid var(--dim);color:var(--gold);padding:.3rem .5rem;font-family:inherit;font-size:.82rem}
+.ri select option{background:#111}
+.be,.bs,.bc{background:none;border:none;color:var(--gold);font-size:1rem;padding:.2rem .5rem;opacity:.6}
+.be:hover,.bs:hover,.bc:hover{opacity:1}
+.bc{color:var(--dim)}
+#status{text-align:center;padding:2rem;color:var(--dim);font-size:.8rem;letter-spacing:.1em}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; Back</a>
+  <div class="page-title">&#9670; General Settings &#9670;</div>
+</div>
+<main>
+  <div id="status">LOADING&#8230;</div>
+</main>
+<script src="/assets/edit.js"></script>
+<script>
+var SCHEMA=[
+  {section:'Sound'},
+  {key:'volume',    label:'Volume',            type:'number', min:0,   max:100},
+  {key:'startup',   label:'Startup Sound',     type:'bool'},
+  {key:'rndon',     label:'Random Sounds',     type:'bool'},
+  {key:'mindelay',  label:'Random Min Delay',  type:'number', min:0,   max:1000, note:'seconds'},
+  {key:'maxdelay',  label:'Random Max Delay',  type:'number', min:0,   max:1000, note:'seconds'},
+  {key:'ackon',     label:'Ack Sounds',        type:'bool'},
+  {section:'Drive'},
+  {key:'goslow',    label:'Start in Slow Mode',type:'bool'},
+  {key:'mix12',     label:'Channel Mixing',    type:'bool'},
+  {key:'auto',      label:'Autocorrect Gestures', type:'bool'},
+  {section:'Serial'},
+  {key:'serialbaud', label:'Baud Rate',         type:'number', min:300, max:115200},
+  {key:'serialdelim',label:'Delimiter (ASCII)', type:'number', min:0,   max:255},
+  {key:'serialeol',  label:'EOL (ASCII)',        type:'number', min:0,   max:255},
+  {section:'I²C'},
+  {key:'myi2c',     label:"This Board's Address", type:'number', min:0, max:100}
+];
+
+function buildRow(s,val){
+  var disp=s.type==='bool'?(val==='y'?'On':'Off'):String(val);
+  var inp=s.type==='bool'
+    ?('<select><option value="y"'+(val==='y'?' selected':'')+'>On</option>'
+      +'<option value="n"'+(val==='n'?' selected':'')+'>Off</option></select>')
+    :('<input type="number" value="'+val+'" min="'+(s.min||0)+'" max="'+(s.max||9999)+'">');
+  var note=s.note?'<span style="font-size:.65rem;color:var(--dim);margin-left:.3rem">'+s.note+'</span>':'';
+  return '<div class="row" data-key="'+s.key+'" data-type="'+(s.type||'text')+'">'
+    +'<div class="row-label">'+s.label+'</div>'
+    +'<div class="rv">'+disp+'</div>'
+    +'<div class="ri" hidden><div style="display:flex;align-items:center">'+inp+note+'</div></div>'
+    +'<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
+    +'<button class="bs hidden" onclick="doSave(this)" title="Save">&#10003;</button>'
+    +'<button class="bc hidden" onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    +'</div>';
+}
+
+fetch('/api/config/general').then(function(r){return r.json();}).then(function(d){
+  var html='';
+  SCHEMA.forEach(function(s){
+    if(s.section){
+      html+='<div class="section-label">'+s.section+'</div>';
+      return;
+    }
+    var val=(d[s.key]!==undefined)?String(d[s.key]):'?';
+    html+=buildRow(s,val);
+  });
+  document.querySelector('main').innerHTML=html;
+}).catch(function(){
+  document.getElementById('status').textContent='Failed to load settings.';
+});
+</script>
+</body>
+</html>

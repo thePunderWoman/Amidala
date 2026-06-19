@@ -1,0 +1,42 @@
+/* Amidala web UI — shared styles.
+   Embed script inlines this into every page's <style> block.
+   In dev mode (scripts/web_dev.py) it's served as a real file from /assets/common.css. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --gold:   #ffe81f;
+  --red:    #c00;
+  --bg:     #000;
+  --card:   #0a0a0a;
+  --dim:    #555;
+  --border: #ffe81f22;
+}
+
+body {
+  background: var(--bg);
+  color: var(--gold);
+  font-family: 'Courier New', Courier, monospace;
+  min-height: 100vh;
+  font-size: 15px;
+}
+
+a {
+  color: var(--gold);
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.hidden {
+  display: none !important;
+}

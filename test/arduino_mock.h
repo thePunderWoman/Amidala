@@ -221,6 +221,69 @@ public:
   }
 };
 
+// ---- Arduino String class (std::string wrapper) ----
+// Provides the subset of the Arduino String API used by project headers.
+// Must appear before any header that uses String.
+#include <string>
+#ifndef ARDUINO  // guard: real Arduino builds have their own String
+class String {
+public:
+  String() {}
+  String(const char* s) : _s(s ? s : "") {}      // NOLINT
+  String(char c) : _s(1, c) {}
+  String(int v)           { char b[24]; snprintf(b,sizeof(b),"%d",  v);  _s=b; }
+  String(unsigned int v)  { char b[24]; snprintf(b,sizeof(b),"%u",  v);  _s=b; }
+  String(long v)          { char b[24]; snprintf(b,sizeof(b),"%ld", v);  _s=b; }
+  String(unsigned long v) { char b[24]; snprintf(b,sizeof(b),"%lu", v);  _s=b; }
+  String(uint8_t v)       { char b[24]; snprintf(b,sizeof(b),"%u",  (unsigned)v); _s=b; }
+  String(uint16_t v)      { char b[24]; snprintf(b,sizeof(b),"%u",  (unsigned)v); _s=b; }
+
+  bool operator==(const String& o) const { return _s == o._s; }
+  bool operator!=(const String& o) const { return _s != o._s; }
+  bool operator==(const char* s)   const { return _s == (s?s:""); }
+
+  String  operator+ (const String& o) const { String r(_s.c_str()); r._s += o._s; return r; }
+  String  operator+ (const char* s)   const { String r(_s.c_str()); if(s) r._s += s; return r; }
+  String& operator+=(const String& o) { _s += o._s; return *this; }
+  String& operator+=(const char* s)   { if(s) _s += s; return *this; }
+
+  const char* c_str()   const { return _s.c_str(); }
+  size_t      length()  const { return _s.length(); }
+  bool        isEmpty() const { return _s.empty(); }
+
+  int  indexOf(const char* s)    const { auto p=_s.find(s?s:""); return p==std::string::npos?-1:(int)p; }
+  int  indexOf(const String& s)  const { return indexOf(s.c_str()); }
+  int  lastIndexOf(const char* s) const {
+    if (!s || !*s) return -1;
+    auto p = _s.rfind(s);
+    return p == std::string::npos ? -1 : (int)p;
+  }
+  bool startsWith(const char* s) const { return s && _s.find(s) == 0; }
+  bool endsWith  (const char* s) const {
+    if (!s) return false;
+    size_t sl = strlen(s);
+    return _s.size() >= sl && _s.compare(_s.size()-sl, sl, s) == 0;
+  }
+  String substring(size_t from, size_t to=(size_t)-1) const {
+    return String(_s.substr(from, to==(size_t)-1 ? std::string::npos : to-from).c_str());
+  }
+  void remove(size_t idx, size_t cnt=1)  { _s.erase(idx, cnt); }
+  void reserve(size_t n)                 { _s.reserve(n); }
+  void trim() {
+    auto a=_s.find_first_not_of(" \t\r\n");
+    if(a==std::string::npos){_s.clear();return;}
+    auto b=_s.find_last_not_of(" \t\r\n");
+    _s=_s.substr(a,b-a+1);
+  }
+
+private:
+  std::string _s;
+};
+inline String operator+(const char* lhs, const String& rhs) {
+  return String(lhs) + rhs;
+}
+#endif  // ARDUINO
+
 // ---- Serial stub (used by config_reader.h) ----
 struct SerialClass {
   void println(const char*) {}

@@ -79,6 +79,9 @@ void AmidalaController::setup() {
   fConsole.setMinimal(!loadConfig());
   fConfig.showCurrentConfiguration();
 
+  if (params.wifion)
+    fWiFiAP.begin(params.wifiSSID, params.wifiPassword, this);
+
   fConsole.println(F("Activating Servos"));
   fConsole.println(F("Activating Digital Outputs"));
   fConsole.println(F("Init i2c Bus"));
@@ -204,6 +207,8 @@ void AmidalaController::animate() {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
   fDomeDrive.animate();
 #endif
+  if (params.wifion)
+    fWiFiAP.handle();
   fConsole.process();
 #ifdef EXPERIMENTAL_JEVOIS_STEERING
   fJevois.process();

@@ -210,6 +210,13 @@ void AmidalaConfig::showCurrentConfiguration() {
     fOutput->print(F("Serial Init: "));
     fOutput->println();
     fOutput->println(F("Serial String Commands:"));
+    fOutput->println();
+    fOutput->print(F("WiFi AP: "));
+    fOutput->println(params.wifion ? F("On") : F("Off"));
+    fOutput->print(F("WiFi SSID: "));
+    fOutput->println(params.wifiSSID);
+    fOutput->print(F("WiFi Password: "));
+    fOutput->println(params.wifiPassword);
     for (unsigned i = 0; i < params.getSerialStringCount(); i++) {
       fOutput->println(params.Str[i].str);
     }
@@ -812,6 +819,16 @@ bool AmidalaConfig::processConfig(const char *cmd) {
   } else if (intparam(cmd, "altdomestick=", params.altdomestick, 0, 1)) {
     return true;
   } else if (intparam(cmd, "mutebutton=", params.mutebutton, 0, 9)) {
+    return true;
+  } else if (boolparam(cmd, "wifion=", params.wifion)) {
+    return true;
+  } else if (startswith(cmd, "wifissid=")) {
+    strncpy(params.wifiSSID, cmd, sizeof(params.wifiSSID) - 1);
+    params.wifiSSID[sizeof(params.wifiSSID) - 1] = '\0';
+    return true;
+  } else if (startswith(cmd, "wifipassword=")) {
+    strncpy(params.wifiPassword, cmd, sizeof(params.wifiPassword) - 1);
+    params.wifiPassword[sizeof(params.wifiPassword) - 1] = '\0';
     return true;
   } else if (strcmp(cmd, "reboot") == 0) {
     void (*resetArduino)() = NULL;

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AMIDALA</title>
+<link rel="stylesheet" href="/assets/common.css">
+<style>
+header{text-align:center;padding:2rem 1rem 1.5rem;border-bottom:1px solid var(--border)}
+.logo{font-size:clamp(1.6rem,6vw,2.8rem);letter-spacing:.4em;text-transform:uppercase}
+.subtitle{color:var(--dim);font-size:.72rem;letter-spacing:.18em;margin-top:.35rem}
+.build-strip{display:flex;flex-wrap:wrap;justify-content:center;border-bottom:1px solid var(--border)}
+.bi{padding:.8rem 1.4rem;text-align:center;border-right:1px solid var(--border)}
+.bi:last-child{border-right:none}
+.bi .lbl{font-size:.58rem;color:var(--dim);text-transform:uppercase;letter-spacing:.15em}
+.bi .val{font-size:.9rem;margin-top:.2rem}
+.sh{text-align:center;color:var(--dim);font-size:.62rem;letter-spacing:.3em;text-transform:uppercase;padding:1.4rem 1rem .7rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);max-width:840px;margin:0 auto 1.5rem}
+.card{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);padding:1.4rem 1rem;text-align:center;min-height:90px;transition:background .1s;-webkit-tap-highlight-color:transparent}
+.card:hover,.card:focus{background:#0e0e0e;outline:none}
+.card:active{background:#141414}
+.card .icon{font-size:1.5rem;margin-bottom:.5rem;line-height:1}
+.card .name{font-size:.72rem;letter-spacing:.04em;line-height:1.35}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">&#9670; AMIDALA &#9670;</div>
+  <div class="subtitle" id="fwv">&#8212;</div>
+</header>
+<div class="build-strip">
+  <div class="bi"><div class="lbl">Drive</div><div class="val" id="bi-dr">&#8212;</div></div>
+  <div class="bi"><div class="lbl">Dome</div><div class="val" id="bi-do">&#8212;</div></div>
+  <div class="bi"><div class="lbl">Audio</div><div class="val" id="bi-au">&#8212;</div></div>
+  <div class="bi"><div class="lbl">Network</div><div class="val" id="bi-wi">&#8212;</div></div>
+</div>
+<div class="sh">&#9670;&#9670; Configuration &#9670;&#9670;</div>
+<nav class="grid">
+  <a class="card" href="/config/general"><div class="icon">&#9881;</div><div class="name">General</div></a>
+  <a class="card" href="/config/audio"><div class="icon">&#9834;</div><div class="name">Audio</div></a>
+  <a class="card" href="/config/dome"><div class="icon">&#8853;</div><div class="name">Dome Drive</div></a>
+  <a class="card" href="/config/buttons"><div class="icon">&#9711;</div><div class="name">Buttons &amp; Gestures</div></a>
+  <a class="card" href="/config/servos"><div class="icon">&#9699;</div><div class="name">Servos</div></a>
+  <a class="card" href="/config/xbee"><div class="icon">&#9702;</div><div class="name">XBee</div></a>
+  <a class="card" href="/config/serial-strings"><div class="icon">&#9166;</div><div class="name">Serial Strings</div></a>
+  <a class="card" href="/config/rc-radio"><div class="icon">&#9526;</div><div class="name">RC Radio</div></a>
+  <a class="card" href="/config/wifi"><div class="icon">&#10047;</div><div class="name">WiFi</div></a>
+</nav>
+<div class="sh">&#9670;&#9670; Tools &#9670;&#9670;</div>
+<nav class="grid">
+  <a class="card" href="/sequences"><div class="icon">&#9654;</div><div class="name">Sequences</div></a>
+  <a class="card" href="/monitor"><div class="icon">&#9680;</div><div class="name">Serial Monitor</div></a>
+  <a class="card" href="/update"><div class="icon">&#8679;</div><div class="name">Firmware Update</div></a>
+</nav>
+<script>
+fetch('/api/info').then(function(r){return r.json();}).then(function(d){
+  document.getElementById('fwv').textContent=d.firmware+' v'+d.version+' · '+d.date;
+  document.getElementById('bi-dr').textContent=d.drive||'none';
+  document.getElementById('bi-do').textContent=d.dome||'none';
+  document.getElementById('bi-au').textContent=d.audio;
+  document.getElementById('bi-wi').textContent=d.wifi_ssid;
+}).catch(function(){document.getElementById('fwv').textContent='connection error';});
+</script>
+</body>
+</html>
