@@ -24,6 +24,8 @@ PAGES = [
     ("config/rc-radio.html",    "WEB_PAGE_RC_RADIO"),
     ("config/dome.html",            "WEB_PAGE_DOME"),
     ("config/serial-strings.html",  "WEB_PAGE_SERIAL_STRINGS"),
+    ("config/servos.html",          "WEB_PAGE_SERVOS"),
+    ("monitor.html",                "WEB_PAGE_MONITOR"),
     ("config/coming-soon.html",     "WEB_PAGE_COMING_SOON"),
 ]
 
