@@ -8,8 +8,14 @@
 
 #pragma once
 
-#define FIRMWARE_NAME   F("Amidala RC")
-#define VERSION_NUM     F("1.3")
+// Plain C string literals — usable in web_api.h and anywhere F() can't be used
+#define FIRMWARE_VERSION   "1.3"
+#define BOARD_REV          "1.1"
+#define MCU_VARIANT        "ESP32-S3 N16R8"
+
+// Flash-string versions for Arduino serial output (saves RAM)
+#define FIRMWARE_NAME   F("Amidala")
+#define VERSION_NUM     F(FIRMWARE_VERSION)
 #define BUILD_NUM       F("1")
 #define BUILD_DATE      F(__DATE__)
 

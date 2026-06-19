@@ -42,6 +42,7 @@ var SCHEMA = [
   {section:'Hardware'},
   {key:'audiohw',        label:'Audio Board',        readOnly:true},
   {section:'Volume'},
+  {key:'volume',         label:'R2 Sounds Volume',   type:'number', min:0, max:100},
   {key:'volumeChA',      label:'Channel A Volume',   type:'number', min:0, max:100},
   {key:'volumeChB',      label:'Channel B Volume',   type:'number', min:0, max:100},
   {key:'volumewheel',    label:'Volume Wheel',       type:'select', options:_whl},
@@ -53,7 +54,7 @@ var SCHEMA = [
   {key:'ackem',  label:'Emotion', type:'select', options:_emo},
   {key:'acklvl', label:'Level',   type:'select', options:_lvl}
 ];
-buildPage(SCHEMA, '/api/config/audio');
+buildPage(SCHEMA, '/api/config');
 </script>
 </body>
 </html>

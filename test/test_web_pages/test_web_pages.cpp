@@ -1,9 +1,9 @@
 // test_web_pages.cpp
 // Tests for the web UI layer:
-//   1. HTML content — verify pages reference the correct API endpoints,
-//      navigation links, and config keys so renames or copy-paste errors are
-//      caught at compile/test time rather than at runtime in the browser.
-//   2. JSON builders (web_api.h) — verify that buildGeneralConfigJson and
+//   1. HTML content — verify pages reference /api/config, have back links,
+//      and list the correct SCHEMA keys so renames or omissions are caught
+//      at test time rather than at runtime in the browser.
+//   2. JSON builder (web_api.h) — verify that buildFullConfigJson and
 //      buildInfoJson produce well-formed output with the correct keys and
 //      values for known AmidalaParameters states.
 
@@ -63,24 +63,48 @@ void test_home_page_populates_build_strip_ids() {
 }
 
 // ---------------------------------------------------------------------------
-// General settings page (WEB_PAGE_GENERAL) — content checks
+// Config pages — shared endpoint + back-link checks
 // ---------------------------------------------------------------------------
 
-void test_general_page_fetches_config_endpoint() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "/api/config/general"));
-}
-
-void test_general_page_posts_to_config_endpoint() {
+void test_general_page_uses_config_endpoint() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "/api/config"));
-}
-
-void test_general_page_has_back_link() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "href=\"/\""));
 }
 
-void test_general_page_schema_has_expected_keys() {
-    // These keys must match what buildGeneralConfigJson returns AND what
-    // processConfig() accepts.  Any rename in either place will break the UI.
+void test_general_page_has_viewport_meta() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "viewport"));
+}
+
+void test_wifi_page_uses_config_endpoint() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "/api/config"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "href=\"/\""));
+}
+
+void test_xbee_page_uses_config_endpoint() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_XBEE, "/api/config"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_XBEE, "href=\"/\""));
+}
+
+void test_audio_page_uses_config_endpoint() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "/api/config"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "href=\"/\""));
+}
+
+void test_rc_radio_page_uses_config_endpoint() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_RC_RADIO, "/api/config"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_RC_RADIO, "href=\"/\""));
+}
+
+void test_dome_page_uses_config_endpoint() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DOME, "/api/config"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DOME, "href=\"/\""));
+}
+
+// ---------------------------------------------------------------------------
+// Config pages — SCHEMA key checks
+// ---------------------------------------------------------------------------
+
+void test_general_page_schema_keys() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'volume'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'startup'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'rndon'"));
@@ -96,12 +120,39 @@ void test_general_page_schema_has_expected_keys() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'myi2c'"));
 }
 
-void test_general_page_has_viewport_meta() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "viewport"));
+void test_wifi_page_schema_keys() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifion'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifissid'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifipassword'"));
+}
+
+void test_xbee_page_schema_keys() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_XBEE, "'xbr'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_XBEE, "'xbl'"));
+}
+
+void test_audio_page_schema_keys() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'volume'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'volumeChA'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'volumeChB'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'startupem'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'ackem'"));
+}
+
+void test_rc_radio_page_schema_keys() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_RC_RADIO, "'rcchn'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_RC_RADIO, "'rvrmin'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_RC_RADIO, "'fst'"));
+}
+
+void test_dome_page_schema_keys() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DOME, "'domespeed'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DOME, "'domeflip'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DOME, "'domercaddr'"));
 }
 
 // ---------------------------------------------------------------------------
-// buildGeneralConfigJson — JSON content
+// buildFullConfigJson — JSON content
 // ---------------------------------------------------------------------------
 
 // AmidalaParameters::init() uses internal statics, so calling it on multiple
@@ -111,7 +162,6 @@ void test_general_page_has_viewport_meta() {
 static AmidalaParameters makeParams() {
     AmidalaParameters p;
     memset(&p, 0, sizeof(p));
-    // Mirror the defaults from params.h init() that the JSON tests care about
     p.volume      = 50;
     p.startup     = true;
     p.rndon       = true;
@@ -128,9 +178,24 @@ static AmidalaParameters makeParams() {
     return p;
 }
 
-void test_general_json_contains_all_keys() {
+void test_full_config_json_wraps_in_braces() {
     AmidalaParameters p = makeParams();
-    String json = buildGeneralConfigJson(p);
+    String json = buildFullConfigJson(p);
+    const char* s = json.c_str();
+    TEST_ASSERT_EQUAL('{', s[0]);
+    TEST_ASSERT_EQUAL('}', s[strlen(s) - 1]);
+}
+
+void test_full_config_json_no_trailing_comma() {
+    AmidalaParameters p = makeParams();
+    String json = buildFullConfigJson(p);
+    const char* s = json.c_str();
+    TEST_ASSERT_NOT_EQUAL(',', s[strlen(s) - 2]);
+}
+
+void test_full_config_json_general_keys() {
+    AmidalaParameters p = makeParams();
+    String json = buildFullConfigJson(p);
     const char* s = json.c_str();
     TEST_ASSERT_TRUE(contains(s, "\"volume\""));
     TEST_ASSERT_TRUE(contains(s, "\"startup\""));
@@ -147,166 +212,41 @@ void test_general_json_contains_all_keys() {
     TEST_ASSERT_TRUE(contains(s, "\"myi2c\""));
 }
 
-void test_general_json_default_volume() {
-    AmidalaParameters p = makeParams();
-    String json = buildGeneralConfigJson(p);
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"volume\":50"));
-}
-
-void test_general_json_bool_true_encodes_as_y() {
-    AmidalaParameters p = makeParams();
-    // startup=true, rndon=true by default in makeParams()
-    String json = buildGeneralConfigJson(p);
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"startup\":\"y\""));
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"rndon\":\"y\""));
-}
-
-void test_general_json_bool_false_encodes_as_n() {
-    AmidalaParameters p = makeParams();
-    // ackon=false, goslow=false by default in makeParams()
-    String json = buildGeneralConfigJson(p);
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"ackon\":\"n\""));
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"goslow\":\"n\""));
-}
-
-void test_general_json_wraps_in_braces() {
-    AmidalaParameters p = makeParams();
-    String json = buildGeneralConfigJson(p);
-    const char* s = json.c_str();
-    TEST_ASSERT_EQUAL('{', s[0]);
-    TEST_ASSERT_EQUAL('}', s[strlen(s) - 1]);
-}
-
-void test_general_json_no_trailing_comma_before_close() {
-    AmidalaParameters p = makeParams();
-    String json = buildGeneralConfigJson(p);
-    // The character just before the closing brace must not be a comma
-    const char* s = json.c_str();
-    size_t len = strlen(s);
-    TEST_ASSERT_TRUE(len >= 2);
-    TEST_ASSERT_NOT_EQUAL(',', s[len - 2]);
-}
-
-void test_general_json_reflects_changed_volume() {
-    AmidalaParameters p = makeParams();
-    p.volume = 77;
-    String json = buildGeneralConfigJson(p);
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"volume\":77"));
-}
-
-void test_general_json_reflects_changed_serialbaud() {
-    AmidalaParameters p = makeParams();
-    p.serialbaud = 115200;
-    String json = buildGeneralConfigJson(p);
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"serialbaud\":115200"));
-}
-
-// ---------------------------------------------------------------------------
-// New config pages — content checks
-// ---------------------------------------------------------------------------
-
-void test_wifi_page_has_correct_api() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "/api/config/wifi"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "href=\"/\""));
-}
-void test_wifi_page_schema_keys() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifion'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifissid'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifipassword'"));
-}
-
-void test_xbee_page_has_correct_api() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_XBEE, "/api/config/xbee"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_XBEE, "href=\"/\""));
-}
-void test_xbee_page_schema_keys() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_XBEE, "'xbr'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_XBEE, "'xbl'"));
-}
-
-void test_audio_page_has_correct_api() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "/api/config/audio"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "href=\"/\""));
-}
-void test_audio_page_schema_keys() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'volumeChA'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'volumeChB'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'startupem'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'ackem'"));
-}
-
-void test_rc_radio_page_has_correct_api() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_RC_RADIO, "/api/config/rc-radio"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_RC_RADIO, "href=\"/\""));
-}
-void test_rc_radio_page_schema_keys() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_RC_RADIO, "'rcchn'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_RC_RADIO, "'rvrmin'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_RC_RADIO, "'fst'"));
-}
-
-void test_dome_page_has_correct_api() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_DOME, "/api/config/dome"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_DOME, "href=\"/\""));
-}
-void test_dome_page_schema_keys() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_DOME, "'domespeed'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_DOME, "'domeflip'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_DOME, "'domercaddr'"));
-}
-
-// ---------------------------------------------------------------------------
-// New JSON builders
-// ---------------------------------------------------------------------------
-
-void test_wifi_json_contains_all_keys() {
+void test_full_config_json_wifi_keys() {
     AmidalaParameters p = makeParams();
     strncpy(p.wifiSSID, "amidala", sizeof(p.wifiSSID));
-    strncpy(p.wifiPassword, "Astromech", sizeof(p.wifiPassword));
-    p.wifion = true;
-    String json = buildWifiConfigJson(p);
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"wifion\""));
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"wifissid\""));
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"wifipassword\""));
-}
-void test_wifi_json_ssid_value() {
-    AmidalaParameters p = makeParams();
-    strncpy(p.wifiSSID, "testnet", sizeof(p.wifiSSID));
-    String json = buildWifiConfigJson(p);
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"wifissid\":\"testnet\""));
+    String json = buildFullConfigJson(p);
+    const char* s = json.c_str();
+    TEST_ASSERT_TRUE(contains(s, "\"wifion\""));
+    TEST_ASSERT_TRUE(contains(s, "\"wifissid\""));
+    TEST_ASSERT_TRUE(contains(s, "\"wifipassword\""));
+    TEST_ASSERT_TRUE(contains(s, "\"wifissid\":\"amidala\""));
 }
 
-void test_xbee_json_keys_and_hex_format() {
+void test_full_config_json_xbee_hex_format() {
     AmidalaParameters p = makeParams();
     p.xbr = 0x0A1B2C3D;
     p.xbl = 0x00000000;
-    String json = buildXbeeConfigJson(p);
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"xbr\""));
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"xbl\""));
+    String json = buildFullConfigJson(p);
     TEST_ASSERT_TRUE(contains(json.c_str(), "\"xbr\":\"0A1B2C3D\""));
     TEST_ASSERT_TRUE(contains(json.c_str(), "\"xbl\":\"00000000\""));
 }
 
-void test_audio_json_contains_all_keys() {
+void test_full_config_json_audio_keys() {
     AmidalaParameters p = makeParams();
-    String json = buildAudioConfigJson(p);
+    p.audiohw = 1; // AUDIO_HW_HCR
+    String json = buildFullConfigJson(p);
     const char* s = json.c_str();
-    TEST_ASSERT_TRUE(contains(s, "\"audiohw\""));
+    TEST_ASSERT_TRUE(contains(s, "\"audiohw\":\"hcr\""));
     TEST_ASSERT_TRUE(contains(s, "\"volumeChA\""));
     TEST_ASSERT_TRUE(contains(s, "\"volumeChB\""));
     TEST_ASSERT_TRUE(contains(s, "\"startupem\""));
     TEST_ASSERT_TRUE(contains(s, "\"ackem\""));
 }
-void test_audio_json_hcr_default() {
-    AmidalaParameters p = makeParams();
-    p.audiohw = 1; // AUDIO_HW_HCR
-    String json = buildAudioConfigJson(p);
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"audiohw\":\"hcr\""));
-}
 
-void test_rc_radio_json_contains_all_keys() {
+void test_full_config_json_rc_radio_keys() {
     AmidalaParameters p = makeParams();
-    String json = buildRcRadioConfigJson(p);
+    String json = buildFullConfigJson(p);
     const char* s = json.c_str();
     TEST_ASSERT_TRUE(contains(s, "\"rcchn\""));
     TEST_ASSERT_TRUE(contains(s, "\"rcd\""));
@@ -315,9 +255,9 @@ void test_rc_radio_json_contains_all_keys() {
     TEST_ASSERT_TRUE(contains(s, "\"j1adjv\""));
 }
 
-void test_dome_json_contains_all_keys() {
+void test_full_config_json_dome_keys() {
     AmidalaParameters p = makeParams();
-    String json = buildDomeConfigJson(p);
+    String json = buildFullConfigJson(p);
     const char* s = json.c_str();
     TEST_ASSERT_TRUE(contains(s, "\"domespeed\""));
     TEST_ASSERT_TRUE(contains(s, "\"domeflip\""));
@@ -325,25 +265,54 @@ void test_dome_json_contains_all_keys() {
     TEST_ASSERT_TRUE(contains(s, "\"domercaddr\""));
     TEST_ASSERT_TRUE(contains(s, "\"domestall\""));
 }
-void test_dome_json_no_trailing_comma() {
+
+void test_full_config_json_default_volume() {
     AmidalaParameters p = makeParams();
-    String json = buildDomeConfigJson(p);
-    const char* s = json.c_str();
-    TEST_ASSERT_NOT_EQUAL(',', s[strlen(s) - 2]);
+    String json = buildFullConfigJson(p);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"volume\":50"));
+}
+
+void test_full_config_json_bool_true_encodes_as_y() {
+    AmidalaParameters p = makeParams();
+    String json = buildFullConfigJson(p);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"startup\":\"y\""));
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"rndon\":\"y\""));
+}
+
+void test_full_config_json_bool_false_encodes_as_n() {
+    AmidalaParameters p = makeParams();
+    String json = buildFullConfigJson(p);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"ackon\":\"n\""));
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"goslow\":\"n\""));
+}
+
+void test_full_config_json_reflects_changed_volume() {
+    AmidalaParameters p = makeParams();
+    p.volume = 77;
+    String json = buildFullConfigJson(p);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"volume\":77"));
+}
+
+void test_full_config_json_reflects_changed_serialbaud() {
+    AmidalaParameters p = makeParams();
+    p.serialbaud = 115200;
+    String json = buildFullConfigJson(p);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"serialbaud\":115200"));
 }
 
 // ---------------------------------------------------------------------------
 // buildInfoJson — JSON content
 // ---------------------------------------------------------------------------
 
-void test_info_json_contains_firmware_key() {
-    String json = buildInfoJson("roboteq-pwm", "roboclaw", "hcr", "amidala", "192.168.4.1");
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"firmware\""));
-}
-
 void test_info_json_contains_version_key() {
     String json = buildInfoJson("roboteq-pwm", "roboclaw", "hcr", "amidala", "192.168.4.1");
     TEST_ASSERT_TRUE(contains(json.c_str(), "\"version\""));
+}
+
+void test_info_json_contains_board_rev_and_mcu() {
+    String json = buildInfoJson("roboteq-pwm", "roboclaw", "hcr", "amidala", "192.168.4.1");
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"board_rev\":\"1.1\""));
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"mcu\":\"ESP32-S3 N16R8\""));
 }
 
 void test_info_json_drive_string_appears() {
@@ -383,48 +352,41 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_home_page_has_viewport_meta);
     RUN_TEST(test_home_page_populates_build_strip_ids);
 
-    // General settings page
-    RUN_TEST(test_general_page_fetches_config_endpoint);
-    RUN_TEST(test_general_page_posts_to_config_endpoint);
-    RUN_TEST(test_general_page_has_back_link);
-    RUN_TEST(test_general_page_schema_has_expected_keys);
+    // Config pages — endpoint + back-link
+    RUN_TEST(test_general_page_uses_config_endpoint);
     RUN_TEST(test_general_page_has_viewport_meta);
+    RUN_TEST(test_wifi_page_uses_config_endpoint);
+    RUN_TEST(test_xbee_page_uses_config_endpoint);
+    RUN_TEST(test_audio_page_uses_config_endpoint);
+    RUN_TEST(test_rc_radio_page_uses_config_endpoint);
+    RUN_TEST(test_dome_page_uses_config_endpoint);
 
-    // buildGeneralConfigJson
-    RUN_TEST(test_general_json_contains_all_keys);
-    RUN_TEST(test_general_json_default_volume);
-    RUN_TEST(test_general_json_bool_true_encodes_as_y);
-    RUN_TEST(test_general_json_bool_false_encodes_as_n);
-    RUN_TEST(test_general_json_wraps_in_braces);
-    RUN_TEST(test_general_json_no_trailing_comma_before_close);
-    RUN_TEST(test_general_json_reflects_changed_volume);
-    RUN_TEST(test_general_json_reflects_changed_serialbaud);
-
-    // New config pages — HTML content
-    RUN_TEST(test_wifi_page_has_correct_api);
+    // Config pages — SCHEMA keys
+    RUN_TEST(test_general_page_schema_keys);
     RUN_TEST(test_wifi_page_schema_keys);
-    RUN_TEST(test_xbee_page_has_correct_api);
     RUN_TEST(test_xbee_page_schema_keys);
-    RUN_TEST(test_audio_page_has_correct_api);
     RUN_TEST(test_audio_page_schema_keys);
-    RUN_TEST(test_rc_radio_page_has_correct_api);
     RUN_TEST(test_rc_radio_page_schema_keys);
-    RUN_TEST(test_dome_page_has_correct_api);
     RUN_TEST(test_dome_page_schema_keys);
 
-    // New JSON builders
-    RUN_TEST(test_wifi_json_contains_all_keys);
-    RUN_TEST(test_wifi_json_ssid_value);
-    RUN_TEST(test_xbee_json_keys_and_hex_format);
-    RUN_TEST(test_audio_json_contains_all_keys);
-    RUN_TEST(test_audio_json_hcr_default);
-    RUN_TEST(test_rc_radio_json_contains_all_keys);
-    RUN_TEST(test_dome_json_contains_all_keys);
-    RUN_TEST(test_dome_json_no_trailing_comma);
+    // buildFullConfigJson
+    RUN_TEST(test_full_config_json_wraps_in_braces);
+    RUN_TEST(test_full_config_json_no_trailing_comma);
+    RUN_TEST(test_full_config_json_general_keys);
+    RUN_TEST(test_full_config_json_wifi_keys);
+    RUN_TEST(test_full_config_json_xbee_hex_format);
+    RUN_TEST(test_full_config_json_audio_keys);
+    RUN_TEST(test_full_config_json_rc_radio_keys);
+    RUN_TEST(test_full_config_json_dome_keys);
+    RUN_TEST(test_full_config_json_default_volume);
+    RUN_TEST(test_full_config_json_bool_true_encodes_as_y);
+    RUN_TEST(test_full_config_json_bool_false_encodes_as_n);
+    RUN_TEST(test_full_config_json_reflects_changed_volume);
+    RUN_TEST(test_full_config_json_reflects_changed_serialbaud);
 
     // buildInfoJson
-    RUN_TEST(test_info_json_contains_firmware_key);
     RUN_TEST(test_info_json_contains_version_key);
+    RUN_TEST(test_info_json_contains_board_rev_and_mcu);
     RUN_TEST(test_info_json_drive_string_appears);
     RUN_TEST(test_info_json_null_drive_emits_null);
     RUN_TEST(test_info_json_ssid_appears);

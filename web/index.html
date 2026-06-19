@@ -54,7 +54,7 @@ header{text-align:center;padding:2rem 1rem 1.5rem;border-bottom:1px solid var(--
 </nav>
 <script>
 fetch('/api/info').then(function(r){return r.json();}).then(function(d){
-  document.getElementById('fwv').textContent=d.firmware+' v'+d.version+' · '+d.date;
+  document.getElementById('fwv').textContent='v'+d.version+' · '+d.mcu+' · r'+d.board_rev+' · '+d.date;
   document.getElementById('bi-dr').textContent=d.drive||'none';
   document.getElementById('bi-do').textContent=d.dome||'none';
   document.getElementById('bi-au').textContent=d.audio;

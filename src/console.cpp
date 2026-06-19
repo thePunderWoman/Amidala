@@ -63,7 +63,7 @@ void AmidalaConsole::showXBEE() {
 }
 
 void AmidalaConsole::printVersion() {
-  print(F("Amidala RC - "));
+  print(F("Amidala - "));
   print(VERSION_NUM);
   print(F(" Build "));
   print(BUILD_NUM);

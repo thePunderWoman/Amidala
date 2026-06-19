@@ -1,5 +1,4 @@
-// web_api.h — GENERATED indirectly: JSON builders hand-maintained here,
-// HTML pages generated from web/ by scripts/embed_web.py.
+// web_api.h
 // Pure JSON-building functions for the Amidala web API.
 //
 // Header-only so they compile in both the firmware (Arduino String from the
@@ -10,6 +9,7 @@
 #pragma once
 
 #include "params.h"
+#include "version.h"
 
 // ---------------------------------------------------------------------------
 // Hex string helper (8 uppercase hex digits, no prefix)
@@ -32,8 +32,9 @@ inline String buildInfoJson(const char* drive, const char* dome,
     String domeVal  = dome  ? (String("\"") + dome  + "\"") : String("null");
 
     String json = "{";
-    json += "\"firmware\":\"Amidala RC\",";
-    json += "\"version\":\"1.3\",";
+    json += "\"version\":\""   FIRMWARE_VERSION "\",";
+    json += "\"board_rev\":\"" BOARD_REV        "\",";
+    json += "\"mcu\":\""       MCU_VARIANT      "\",";
     json += "\"date\":\"" __DATE__ "\",";
     json += "\"drive\":"    + driveVal + ",";
     json += "\"dome\":"     + domeVal  + ",";
@@ -45,71 +46,62 @@ inline String buildInfoJson(const char* drive, const char* dome,
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/config/wifi
+// GET /api/config  (all tuneable settings in one flat object)
+// Every config sub-page fetches this single endpoint and reads the keys it
+// needs — no per-page endpoints required.
 // ---------------------------------------------------------------------------
-inline String buildWifiConfigJson(const AmidalaParameters& p) {
-    String json = "{";
-    json += "\"wifion\":\""       + String(p.wifion ? "y" : "n") + "\",";
-    json += "\"wifissid\":\""     + String(p.wifiSSID)            + "\",";
-    json += "\"wifipassword\":\"" + String(p.wifiPassword)        + "\"";
-    json += "}";
-    return json;
-}
-
-// ---------------------------------------------------------------------------
-// GET /api/config/xbee
-// ---------------------------------------------------------------------------
-inline String buildXbeeConfigJson(const AmidalaParameters& p) {
-    String json = "{";
-    json += "\"xbr\":\"" + hexStr(p.xbr) + "\",";
-    json += "\"xbl\":\"" + hexStr(p.xbl) + "\"";
-    json += "}";
-    return json;
-}
-
-// ---------------------------------------------------------------------------
-// GET /api/config/audio
-// ---------------------------------------------------------------------------
-inline String buildAudioConfigJson(const AmidalaParameters& p) {
+inline String buildFullConfigJson(const AmidalaParameters& p) {
     const char* hw = (p.audiohw == AUDIO_HW_VMUSIC) ? "vmusic" : "hcr";
     String json = "{";
-    json += "\"audiohw\":\""        + String(hw)                         + "\",";
-    json += "\"volumeChA\":"        + String(p.volumeChA)                + ",";
-    json += "\"volumeChB\":"        + String(p.volumeChB)                + ",";
-    json += "\"volumewheel\":"      + String(p.volumewheel)              + ",";
-    json += "\"altvolumewheel\":"   + String(p.altvolumewheel)           + ",";
-    json += "\"startupem\":"        + String(p.startupem)                + ",";
-    json += "\"startuplvl\":"       + String(p.startuplvl)               + ",";
-    json += "\"ackem\":"            + String(p.ackem)                    + ",";
-    json += "\"acklvl\":"           + String(p.acklvl);
-    json += "}";
-    return json;
-}
 
-// ---------------------------------------------------------------------------
-// GET /api/config/rc-radio
-// ---------------------------------------------------------------------------
-inline String buildRcRadioConfigJson(const AmidalaParameters& p) {
-    String json = "{";
-    json += "\"rcchn\":"  + String(p.rcchn)  + ",";
-    json += "\"rcd\":"    + String(p.rcd)    + ",";
-    json += "\"rcj\":"    + String(p.rcj)    + ",";
-    json += "\"fst\":"    + String(p.fst)    + ",";
-    json += "\"rvrmin\":" + String(p.rvrmin) + ",";
-    json += "\"rvrmax\":" + String(p.rvrmax) + ",";
-    json += "\"rvlmin\":" + String(p.rvlmin) + ",";
-    json += "\"rvlmax\":" + String(p.rvlmax) + ",";
-    json += "\"j1adjv\":" + String(p.j1adjv) + ",";
-    json += "\"j1adjh\":" + String(p.j1adjh);
-    json += "}";
-    return json;
-}
+    // General
+    json += "\"volume\":"        + String(p.volume)                   + ",";
+    json += "\"startup\":\""     + String(p.startup     ? "y" : "n")  + "\",";
+    json += "\"rndon\":\""       + String(p.rndon       ? "y" : "n")  + "\",";
+    json += "\"mindelay\":"      + String(p.mindelay)                  + ",";
+    json += "\"maxdelay\":"      + String(p.maxdelay)                  + ",";
+    json += "\"ackon\":\""       + String(p.ackon       ? "y" : "n")  + "\",";
+    json += "\"goslow\":\""      + String(p.goslow      ? "y" : "n")  + "\",";
+    json += "\"mix12\":\""       + String(p.mix12       ? "y" : "n")  + "\",";
+    json += "\"auto\":\""        + String(p.autocorrect ? "y" : "n")  + "\",";
+    json += "\"serialbaud\":"    + String(p.serialbaud)                + ",";
+    json += "\"serialdelim\":"   + String(p.serialdelim)               + ",";
+    json += "\"serialeol\":"     + String(p.serialeol)                 + ",";
+    json += "\"myi2c\":"         + String(p.myi2c)                    + ",";
 
-// ---------------------------------------------------------------------------
-// GET /api/config/dome
-// ---------------------------------------------------------------------------
-inline String buildDomeConfigJson(const AmidalaParameters& p) {
-    String json = "{";
+    // WiFi
+    json += "\"wifion\":\""       + String(p.wifion ? "y" : "n")      + "\",";
+    json += "\"wifissid\":\""     + String(p.wifiSSID)                 + "\",";
+    json += "\"wifipassword\":\"" + String(p.wifiPassword)             + "\",";
+
+    // XBee
+    json += "\"xbr\":\"" + hexStr(p.xbr) + "\",";
+    json += "\"xbl\":\"" + hexStr(p.xbl) + "\",";
+
+    // Audio
+    json += "\"audiohw\":\""      + String(hw)                        + "\",";
+    json += "\"volumeChA\":"      + String(p.volumeChA)               + ",";
+    json += "\"volumeChB\":"      + String(p.volumeChB)               + ",";
+    json += "\"volumewheel\":"    + String(p.volumewheel)             + ",";
+    json += "\"altvolumewheel\":" + String(p.altvolumewheel)          + ",";
+    json += "\"startupem\":"      + String(p.startupem)               + ",";
+    json += "\"startuplvl\":"     + String(p.startuplvl)              + ",";
+    json += "\"ackem\":"          + String(p.ackem)                   + ",";
+    json += "\"acklvl\":"         + String(p.acklvl)                  + ",";
+
+    // RC Radio
+    json += "\"rcchn\":"   + String(p.rcchn)  + ",";
+    json += "\"rcd\":"     + String(p.rcd)    + ",";
+    json += "\"rcj\":"     + String(p.rcj)    + ",";
+    json += "\"fst\":"     + String(p.fst)    + ",";
+    json += "\"rvrmin\":"  + String(p.rvrmin) + ",";
+    json += "\"rvrmax\":"  + String(p.rvrmax) + ",";
+    json += "\"rvlmin\":"  + String(p.rvlmin) + ",";
+    json += "\"rvlmax\":"  + String(p.rvlmax) + ",";
+    json += "\"j1adjv\":"  + String(p.j1adjv) + ",";
+    json += "\"j1adjh\":"  + String(p.j1adjh) + ",";
+
+    // Dome
     json += "\"domespeed\":"     + String(p.domespeed)     + ",";
     json += "\"domespeedhome\":" + String(p.domespeedhome) + ",";
     json += "\"domespeedseek\":" + String(p.domespeedseek) + ",";
@@ -127,28 +119,7 @@ inline String buildDomeConfigJson(const AmidalaParameters& p) {
     json += "\"domercqpps\":"    + String(p.domercqpps)    + ",";
     json += "\"domefront\":"     + String(p.domefront)     + ",";
     json += "\"domestall\":"     + String(p.domestall);
-    json += "}";
-    return json;
-}
 
-// ---------------------------------------------------------------------------
-// GET /api/config/general
-// ---------------------------------------------------------------------------
-inline String buildGeneralConfigJson(const AmidalaParameters& p) {
-    String json = "{";
-    json += "\"volume\":"      + String(p.volume)                  + ",";
-    json += "\"startup\":\""   + String(p.startup     ? "y" : "n") + "\",";
-    json += "\"rndon\":\""     + String(p.rndon       ? "y" : "n") + "\",";
-    json += "\"mindelay\":"    + String(p.mindelay)                + ",";
-    json += "\"maxdelay\":"    + String(p.maxdelay)                + ",";
-    json += "\"ackon\":\""     + String(p.ackon       ? "y" : "n") + "\",";
-    json += "\"goslow\":\""    + String(p.goslow      ? "y" : "n") + "\",";
-    json += "\"mix12\":\""     + String(p.mix12       ? "y" : "n") + "\",";
-    json += "\"auto\":\""      + String(p.autocorrect ? "y" : "n") + "\",";
-    json += "\"serialbaud\":"  + String(p.serialbaud)              + ",";
-    json += "\"serialdelim\":" + String(p.serialdelim)             + ",";
-    json += "\"serialeol\":"   + String(p.serialeol)               + ",";
-    json += "\"myi2c\":"       + String(p.myi2c);
     json += "}";
     return json;
 }
