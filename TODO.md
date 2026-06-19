@@ -80,4 +80,4 @@
 ## Testing
 - [x] Unit tests for JSON API builders (`buildGeneralConfigJson`, `buildInfoJson`)
 - [x] Unit tests for HTML page content (API endpoint URLs, nav links, SCHEMA keys)
-- [ ] Unit tests for `updateConfigFile` SD write-back logic (needs SD mock extension)
+- [x] Unit tests for `updateConfigFile` SD write-back logic (SD mock extended with write support)

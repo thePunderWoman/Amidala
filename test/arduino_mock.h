@@ -10,6 +10,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <map>
+#include <string>
 
 // ---- Arduino integer types ----
 typedef bool    boolean;
@@ -258,7 +260,8 @@ public:
     auto p = _s.rfind(s);
     return p == std::string::npos ? -1 : (int)p;
   }
-  bool startsWith(const char* s) const { return s && _s.find(s) == 0; }
+  bool startsWith(const char*   s) const { return s && _s.find(s) == 0; }
+  bool startsWith(const String& s) const { return startsWith(s.c_str()); }
   bool endsWith  (const char* s) const {
     if (!s) return false;
     size_t sl = strlen(s);
@@ -303,33 +306,117 @@ static SerialClass& Serial0 = Serial;
 struct MockSPIClass {};
 static MockSPIClass SPI;
 
-// ---- SD / File stubs (used by config_reader.h in SD path) ----
+// ---- SD / File stubs (used by config_reader.h and config_file.h) ----
+// File supports both read mode (from a const char* or std::string snapshot)
+// and write mode (accumulates output into a std::string owned by MockSDClass).
 
 class File {
 public:
-  File() : fData(nullptr), fPos(0), fValid(false) {}
+  File() : fPos(0), fValid(false), fWriteTarget(nullptr) {}
+
+  // Read mode: legacy path — const char* (e.g. SD.fileContent)
   explicit File(const char* data)
-      : fData(data), fPos(0), fValid(data != nullptr) {}
+    : fContent(data ? data : ""), fPos(0), fValid(data != nullptr),
+      fWriteTarget(nullptr) {}
+
+  // Read mode: from an owned std::string snapshot (map-based SD)
+  explicit File(const std::string& content)
+    : fContent(content), fPos(0), fValid(true), fWriteTarget(nullptr) {}
+
+  // Write mode: output accumulates in *target (owned by MockSDClass::_fs)
+  explicit File(std::string* target)
+    : fPos(0), fValid(target != nullptr), fWriteTarget(target) {}
+
+  // Copy: fWriteTarget is a raw pointer (shared); fContent is value-copied.
+  File(const File& o) = default;
+  File& operator=(const File& o) = default;
 
   explicit operator bool() const { return fValid; }
-  bool available() const { return fValid && fData && fData[fPos] != '\0'; }
-  char read()            { return (fData && fValid) ? fData[fPos++] : '\0'; }
-  void close()           { fValid = false; }
+
+  // ---- Read interface ----
+  bool available() const {
+    return fValid && !fWriteTarget && fPos < fContent.size();
+  }
+  char read() {
+    return (fValid && !fWriteTarget && fPos < fContent.size())
+           ? fContent[fPos++] : '\0';
+  }
+  String readStringUntil(char terminator) {
+    if (!fValid || fWriteTarget) return String("");
+    std::string result;
+    while (fPos < fContent.size() && fContent[fPos] != terminator)
+      result += fContent[fPos++];
+    if (fPos < fContent.size()) fPos++;  // consume terminator
+    return String(result.c_str());
+  }
+
+  // ---- Write interface ----
+  size_t print(const char* s) {
+    if (!fWriteTarget || !s) return 0;
+    *fWriteTarget += s;
+    return strlen(s);
+  }
+  size_t print(const String& s) { return print(s.c_str()); }
+  size_t println(const char* s = "") {
+    size_t n = s ? print(s) : 0;
+    if (fWriteTarget) fWriteTarget->push_back('\n');
+    return n + 1;
+  }
+  size_t println(const String& s) {
+    size_t n = print(s.c_str());
+    if (fWriteTarget) fWriteTarget->push_back('\n');
+    return n + 1;
+  }
+
+  void close() { fValid = false; }
 
 private:
-  const char* fData;
-  size_t      fPos;
-  bool        fValid;
+  std::string  fContent;       // read-mode buffer (owned copy)
+  size_t       fPos;
+  bool         fValid;
+  std::string* fWriteTarget;   // non-null in write mode; points into _fs
 };
 
 struct MockSDClass {
-  bool        beginResult  = true;
-  const char* fileContent  = nullptr;
+  bool        beginResult = true;
+  const char* fileContent = nullptr;      // legacy: used by 1-arg open()
+  std::map<std::string, std::string> _fs; // in-memory filesystem
 
-  bool begin(int /*pin*/)                      { return beginResult; }
-  bool begin(int /*pin*/, MockSPIClass& /*spi*/) { return beginResult; }
+  bool begin(int /*pin*/)                       { return beginResult; }
+  bool begin(int /*pin*/, MockSPIClass& /*spi*/){ return beginResult; }
+
+  // 1-arg open: legacy read-only path (test_config_reader etc.)
   File open(const char* /*name*/) {
     return fileContent ? File(fileContent) : File();
   }
+
+  // 2-arg open: "r" or "w" (matches ESP32 SD.h signature)
+  File open(const char* name, const char* mode) {
+    std::string n(name ? name : "");
+    if (mode && mode[0] == 'r') {
+      auto it = _fs.find(n);
+      if (it != _fs.end()) return File(it->second);
+      return fileContent ? File(fileContent) : File();
+    }
+    if (mode && mode[0] == 'w') {
+      _fs[n] = "";
+      return File(&_fs[n]);  // stable pointer: std::map doesn't invalidate on insert
+    }
+    return File();
+  }
+  File open(const String& name, const char* mode) { return open(name.c_str(), mode); }
+
+  bool remove(const char* name) {
+    return name && _fs.erase(std::string(name)) > 0;
+  }
+  bool remove(const String& name) { return remove(name.c_str()); }
+
+  // Test helper: read back written content
+  std::string getFile(const char* name) const {
+    auto it = _fs.find(std::string(name ? name : ""));
+    return it != _fs.end() ? it->second : "";
+  }
+
+  void reset() { _fs.clear(); fileContent = nullptr; beginResult = true; }
 };
 static MockSDClass SD;

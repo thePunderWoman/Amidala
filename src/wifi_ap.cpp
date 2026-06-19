@@ -44,58 +44,7 @@ static void monAppend(const char* text, char cls = 'i') {
 // SD card config write-back
 // ---------------------------------------------------------------------------
 
-static bool updateConfigFile(const char* key, const char* value) {
-    String path   = "/config.txt";
-    String prefix = String(key) + "=";
-    String newLine = prefix + String(value);
-
-    File f = SD.open(path, "r");
-    if (!f) {
-        // No config.txt yet — create a minimal one
-        File wf = SD.open(path, "w");
-        if (!wf) return false;
-        wf.println("#START");
-        wf.println(newLine);
-        wf.println("#END");
-        wf.close();
-        return true;
-    }
-
-    String out;
-    out.reserve(8192);
-    bool found = false;
-    while (f.available()) {
-        String line = f.readStringUntil('\n');
-        // Trim trailing \r so the comparison works on Windows-style line endings
-        if (line.endsWith("\r")) line.remove(line.length() - 1);
-
-        // Replace a matching non-commented key= line
-        if (!line.startsWith("#") && !line.startsWith("//") && line.startsWith(prefix)) {
-            out += newLine + "\n";
-            found = true;
-        } else {
-            out += line + "\n";
-        }
-    }
-    f.close();
-
-    if (!found) {
-        // Insert before #END if present, otherwise append
-        int endIdx = out.lastIndexOf("#END");
-        if (endIdx >= 0) {
-            out = out.substring(0, endIdx) + newLine + "\n" + out.substring(endIdx);
-        } else {
-            out += newLine + "\n";
-        }
-    }
-
-    SD.remove(path);
-    File wf = SD.open(path, "w");
-    if (!wf) return false;
-    wf.print(out);
-    wf.close();
-    return true;
-}
+#include "config_file.h"
 
 // ---------------------------------------------------------------------------
 // Serial-string config file helpers
