@@ -26,6 +26,7 @@ PAGES = [
     ("config/serial-strings.html",  "WEB_PAGE_SERIAL_STRINGS"),
     ("config/servos.html",          "WEB_PAGE_SERVOS"),
     ("monitor.html",                "WEB_PAGE_MONITOR"),
+    ("update.html",                 "WEB_PAGE_UPDATE"),
     ("config/coming-soon.html",     "WEB_PAGE_COMING_SOON"),
 ]
 

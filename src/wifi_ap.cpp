@@ -7,6 +7,7 @@
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <ESPmDNS.h>
+#include <Update.h>
 #include "SD.h"
 #include "web_api.h"
 #include "controller.h"
@@ -361,6 +362,37 @@ static void handleApiMonitorPost() {
 }
 
 // ---------------------------------------------------------------------------
+// Firmware update (OTA)
+// ---------------------------------------------------------------------------
+
+static void handleUpdateUpload() {
+    HTTPUpload& upload = sServer.upload();
+    if (upload.status == UPLOAD_FILE_START) {
+        monAppend("OTA: upload started", 'i');
+        if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+            monAppend("OTA: begin failed", 'i');
+        }
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+        if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+            monAppend("OTA: write error", 'i');
+        }
+    } else if (upload.status == UPLOAD_FILE_END) {
+        if (Update.end(true)) {
+            monAppend("OTA: flash complete, restarting", 'i');
+        } else {
+            monAppend("OTA: end failed", 'i');
+        }
+    }
+}
+
+static void handleUpdatePost() {
+    bool ok = !Update.hasError();
+    sServer.send(200, "text/plain", ok ? "OK" : "FAIL");
+    delay(200);
+    if (ok) ESP.restart();
+}
+
+// ---------------------------------------------------------------------------
 // Page handlers
 // ---------------------------------------------------------------------------
 
@@ -377,6 +409,7 @@ static void handleConfigDome()          { sServer.send(200, "text/html", WEB_PAG
 static void handleConfigSerialStrings() { sServer.send(200, "text/html", WEB_PAGE_SERIAL_STRINGS);  }
 static void handleConfigServos()        { sServer.send(200, "text/html", WEB_PAGE_SERVOS);           }
 static void handleMonitor()             { sServer.send(200, "text/html", WEB_PAGE_MONITOR);         }
+static void handleUpdatePage()          { sServer.send(200, "text/html", WEB_PAGE_UPDATE);          }
 static void handleComingSoon()          { sServer.send(200, "text/html", WEB_PAGE_COMING_SOON);     }
 
 // ---------------------------------------------------------------------------
@@ -420,7 +453,8 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/monitor",              HTTP_GET,  handleMonitor);
     sServer.on("/api/monitor",          HTTP_GET,  handleApiMonitorGet);
     sServer.on("/api/monitor",          HTTP_POST, handleApiMonitorPost);
-    sServer.on("/update",               HTTP_GET, handleComingSoon);
+    sServer.on("/update",               HTTP_GET,  handleUpdatePage);
+    sServer.on("/update",               HTTP_POST, handleUpdatePost, handleUpdateUpload);
 
     // REST API
     sServer.on("/api/info",   HTTP_GET,  handleApiInfo);

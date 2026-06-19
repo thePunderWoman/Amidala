@@ -312,6 +312,8 @@ function showToast(msg, isErr) {
 
 function startEdit(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
   btn.hidden = true;
@@ -321,6 +323,8 @@ function startEdit(btn) {
 
 function doCancel(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
@@ -413,8 +417,8 @@ function buildRow(s, val) {
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
-    + '<button class="bs hidden" onclick="doSave(this)" title="Save">&#10003;</button>'
-    + '<button class="bc hidden" onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '<button class="bs" hidden onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)" title="Cancel">&#10005;</button>'
     + '</div>';
 }
 
@@ -614,6 +618,8 @@ function showToast(msg, isErr) {
 
 function startEdit(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
   btn.hidden = true;
@@ -623,6 +629,8 @@ function startEdit(btn) {
 
 function doCancel(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
@@ -715,8 +723,8 @@ function buildRow(s, val) {
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
-    + '<button class="bs hidden" onclick="doSave(this)" title="Save">&#10003;</button>'
-    + '<button class="bc hidden" onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '<button class="bs" hidden onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)" title="Cancel">&#10005;</button>'
     + '</div>';
 }
 
@@ -910,6 +918,8 @@ function showToast(msg, isErr) {
 
 function startEdit(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
   btn.hidden = true;
@@ -919,6 +929,8 @@ function startEdit(btn) {
 
 function doCancel(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
@@ -1011,8 +1023,8 @@ function buildRow(s, val) {
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
-    + '<button class="bs hidden" onclick="doSave(this)" title="Save">&#10003;</button>'
-    + '<button class="bc hidden" onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '<button class="bs" hidden onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)" title="Cancel">&#10005;</button>'
     + '</div>';
 }
 
@@ -1205,6 +1217,8 @@ function showToast(msg, isErr) {
 
 function startEdit(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
   btn.hidden = true;
@@ -1214,6 +1228,8 @@ function startEdit(btn) {
 
 function doCancel(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
@@ -1306,8 +1322,8 @@ function buildRow(s, val) {
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
-    + '<button class="bs hidden" onclick="doSave(this)" title="Save">&#10003;</button>'
-    + '<button class="bc hidden" onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '<button class="bs" hidden onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)" title="Cancel">&#10005;</button>'
     + '</div>';
 }
 
@@ -1521,6 +1537,8 @@ function showToast(msg, isErr) {
 
 function startEdit(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
   btn.hidden = true;
@@ -1530,6 +1548,8 @@ function startEdit(btn) {
 
 function doCancel(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
@@ -1622,8 +1642,8 @@ function buildRow(s, val) {
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
-    + '<button class="bs hidden" onclick="doSave(this)" title="Save">&#10003;</button>'
-    + '<button class="bc hidden" onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '<button class="bs" hidden onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)" title="Cancel">&#10005;</button>'
     + '</div>';
 }
 
@@ -1827,6 +1847,8 @@ function showToast(msg, isErr) {
 
 function startEdit(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
   btn.hidden = true;
@@ -1836,6 +1858,8 @@ function startEdit(btn) {
 
 function doCancel(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
@@ -1928,8 +1952,8 @@ function buildRow(s, val) {
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
-    + '<button class="bs hidden" onclick="doSave(this)" title="Save">&#10003;</button>'
-    + '<button class="bc hidden" onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '<button class="bs" hidden onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)" title="Cancel">&#10005;</button>'
     + '</div>';
 }
 
@@ -2146,6 +2170,8 @@ function showToast(msg, isErr) {
 
 function startEdit(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
   btn.hidden = true;
@@ -2155,6 +2181,8 @@ function startEdit(btn) {
 
 function doCancel(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
@@ -2247,8 +2275,8 @@ function buildRow(s, val) {
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
-    + '<button class="bs hidden" onclick="doSave(this)" title="Save">&#10003;</button>'
-    + '<button class="bc hidden" onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '<button class="bs" hidden onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)" title="Cancel">&#10005;</button>'
     + '</div>';
 }
 
@@ -2555,6 +2583,8 @@ function showToast(msg, isErr) {
 
 function startEdit(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
   btn.hidden = true;
@@ -2564,6 +2594,8 @@ function startEdit(btn) {
 
 function doCancel(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
@@ -2656,8 +2688,8 @@ function buildRow(s, val) {
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
-    + '<button class="bs hidden" onclick="doSave(this)" title="Save">&#10003;</button>'
-    + '<button class="bc hidden" onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '<button class="bs" hidden onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)" title="Cancel">&#10005;</button>'
     + '</div>';
 }
 
@@ -2948,6 +2980,8 @@ function showToast(msg, isErr) {
 
 function startEdit(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
   btn.hidden = true;
@@ -2957,6 +2991,8 @@ function startEdit(btn) {
 
 function doCancel(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
@@ -3049,8 +3085,8 @@ function buildRow(s, val) {
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
-    + '<button class="bs hidden" onclick="doSave(this)" title="Save">&#10003;</button>'
-    + '<button class="bc hidden" onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '<button class="bs" hidden onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)" title="Cancel">&#10005;</button>'
     + '</div>';
 }
 
@@ -3158,6 +3194,448 @@ function togglePause() {
 
 poll();
 setInterval(poll, 1500);
+</script>
+</body>
+</html>
+)html";
+
+static const char WEB_PAGE_UPDATE[] = R"html(<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Firmware Update &#9670; AMIDALA</title>
+<style>
+/* Amidala web UI — shared styles.
+   Embed script inlines this into every page's <style> block.
+   In dev mode (scripts/web_dev.py) it's served as a real file from /assets/common.css. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --gold:   #ffe81f;
+  --red:    #c00;
+  --bg:     #000;
+  --card:   #0a0a0a;
+  --dim:    #555;
+  --border: #ffe81f22;
+}
+
+body {
+  background: var(--bg);
+  color: var(--gold);
+  font-family: 'Courier New', Courier, monospace;
+  min-height: 100vh;
+  font-size: 15px;
+}
+
+a {
+  color: var(--gold);
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #111;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  padding: .55rem 1.4rem;
+  font-size: .78rem;
+  letter-spacing: .08em;
+  pointer-events: none;
+  white-space: nowrap;
+  animation: _tfi .15s ease, _tfo .3s 1.9s ease forwards;
+  z-index: 9999;
+}
+.toast-err {
+  border-color: var(--red);
+  color: var(--red);
+}
+@keyframes _tfi {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px) }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) }
+}
+@keyframes _tfo {
+  from { opacity: 1 }
+  to   { opacity: 0 }
+}
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }
+</style>
+<style>
+.page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
+.back{font-size:.8rem;color:var(--dim);letter-spacing:.1em;white-space:nowrap}
+.back:hover{color:var(--gold)}
+.page-title{flex:1;text-align:center;font-size:.9rem;letter-spacing:.25em;text-transform:uppercase}
+main{max-width:660px;margin:0 auto;padding:1rem}
+.section-label{font-size:.6rem;color:var(--dim);letter-spacing:.25em;text-transform:uppercase;padding:.5rem 0 .4rem;border-bottom:1px solid var(--border);margin-bottom:.2rem}
+.row{display:flex;align-items:center;padding:.7rem .2rem;border-bottom:1px solid #0f0f0f;gap:.5rem}
+.row-label{flex:1;font-size:.82rem;color:#ccc}
+.rv{font-size:.82rem;color:var(--gold);min-width:60px;text-align:right}
+.warn-box{border:1px solid #c80;background:#1a1200;color:#fa0;padding:.9rem 1.1rem;font-size:.78rem;line-height:1.7;margin:1rem 0}
+.warn-box strong{color:#ffd;letter-spacing:.05em;display:block;margin-bottom:.3rem}
+.warn-box code{color:#fc8;font-size:.82em}
+.file-row{padding:.9rem .2rem;border-bottom:1px solid #0f0f0f}
+#fw-file{font-size:.8rem;color:var(--dim);width:100%}
+#fw-file::file-selector-button{background:#111;color:var(--gold);border:1px solid var(--gold);padding:.3rem .8rem;cursor:pointer;font-size:.75rem;letter-spacing:.08em;margin-right:.7rem}
+#flash-btn{margin-top:1.2rem;background:#700;color:#fff;border:1px solid #c44;padding:.5rem 1.6rem;font-size:.78rem;letter-spacing:.15em;text-transform:uppercase}
+#flash-btn:disabled{opacity:.35;cursor:default}
+#flash-btn:not(:disabled):hover{background:#a00}
+.prog-wrap{margin:1.6rem 0 .4rem}
+.prog-label{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:.7rem}
+progress{width:100%;height:22px;appearance:none;-webkit-appearance:none;border:1px solid var(--border);background:#111;display:block}
+progress::-webkit-progress-bar{background:#111}
+progress::-webkit-progress-value{background:var(--gold);transition:width .4s ease}
+progress::-moz-progress-bar{background:var(--gold)}
+progress.busy::-webkit-progress-value{animation:prog-pulse 1.2s ease-in-out infinite}
+@keyframes prog-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.prog-pct{font-size:.7rem;color:var(--dim);text-align:right;margin-top:.35rem}
+.success-box{border:1px solid #0a0;background:#001400;color:#4f4;padding:1.6rem;text-align:center;line-height:2.2;margin-top:1rem}
+.success-box .icon{font-size:2rem;display:block}
+.success-box .ver{font-size:.72rem;color:#8f8;letter-spacing:.1em;display:block}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; Back</a>
+  <div class="page-title">&#9670; Firmware Update &#9670;</div>
+</div>
+<main>
+  <div id="form-area">
+    <div class="section-label">Current Firmware</div>
+    <div class="row"><div class="row-label">Version</div><div class="rv" id="cur-ver">&#8212;</div></div>
+    <div class="row"><div class="row-label">MCU</div><div class="rv" id="cur-mcu">&#8212;</div></div>
+    <div class="row"><div class="row-label">Build Date</div><div class="rv" id="cur-date">&#8212;</div></div>
+
+    <div class="section-label" style="margin-top:.8rem">Flash New Firmware</div>
+    <div class="warn-box">
+      <strong>&#9888; WARNING</strong>
+      This will overwrite the firmware currently running on your droid.
+      Do not power off the droid while the update is in progress — this can permanently brick the board.
+      Ensure you are uploading the correct <code>.bin</code> file for this hardware revision.
+    </div>
+    <div class="file-row">
+      <input type="file" id="fw-file" accept=".bin">
+    </div>
+    <button id="flash-btn" disabled>Flash Firmware</button>
+  </div>
+
+  <div id="prog-area" hidden>
+    <div class="prog-wrap">
+      <div class="prog-label" id="prog-label">Uploading firmware&hellip;</div>
+      <progress id="prog" value="0" max="100"></progress>
+      <div class="prog-pct" id="prog-pct">0%</div>
+    </div>
+  </div>
+
+  <div id="success-area" hidden>
+    <div class="success-box">
+      <span class="icon">&#10003;</span>
+      Firmware update complete.
+      <span class="ver" id="new-ver"></span>
+    </div>
+  </div>
+</main>
+<script>
+/* Amidala web UI — edit-in-place widget + shared config page helpers.
+   Embed script inlines this into every config sub-page.
+   In dev mode (scripts/web_dev.py) it's served as /assets/edit.js. */
+
+// ------------------------------------------------------------------ toast ---
+
+function showToast(msg, isErr) {
+  var t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' toast-err' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
+}
+
+// -------------------------------------------------------- edit-in-place -----
+
+function startEdit(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
+  row.querySelector('.rv').hidden = true;
+  row.querySelector('.ri').hidden = false;
+  btn.hidden = true;
+  row.querySelector('.bs').hidden = false;
+  row.querySelector('.bc').hidden = false;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  row.querySelector('.rv').hidden = false;
+  row.querySelector('.ri').hidden = true;
+  row.querySelector('.be').hidden = false;
+  row.querySelector('.bs').hidden = true;
+  btn.hidden = true;
+}
+
+async function doSave(btn) {
+  var row = btn.closest('.row');
+  var key = row.dataset.key;
+  var inp = row.querySelector('input,select');
+  var val = inp.value;
+  var prev = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    var r = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'key=' + encodeURIComponent(key) + '&value=' + encodeURIComponent(val)
+    });
+    if (r.ok) {
+      var dv = row.querySelector('.rv');
+      var rt = row.dataset.type;
+      if (rt === 'bool' || rt === 'select') {
+        var sel = row.querySelector('select');
+        dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'password') {
+        dv.textContent = '••••••••';
+      } else {
+        dv.textContent = val;
+      }
+      doCancel(row.querySelector('.bc'));
+      showToast('Saved');
+    } else {
+      showToast('Save failed: ' + await r.text(), true);
+    }
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+// ------------------------------------------------ schema-driven row builder --
+
+function dispValue(s, val) {
+  if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
+  if (s.type === 'select') {
+    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    return found ? found.l : val;
+  }
+  if (s.type === 'password') return '••••••••';
+  return String(val);
+}
+
+function buildInput(s, val) {
+  if (s.type === 'bool') {
+    return '<select>'
+      + '<option value="y"' + (val === 'y' ? ' selected' : '') + '>On</option>'
+      + '<option value="n"' + (val === 'n' ? ' selected' : '') + '>Off</option>'
+      + '</select>';
+  }
+  if (s.type === 'select') {
+    var opts = (s.options || []).map(function(op) {
+      return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
+    }).join('');
+    return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'number') {
+    return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
+  }
+  if (s.type === 'password') {
+    return '<input type="password" value="' + val + '" maxlength="' + (s.maxlength || 64) + '">';
+  }
+  return '<input type="text" value="' + val + '"' + (s.maxlength ? ' maxlength="' + s.maxlength + '"' : '') + '>';
+}
+
+function buildRow(s, val) {
+  var disp = dispValue(s, val);
+  var note = s.note ? '<span style="font-size:.65rem;color:var(--dim);margin-left:.3rem">' + s.note + '</span>' : '';
+  if (s.readOnly) {
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<div class="rv">' + disp + '</div>'
+      + '</div>';
+  }
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    + '<div class="row-label">' + s.label + '</div>'
+    + '<div class="rv">' + disp + '</div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
+    + '<button class="bs" hidden onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '</div>';
+}
+
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.textContent = 'E-Stop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  document.body.appendChild(b);
+})();
+
+function buildPage(SCHEMA, endpoint) {
+  fetch(endpoint)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var html = '';
+      SCHEMA.forEach(function(s) {
+        if (s.section) {
+          html += '<div class="section-label">' + s.section + '</div>';
+          return;
+        }
+        var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
+        html += buildRow(s, val);
+      });
+      document.querySelector('main').innerHTML = html;
+    })
+    .catch(function() {
+      var el = document.getElementById('status');
+      if (el) el.textContent = 'Failed to load settings.';
+    });
+}
+</script>
+<script>
+fetch('/api/info').then(function(r){return r.json();}).then(function(d){
+  document.getElementById('cur-ver').textContent  = 'v' + d.version;
+  document.getElementById('cur-mcu').textContent  = d.mcu;
+  document.getElementById('cur-date').textContent = d.date;
+});
+
+var fileInput   = document.getElementById('fw-file');
+var flashBtn    = document.getElementById('flash-btn');
+var formArea    = document.getElementById('form-area');
+var progArea    = document.getElementById('prog-area');
+var successArea = document.getElementById('success-area');
+var prog        = document.getElementById('prog');
+var progLabel   = document.getElementById('prog-label');
+var progPct     = document.getElementById('prog-pct');
+
+fileInput.onchange = function() {
+  flashBtn.disabled = !fileInput.files.length;
+};
+
+flashBtn.onclick = function() {
+  if (!fileInput.files.length) return;
+  var ok = window.confirm(
+    '⚠ WARNING\n\n' +
+    'This will overwrite the firmware currently running on your droid.\n\n' +
+    'Do NOT power off the droid during the update.\n\n' +
+    'Press OK to begin flashing.'
+  );
+  if (!ok) return;
+  startUpload();
+};
+
+function setPhase(label, pct, busy) {
+  progLabel.textContent = label;
+  prog.value = pct;
+  progPct.textContent = pct + '%';
+  if (busy) prog.classList.add('busy'); else prog.classList.remove('busy');
+}
+
+function startUpload() {
+  formArea.hidden = true;
+  progArea.hidden = false;
+  setPhase('Uploading firmware…', 0, false);
+
+  var xhr = new XMLHttpRequest();
+
+  xhr.upload.onprogress = function(e) {
+    if (e.lengthComputable) {
+      setPhase('Uploading firmware…', Math.round(e.loaded / e.total * 85), false);
+    }
+  };
+
+  xhr.onload = function() {
+    if (xhr.status !== 200 || xhr.responseText.trim() !== 'OK') {
+      progLabel.textContent = 'Upload failed: ' + xhr.responseText;
+      prog.classList.remove('busy');
+      return;
+    }
+    onFlashing();
+  };
+
+  xhr.onerror = function() {
+    // Connection dropped — device restarted mid-send; treat as success
+    onFlashing();
+  };
+
+  var fd = new FormData();
+  fd.append('firmware', fileInput.files[0]);
+  xhr.open('POST', '/update');
+  xhr.send(fd);
+}
+
+function onFlashing() {
+  setPhase('Writing to flash…', 90, true);
+  setTimeout(function() {
+    setPhase('Restarting…', 95, true);
+    pollForRestart();
+  }, 3000);
+}
+
+function pollForRestart() {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    if (++attempts > 30) {
+      clearInterval(timer);
+      setPhase('Timed out — check the board manually.', 95, false);
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        clearInterval(timer);
+        setPhase('Complete', 100, false);
+        setTimeout(function() {
+          progArea.hidden = true;
+          successArea.hidden = false;
+          document.getElementById('new-ver').textContent =
+            'Now running v' + d.version + ' · built ' + d.date;
+        }, 600);
+      })
+      .catch(function() { /* still restarting */ });
+  }, 2000);
+}
 </script>
 </body>
 </html>

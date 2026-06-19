@@ -157,6 +157,14 @@ class _Handler(SimpleHTTPRequestHandler):
         key    = params.get("key", "")
         value  = params.get("value", "")
 
+        if path == "/update":
+            print(f"  OTA    {length} bytes received — simulating flash")
+            _info["version"] = "1.4"
+            _info["date"]    = "Jun 19 2026"
+            _monitor["lines"].append({"t": "OTA: flash complete (simulated)", "c": "info"})
+            _monitor["seq"] += 1
+            self._text("OK")
+            return
         if path == "/api/estop":
             print("  ESTOP!")
             _monitor["lines"].append({"t": "! EMERGENCY STOP", "c": "tx"})

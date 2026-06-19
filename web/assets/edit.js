@@ -16,6 +16,8 @@ function showToast(msg, isErr) {
 
 function startEdit(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
   btn.hidden = true;
@@ -25,6 +27,8 @@ function startEdit(btn) {
 
 function doCancel(btn) {
   var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
@@ -117,8 +121,8 @@ function buildRow(s, val) {
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
-    + '<button class="bs hidden" onclick="doSave(this)" title="Save">&#10003;</button>'
-    + '<button class="bc hidden" onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '<button class="bs" hidden onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)" title="Cancel">&#10005;</button>'
     + '</div>';
 }
 
