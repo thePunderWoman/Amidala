@@ -114,40 +114,10 @@ static void handleApiInfo() {
                       WiFi.softAPIP().toString().c_str()));
 }
 
-static void handleApiConfigGeneral() {
+static void handleApiConfigGet() {
     if (!sCtrl) { sServer.send(500, "application/json", "{}"); return; }
     sServer.send(200, "application/json",
-        buildGeneralConfigJson(sCtrl->params));
-}
-
-static void handleApiConfigWifi() {
-    if (!sCtrl) { sServer.send(500, "application/json", "{}"); return; }
-    sServer.send(200, "application/json",
-        buildWifiConfigJson(sCtrl->params));
-}
-
-static void handleApiConfigXbee() {
-    if (!sCtrl) { sServer.send(500, "application/json", "{}"); return; }
-    sServer.send(200, "application/json",
-        buildXbeeConfigJson(sCtrl->params));
-}
-
-static void handleApiConfigAudio() {
-    if (!sCtrl) { sServer.send(500, "application/json", "{}"); return; }
-    sServer.send(200, "application/json",
-        buildAudioConfigJson(sCtrl->params));
-}
-
-static void handleApiConfigRcRadio() {
-    if (!sCtrl) { sServer.send(500, "application/json", "{}"); return; }
-    sServer.send(200, "application/json",
-        buildRcRadioConfigJson(sCtrl->params));
-}
-
-static void handleApiConfigDome() {
-    if (!sCtrl) { sServer.send(500, "application/json", "{}"); return; }
-    sServer.send(200, "application/json",
-        buildDomeConfigJson(sCtrl->params));
+        buildFullConfigJson(sCtrl->params));
 }
 
 static void handleApiConfigPost() {
@@ -230,14 +200,9 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/update",               HTTP_GET, handleComingSoon);
 
     // REST API
-    sServer.on("/api/info",              HTTP_GET,  handleApiInfo);
-    sServer.on("/api/config/general",   HTTP_GET,  handleApiConfigGeneral);
-    sServer.on("/api/config/wifi",      HTTP_GET,  handleApiConfigWifi);
-    sServer.on("/api/config/xbee",      HTTP_GET,  handleApiConfigXbee);
-    sServer.on("/api/config/audio",     HTTP_GET,  handleApiConfigAudio);
-    sServer.on("/api/config/rc-radio",  HTTP_GET,  handleApiConfigRcRadio);
-    sServer.on("/api/config/dome",      HTTP_GET,  handleApiConfigDome);
-    sServer.on("/api/config",           HTTP_POST, handleApiConfigPost);
+    sServer.on("/api/info",   HTTP_GET,  handleApiInfo);
+    sServer.on("/api/config", HTTP_GET,  handleApiConfigGet);
+    sServer.on("/api/config", HTTP_POST, handleApiConfigPost);
 
     // Catch-all: any other URL redirects home (supports captive-portal flow)
     sServer.onNotFound(handleHome);

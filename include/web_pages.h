@@ -130,7 +130,7 @@ header{text-align:center;padding:2rem 1rem 1.5rem;border-bottom:1px solid var(--
 </nav>
 <script>
 fetch('/api/info').then(function(r){return r.json();}).then(function(d){
-  document.getElementById('fwv').textContent=d.firmware+' v'+d.version+' · '+d.date;
+  document.getElementById('fwv').textContent='v'+d.version+' · '+d.mcu+' · r'+d.board_rev+' · '+d.date;
   document.getElementById('bi-dr').textContent=d.drive||'none';
   document.getElementById('bi-do').textContent=d.dome||'none';
   document.getElementById('bi-au').textContent=d.audio;
@@ -413,7 +413,7 @@ var SCHEMA = [
   {section:'I²C'},
   {key:'myi2c',      label:"This Board's Address", type:'number', min:0, max:100}
 ];
-buildPage(SCHEMA, '/api/config/general');
+buildPage(SCHEMA, '/api/config');
 </script>
 </body>
 </html>
@@ -678,7 +678,7 @@ var SCHEMA = [
   {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars'},
   {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars'}
 ];
-buildPage(SCHEMA, '/api/config/wifi');
+buildPage(SCHEMA, '/api/config');
 </script>
 </body>
 </html>
@@ -942,7 +942,7 @@ var SCHEMA = [
   {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address'},
   {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address'}
 ];
-buildPage(SCHEMA, '/api/config/xbee');
+buildPage(SCHEMA, '/api/config');
 </script>
 </body>
 </html>
@@ -1209,6 +1209,7 @@ var SCHEMA = [
   {section:'Hardware'},
   {key:'audiohw',        label:'Audio Board',        readOnly:true},
   {section:'Volume'},
+  {key:'volume',         label:'R2 Sounds Volume',   type:'number', min:0, max:100},
   {key:'volumeChA',      label:'Channel A Volume',   type:'number', min:0, max:100},
   {key:'volumeChB',      label:'Channel B Volume',   type:'number', min:0, max:100},
   {key:'volumewheel',    label:'Volume Wheel',       type:'select', options:_whl},
@@ -1220,7 +1221,7 @@ var SCHEMA = [
   {key:'ackem',  label:'Emotion', type:'select', options:_emo},
   {key:'acklvl', label:'Level',   type:'select', options:_lvl}
 ];
-buildPage(SCHEMA, '/api/config/audio');
+buildPage(SCHEMA, '/api/config');
 </script>
 </body>
 </html>
@@ -1495,7 +1496,7 @@ var SCHEMA = [
   {key:'j1adjv',label:'Vertical Adjust',     type:'number', min:0,   max:80},
   {key:'j1adjh',label:'Horizontal Adjust',   type:'number', min:0,   max:80}
 ];
-buildPage(SCHEMA, '/api/config/rc-radio');
+buildPage(SCHEMA, '/api/config');
 </script>
 </body>
 </html>
@@ -1777,7 +1778,7 @@ var SCHEMA = [
   {key:'domefront', label:'Front Offset',           type:'number', min:0,  max:359, note:'degrees'},
   {key:'domestall', label:'Stall Timeout',          type:'number', min:100,max:5000, note:'ms'}
 ];
-buildPage(SCHEMA, '/api/config/dome');
+buildPage(SCHEMA, '/api/config');
 </script>
 </body>
 </html>

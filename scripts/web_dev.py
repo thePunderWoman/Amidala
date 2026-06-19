@@ -19,60 +19,52 @@ _PROJECT_DIR = os.path.dirname(_HERE)
 _WEB_DIR     = os.path.join(_PROJECT_DIR, "web")
 _PORT        = 8080
 
-# In-memory config state; POST /api/config mutates this
-_general = {
-    "volume":      50,
-    "startup":     "y",
-    "rndon":       "y",
-    "mindelay":    60,
-    "maxdelay":    120,
-    "ackon":       "n",
-    "goslow":      "n",
-    "mix12":       "n",
-    "auto":        "n",
-    "serialbaud":  9600,
-    "serialdelim": 58,
-    "serialeol":   13,
-    "myi2c":       0,
-}
-
-_wifi = {
-    "wifion":       "y",
-    "wifissid":     "amidala",
-    "wifipassword": "Astromech",
-}
-
-_xbee = {
-    "xbr": "00000000",
-    "xbl": "00000000",
-}
-
-_audio = {
-    "audiohw":        "hcr",
-    "volumeChA":      50,
-    "volumeChB":      50,
-    "volumewheel":    0,
-    "altvolumewheel": 0,
-    "startupem":      0,
-    "startuplvl":     0,
-    "ackem":          0,
-    "acklvl":         0,
-}
-
-_rc_radio = {
-    "rcchn":  6,
-    "rcd":    30,
-    "rcj":    5,
-    "fst":    1000,
-    "rvrmin": 0,
-    "rvrmax": 1023,
-    "rvlmin": 0,
-    "rvlmax": 1023,
-    "j1adjv": 0,
-    "j1adjh": 0,
-}
-
-_dome = {
+# Flat config dict — mirrors buildFullConfigJson() in web_api.h.
+# POST /api/config mutates this in memory.
+_config = {
+    # General
+    "volume":        50,
+    "startup":       "y",
+    "rndon":         "y",
+    "mindelay":      60,
+    "maxdelay":      120,
+    "ackon":         "n",
+    "goslow":        "n",
+    "mix12":         "n",
+    "auto":          "n",
+    "serialbaud":    9600,
+    "serialdelim":   58,
+    "serialeol":     13,
+    "myi2c":         0,
+    # WiFi
+    "wifion":        "y",
+    "wifissid":      "amidala",
+    "wifipassword":  "Astromech",
+    # XBee
+    "xbr":           "00000000",
+    "xbl":           "00000000",
+    # Audio
+    "audiohw":       "hcr",
+    "volumeChA":     50,
+    "volumeChB":     50,
+    "volumewheel":   0,
+    "altvolumewheel":0,
+    "startupem":     0,
+    "startuplvl":    0,
+    "ackem":         0,
+    "acklvl":        0,
+    # RC Radio
+    "rcchn":         6,
+    "rcd":           30,
+    "rcj":           5,
+    "fst":           1000,
+    "rvrmin":        0,
+    "rvrmax":        1023,
+    "rvlmin":        0,
+    "rvlmax":        1023,
+    "j1adjv":        0,
+    "j1adjh":        0,
+    # Dome
     "domespeed":     80,
     "domespeedhome": 50,
     "domespeedseek": 50,
@@ -93,9 +85,10 @@ _dome = {
 }
 
 _info = {
-    "firmware": "Amidala RC",
-    "version":  "1.3",
-    "date":     "Jun 19 2026",
+    "version":   "1.3",
+    "board_rev": "1.1",
+    "mcu":       "ESP32-S3 N16R8",
+    "date":      "Jun 19 2026",
     "drive":    "roboteq-pwm",
     "dome":     "roboclaw",
     "audio":    "hcr",
@@ -112,17 +105,11 @@ class _Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
 
-        _api = {
-            "/api/info":             _info,
-            "/api/config/general":   _general,
-            "/api/config/wifi":      _wifi,
-            "/api/config/xbee":      _xbee,
-            "/api/config/audio":     _audio,
-            "/api/config/rc-radio":  _rc_radio,
-            "/api/config/dome":      _dome,
-        }
-        if path in _api:
-            self._json(_api[path])
+        if path == "/api/config":
+            self._json(_config)
+            return
+        if path == "/api/info":
+            self._json(_info)
             return
 
         # Map extension-less paths to .html (e.g. /config/general → general.html)
@@ -148,11 +135,11 @@ class _Handler(SimpleHTTPRequestHandler):
         value  = params.get("value", "")
 
         print(f"  CONFIG  {key} = {value!r}")
-        if key in _general:
+        if key in _config:
             try:
-                _general[key] = int(value)
+                _config[key] = int(value)
             except ValueError:
-                _general[key] = value
+                _config[key] = value
         else:
             print(f"           (unknown key — not stored)")
 
