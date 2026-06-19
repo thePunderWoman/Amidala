@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Serial Monitor — AMIDALA</title>
+<link rel="stylesheet" href="/assets/common.css">
+<style>
+html,body{height:100%;display:flex;flex-direction:column;overflow:hidden}
+.page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem;flex-shrink:0}
+.back{font-size:.8rem;color:var(--dim);letter-spacing:.1em;white-space:nowrap}
+.back:hover{color:var(--gold)}
+.page-title{flex:1;text-align:center;font-size:.9rem;letter-spacing:.25em;text-transform:uppercase}
+main{flex:1;display:flex;flex-direction:column;min-height:0}
+.toolbar{display:flex;align-items:center;gap:.6rem;padding:.45rem 1rem;border-bottom:1px solid var(--border);flex-shrink:0}
+.dot{width:.55rem;height:.55rem;border-radius:50%;background:var(--dim);flex-shrink:0;transition:background .4s}
+.dot.ok{background:#4c4;animation:pulse 2s ease infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.conn-lbl{font-size:.7rem;color:var(--dim);letter-spacing:.1em;flex:1}
+.tbtn{background:none;border:1px solid var(--dim);color:var(--gold);padding:.22rem .7rem;font-family:inherit;font-size:.72rem;letter-spacing:.1em;cursor:pointer;flex-shrink:0}
+.tbtn:hover{border-color:var(--gold)}
+.tbtn.on{border-color:var(--gold);background:rgba(200,160,0,.08)}
+.log{flex:1;overflow-y:auto;padding:.6rem 1rem;font-family:monospace;font-size:.8rem;line-height:1.65;background:#060606;min-height:0}
+.ll{white-space:pre-wrap;word-break:break-all}
+.ll.tx{color:var(--gold)}
+.ll.rx{color:#7cf}
+.ll.info{color:var(--dim)}
+.send-bar{display:flex;gap:.5rem;padding:.6rem 1rem;border-top:1px solid var(--border);flex-shrink:0}
+#cmd{flex:1;background:#111;border:1px solid var(--dim);color:var(--gold);padding:.35rem .6rem;font-family:monospace;font-size:.85rem;min-width:0}
+#cmd:focus{outline:none;border-color:var(--gold)}
+#sbtn{background:none;border:1px solid var(--dim);color:var(--gold);padding:.35rem 1rem;font-family:inherit;font-size:.78rem;letter-spacing:.1em;cursor:pointer;flex-shrink:0}
+#sbtn:hover{border-color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; Back</a>
+  <div class="page-title">&#9670; Serial Monitor &#9670;</div>
+</div>
+<main>
+  <div class="toolbar">
+    <div class="dot" id="dot"></div>
+    <span class="conn-lbl" id="conn">Connecting&#8230;</span>
+    <button class="tbtn" id="pbtn" onclick="togglePause()">Pause</button>
+    <button class="tbtn" onclick="clearLog()">Clear</button>
+  </div>
+  <div class="log" id="log"></div>
+  <div class="send-bar">
+    <input id="cmd" type="text" placeholder="Serial command (e.g. :LD00  or  DM:LEIA)" autocomplete="off"
+           onkeydown="if(event.key==='Enter')sendCmd()">
+    <button id="sbtn" onclick="sendCmd()">Send</button>
+  </div>
+</main>
+<script>
+var _seq = -1;
+var _paused = false;
+var _autoScroll = true;
+
+var logEl  = document.getElementById('log');
+var dotEl  = document.getElementById('dot');
+var connEl = document.getElementById('conn');
+var pbtn   = document.getElementById('pbtn');
+
+logEl.addEventListener('scroll', function() {
+  _autoScroll = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 20;
+});
+
+function addLine(text, cls) {
+  var d = document.createElement('div');
+  d.className = 'll' + (cls ? ' '+cls : '');
+  d.textContent = text;
+  logEl.appendChild(d);
+  if (_autoScroll) logEl.scrollTop = logEl.scrollHeight;
+}
+
+function poll() {
+  if (_paused) return;
+  fetch('/api/monitor').then(function(r){ return r.json(); }).then(function(d){
+    dotEl.className = 'dot ok';
+    connEl.textContent = 'Connected';
+    if (d.seq !== _seq) {
+      logEl.innerHTML = '';
+      var lines = d.lines || [];
+      for (var i = 0; i < lines.length; i++) addLine(lines[i].t, lines[i].c);
+      _seq = d.seq;
+    }
+  }).catch(function(){
+    dotEl.className = 'dot';
+    connEl.textContent = 'Disconnected — retrying…';
+  });
+}
+
+function sendCmd() {
+  var inp = document.getElementById('cmd');
+  var cmd = inp.value.trim();
+  if (!cmd) return;
+  inp.value = '';
+  fetch('/api/monitor', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'cmd=' + encodeURIComponent(cmd)
+  }).then(function(r){
+    if (!r.ok) addLine('! Server error ' + r.status, 'info');
+    else poll();
+  }).catch(function(){ addLine('! Send failed', 'info'); });
+}
+
+function clearLog() {
+  logEl.innerHTML = '';
+  _seq = -1;
+}
+
+function togglePause() {
+  _paused = !_paused;
+  pbtn.textContent = _paused ? 'Resume' : 'Pause';
+  pbtn.className   = 'tbtn' + (_paused ? ' on' : '');
+  if (!_paused) poll();
+}
+
+poll();
+setInterval(poll, 1500);
+</script>
+</body>
+</html>

@@ -2164,6 +2164,551 @@ load();
 </html>
 )html";
 
+static const char WEB_PAGE_SERVOS[] = R"html(<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Servos — AMIDALA</title>
+<style>
+/* Amidala web UI — shared styles.
+   Embed script inlines this into every page's <style> block.
+   In dev mode (scripts/web_dev.py) it's served as a real file from /assets/common.css. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --gold:   #ffe81f;
+  --red:    #c00;
+  --bg:     #000;
+  --card:   #0a0a0a;
+  --dim:    #555;
+  --border: #ffe81f22;
+}
+
+body {
+  background: var(--bg);
+  color: var(--gold);
+  font-family: 'Courier New', Courier, monospace;
+  min-height: 100vh;
+  font-size: 15px;
+}
+
+a {
+  color: var(--gold);
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #111;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  padding: .55rem 1.4rem;
+  font-size: .78rem;
+  letter-spacing: .08em;
+  pointer-events: none;
+  white-space: nowrap;
+  animation: _tfi .15s ease, _tfo .3s 1.9s ease forwards;
+  z-index: 9999;
+}
+.toast-err {
+  border-color: var(--red);
+  color: var(--red);
+}
+@keyframes _tfi {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px) }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) }
+}
+@keyframes _tfo {
+  from { opacity: 1 }
+  to   { opacity: 0 }
+}
+</style>
+<style>
+.page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
+.back{font-size:.8rem;color:var(--dim);letter-spacing:.1em;white-space:nowrap}
+.back:hover{color:var(--gold)}
+.page-title{flex:1;text-align:center;font-size:.9rem;letter-spacing:.25em;text-transform:uppercase}
+main{max-width:900px;margin:0 auto;padding:1rem}
+.section-label{font-size:.65rem;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);padding:.8rem 0 .4rem;border-bottom:1px solid var(--border);margin-bottom:.5rem}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th{font-size:.6rem;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);padding:.5rem .5rem;text-align:center;border-bottom:1px solid var(--border);white-space:nowrap}
+th:first-child{text-align:right;width:2rem}
+td{padding:.45rem .5rem;text-align:center;border-bottom:1px solid #0f0f0f;color:#ccc}
+td:first-child{color:var(--dim);font-size:.7rem;text-align:right}
+td input[type=number]{width:4.2rem;background:#111;border:1px solid var(--dim);color:var(--gold);padding:.25rem .3rem;text-align:center;font-family:inherit;font-size:.8rem;box-sizing:border-box}
+td input[type=checkbox]{accent-color:var(--gold);width:1rem;height:1rem;cursor:pointer;vertical-align:middle}
+.act{white-space:nowrap}
+.be,.bs,.bc{background:none;border:none;color:var(--gold);font-size:1rem;padding:.2rem .4rem;opacity:.55;cursor:pointer}
+.be:hover,.bs:hover,.bc:hover{opacity:1}
+.rev-yes{color:var(--gold)}
+.rev-no{color:var(--dim)}
+#status{text-align:center;padding:2rem;color:var(--dim);font-size:.8rem;letter-spacing:.1em}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; Back</a>
+  <div class="page-title">&#9670; Servos &#9670;</div>
+</div>
+<main id="main">
+  <div id="status">LOADING&#8230;</div>
+</main>
+<script>
+/* Amidala web UI — edit-in-place widget + shared config page helpers.
+   Embed script inlines this into every config sub-page.
+   In dev mode (scripts/web_dev.py) it's served as /assets/edit.js. */
+
+// ------------------------------------------------------------------ toast ---
+
+function showToast(msg, isErr) {
+  var t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' toast-err' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
+}
+
+// -------------------------------------------------------- edit-in-place -----
+
+function startEdit(btn) {
+  var row = btn.closest('.row');
+  row.querySelector('.rv').hidden = true;
+  row.querySelector('.ri').hidden = false;
+  btn.hidden = true;
+  row.querySelector('.bs').hidden = false;
+  row.querySelector('.bc').hidden = false;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  row.querySelector('.rv').hidden = false;
+  row.querySelector('.ri').hidden = true;
+  row.querySelector('.be').hidden = false;
+  row.querySelector('.bs').hidden = true;
+  btn.hidden = true;
+}
+
+async function doSave(btn) {
+  var row = btn.closest('.row');
+  var key = row.dataset.key;
+  var inp = row.querySelector('input,select');
+  var val = inp.value;
+  var prev = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    var r = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'key=' + encodeURIComponent(key) + '&value=' + encodeURIComponent(val)
+    });
+    if (r.ok) {
+      var dv = row.querySelector('.rv');
+      var rt = row.dataset.type;
+      if (rt === 'bool' || rt === 'select') {
+        var sel = row.querySelector('select');
+        dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'password') {
+        dv.textContent = '••••••••';
+      } else {
+        dv.textContent = val;
+      }
+      doCancel(row.querySelector('.bc'));
+      showToast('Saved');
+    } else {
+      showToast('Save failed: ' + await r.text(), true);
+    }
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+// ------------------------------------------------ schema-driven row builder --
+
+function dispValue(s, val) {
+  if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
+  if (s.type === 'select') {
+    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    return found ? found.l : val;
+  }
+  if (s.type === 'password') return '••••••••';
+  return String(val);
+}
+
+function buildInput(s, val) {
+  if (s.type === 'bool') {
+    return '<select>'
+      + '<option value="y"' + (val === 'y' ? ' selected' : '') + '>On</option>'
+      + '<option value="n"' + (val === 'n' ? ' selected' : '') + '>Off</option>'
+      + '</select>';
+  }
+  if (s.type === 'select') {
+    var opts = (s.options || []).map(function(op) {
+      return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
+    }).join('');
+    return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'number') {
+    return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
+  }
+  if (s.type === 'password') {
+    return '<input type="password" value="' + val + '" maxlength="' + (s.maxlength || 64) + '">';
+  }
+  return '<input type="text" value="' + val + '"' + (s.maxlength ? ' maxlength="' + s.maxlength + '"' : '') + '>';
+}
+
+function buildRow(s, val) {
+  var disp = dispValue(s, val);
+  var note = s.note ? '<span style="font-size:.65rem;color:var(--dim);margin-left:.3rem">' + s.note + '</span>' : '';
+  if (s.readOnly) {
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<div class="rv">' + disp + '</div>'
+      + '</div>';
+  }
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    + '<div class="row-label">' + s.label + '</div>'
+    + '<div class="rv">' + disp + '</div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
+    + '<button class="bs hidden" onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc hidden" onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '</div>';
+}
+
+function buildPage(SCHEMA, endpoint) {
+  fetch(endpoint)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var html = '';
+      SCHEMA.forEach(function(s) {
+        if (s.section) {
+          html += '<div class="section-label">' + s.section + '</div>';
+          return;
+        }
+        var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
+        html += buildRow(s, val);
+      });
+      document.querySelector('main').innerHTML = html;
+    })
+    .catch(function() {
+      var el = document.getElementById('status');
+      if (el) el.textContent = 'Failed to load settings.';
+    });
+}
+</script>
+<script>
+var _d = [];   // [{min,max,n,d,t,sp,r}, ...]
+var _ed = -1;  // channel index in edit mode, -1 = none
+
+function load() {
+  fetch('/api/config').then(function(r){return r.json();}).then(function(d){
+    _d = d.servos || [];
+    render();
+  }).catch(function(){
+    document.getElementById('main').innerHTML='<div id="status">Failed to load</div>';
+  });
+}
+
+function render() {
+  var h = '<div class="section-label">Servo Channels</div><div class="tbl-wrap"><table><thead><tr>' +
+    '<th>#</th><th>Min</th><th>Max</th><th>Neutral</th><th>Deadzone</th><th>Trim</th><th>Speed</th><th>Reversed</th><th></th>' +
+    '</tr></thead><tbody>';
+  for (var i = 0; i < _d.length; i++) {
+    var s = _d[i];
+    if (i === _ed) {
+      h += '<tr>' +
+        '<td>'+(i+1)+'</td>' +
+        '<td><input type="number" id="emin" value="'+s.min+'" min="0" max="180"></td>' +
+        '<td><input type="number" id="emax" value="'+s.max+'" min="0" max="180"></td>' +
+        '<td><input type="number" id="en"   value="'+s.n+'"   min="0" max="180"></td>' +
+        '<td><input type="number" id="ed"   value="'+s.d+'"   min="0" max="180"></td>' +
+        '<td><input type="number" id="et"   value="'+s.t+'"   min="-180" max="180"></td>' +
+        '<td><input type="number" id="esp"  value="'+s.sp+'"  min="1"  max="100"></td>' +
+        '<td><input type="checkbox" id="er"'+(s.r?' checked':'')+'></td>' +
+        '<td class="act">' +
+          '<button class="bs" onclick="saveRow('+i+')" title="Save">&#10003;</button>' +
+          '<button class="bc" onclick="cancelEdit()" title="Cancel">&#10005;</button>' +
+        '</td></tr>';
+    } else {
+      h += '<tr>' +
+        '<td>'+(i+1)+'</td>' +
+        '<td>'+s.min+'</td><td>'+s.max+'</td><td>'+s.n+'</td>' +
+        '<td>'+s.d+'</td><td>'+s.t+'</td><td>'+s.sp+'</td>' +
+        '<td class="'+(s.r?'rev-yes':'rev-no')+'">'+(s.r?'Yes':'No')+'</td>' +
+        '<td class="act"><button class="be" onclick="editRow('+i+')" title="Edit">&#9998;</button></td>' +
+        '</tr>';
+    }
+  }
+  h += '</tbody></table></div>';
+  document.getElementById('main').innerHTML = h;
+  if (_ed >= 0) {
+    var el = document.getElementById('emin');
+    if (el) el.focus();
+  }
+}
+
+function editRow(i) {
+  _ed = i;
+  render();
+}
+
+function cancelEdit() {
+  _ed = -1;
+  render();
+}
+
+function saveRow(i) {
+  var min = parseInt(document.getElementById('emin').value,10);
+  var max = parseInt(document.getElementById('emax').value,10);
+  var n   = parseInt(document.getElementById('en').value,10);
+  var d   = parseInt(document.getElementById('ed').value,10);
+  var t   = parseInt(document.getElementById('et').value,10);
+  var sp  = parseInt(document.getElementById('esp').value,10);
+  var r   = document.getElementById('er').checked ? 1 : 0;
+  if (isNaN(min)||isNaN(max)||isNaN(n)||isNaN(d)||isNaN(t)||isNaN(sp)) {
+    showToast('All fields must be numbers', true); return;
+  }
+  fetch('/api/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'key=s&value='+(i+1)+','+min+','+max+','+n+','+d+','+t+','+sp+','+r
+  }).then(function(resp){
+    if (!resp.ok) throw new Error(resp.status);
+    _d[i] = {min:min, max:max, n:n, d:d, t:t, sp:sp, r:r};
+    _ed = -1;
+    render();
+    showToast('Saved');
+  }).catch(function(){ showToast('Save failed', true); });
+}
+
+load();
+</script>
+</body>
+</html>
+)html";
+
+static const char WEB_PAGE_MONITOR[] = R"html(<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Serial Monitor — AMIDALA</title>
+<style>
+/* Amidala web UI — shared styles.
+   Embed script inlines this into every page's <style> block.
+   In dev mode (scripts/web_dev.py) it's served as a real file from /assets/common.css. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --gold:   #ffe81f;
+  --red:    #c00;
+  --bg:     #000;
+  --card:   #0a0a0a;
+  --dim:    #555;
+  --border: #ffe81f22;
+}
+
+body {
+  background: var(--bg);
+  color: var(--gold);
+  font-family: 'Courier New', Courier, monospace;
+  min-height: 100vh;
+  font-size: 15px;
+}
+
+a {
+  color: var(--gold);
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #111;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  padding: .55rem 1.4rem;
+  font-size: .78rem;
+  letter-spacing: .08em;
+  pointer-events: none;
+  white-space: nowrap;
+  animation: _tfi .15s ease, _tfo .3s 1.9s ease forwards;
+  z-index: 9999;
+}
+.toast-err {
+  border-color: var(--red);
+  color: var(--red);
+}
+@keyframes _tfi {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px) }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) }
+}
+@keyframes _tfo {
+  from { opacity: 1 }
+  to   { opacity: 0 }
+}
+</style>
+<style>
+html,body{height:100%;display:flex;flex-direction:column;overflow:hidden}
+.page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem;flex-shrink:0}
+.back{font-size:.8rem;color:var(--dim);letter-spacing:.1em;white-space:nowrap}
+.back:hover{color:var(--gold)}
+.page-title{flex:1;text-align:center;font-size:.9rem;letter-spacing:.25em;text-transform:uppercase}
+main{flex:1;display:flex;flex-direction:column;min-height:0}
+.toolbar{display:flex;align-items:center;gap:.6rem;padding:.45rem 1rem;border-bottom:1px solid var(--border);flex-shrink:0}
+.dot{width:.55rem;height:.55rem;border-radius:50%;background:var(--dim);flex-shrink:0;transition:background .4s}
+.dot.ok{background:#4c4;animation:pulse 2s ease infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.conn-lbl{font-size:.7rem;color:var(--dim);letter-spacing:.1em;flex:1}
+.tbtn{background:none;border:1px solid var(--dim);color:var(--gold);padding:.22rem .7rem;font-family:inherit;font-size:.72rem;letter-spacing:.1em;cursor:pointer;flex-shrink:0}
+.tbtn:hover{border-color:var(--gold)}
+.tbtn.on{border-color:var(--gold);background:rgba(200,160,0,.08)}
+.log{flex:1;overflow-y:auto;padding:.6rem 1rem;font-family:monospace;font-size:.8rem;line-height:1.65;background:#060606;min-height:0}
+.ll{white-space:pre-wrap;word-break:break-all}
+.ll.tx{color:var(--gold)}
+.ll.rx{color:#7cf}
+.ll.info{color:var(--dim)}
+.send-bar{display:flex;gap:.5rem;padding:.6rem 1rem;border-top:1px solid var(--border);flex-shrink:0}
+#cmd{flex:1;background:#111;border:1px solid var(--dim);color:var(--gold);padding:.35rem .6rem;font-family:monospace;font-size:.85rem;min-width:0}
+#cmd:focus{outline:none;border-color:var(--gold)}
+#sbtn{background:none;border:1px solid var(--dim);color:var(--gold);padding:.35rem 1rem;font-family:inherit;font-size:.78rem;letter-spacing:.1em;cursor:pointer;flex-shrink:0}
+#sbtn:hover{border-color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; Back</a>
+  <div class="page-title">&#9670; Serial Monitor &#9670;</div>
+</div>
+<main>
+  <div class="toolbar">
+    <div class="dot" id="dot"></div>
+    <span class="conn-lbl" id="conn">Connecting&#8230;</span>
+    <button class="tbtn" id="pbtn" onclick="togglePause()">Pause</button>
+    <button class="tbtn" onclick="clearLog()">Clear</button>
+  </div>
+  <div class="log" id="log"></div>
+  <div class="send-bar">
+    <input id="cmd" type="text" placeholder="Serial command (e.g. :LD00  or  DM:LEIA)" autocomplete="off"
+           onkeydown="if(event.key==='Enter')sendCmd()">
+    <button id="sbtn" onclick="sendCmd()">Send</button>
+  </div>
+</main>
+<script>
+var _seq = -1;
+var _paused = false;
+var _autoScroll = true;
+
+var logEl  = document.getElementById('log');
+var dotEl  = document.getElementById('dot');
+var connEl = document.getElementById('conn');
+var pbtn   = document.getElementById('pbtn');
+
+logEl.addEventListener('scroll', function() {
+  _autoScroll = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 20;
+});
+
+function addLine(text, cls) {
+  var d = document.createElement('div');
+  d.className = 'll' + (cls ? ' '+cls : '');
+  d.textContent = text;
+  logEl.appendChild(d);
+  if (_autoScroll) logEl.scrollTop = logEl.scrollHeight;
+}
+
+function poll() {
+  if (_paused) return;
+  fetch('/api/monitor').then(function(r){ return r.json(); }).then(function(d){
+    dotEl.className = 'dot ok';
+    connEl.textContent = 'Connected';
+    if (d.seq !== _seq) {
+      logEl.innerHTML = '';
+      var lines = d.lines || [];
+      for (var i = 0; i < lines.length; i++) addLine(lines[i].t, lines[i].c);
+      _seq = d.seq;
+    }
+  }).catch(function(){
+    dotEl.className = 'dot';
+    connEl.textContent = 'Disconnected — retrying…';
+  });
+}
+
+function sendCmd() {
+  var inp = document.getElementById('cmd');
+  var cmd = inp.value.trim();
+  if (!cmd) return;
+  inp.value = '';
+  fetch('/api/monitor', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'cmd=' + encodeURIComponent(cmd)
+  }).then(function(r){
+    if (!r.ok) addLine('! Server error ' + r.status, 'info');
+    else poll();
+  }).catch(function(){ addLine('! Send failed', 'info'); });
+}
+
+function clearLog() {
+  logEl.innerHTML = '';
+  _seq = -1;
+}
+
+function togglePause() {
+  _paused = !_paused;
+  pbtn.textContent = _paused ? 'Resume' : 'Pause';
+  pbtn.className   = 'tbtn' + (_paused ? ' on' : '');
+  if (!_paused) poll();
+}
+
+poll();
+setInterval(poll, 1500);
+</script>
+</body>
+</html>
+)html";
+
 static const char WEB_PAGE_COMING_SOON[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>

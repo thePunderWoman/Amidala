@@ -82,11 +82,27 @@ _config = {
     "domercqpps":    1000,
     "domefront":     0,
     "domestall":     2000,
+    # Servos — list of {min, max, n, d, t, sp, r}
+    "servos": [
+        {"min":  0, "max": 180, "n": 90, "d": 4, "t":  0, "sp": 50, "r": 0},
+        {"min":  0, "max": 180, "n": 90, "d": 4, "t":  0, "sp": 50, "r": 0},
+        {"min":  0, "max": 180, "n": 90, "d": 4, "t":  0, "sp": 50, "r": 0},
+        {"min": 50, "max": 130, "n": 90, "d": 4, "t": -5, "sp": 30, "r": 1},
+    ],
     # Serial strings — list of {n: name, s: serial_string}
     "sstr": [
         {"n": "Leia Sequence",  "s": ":LD00"},
         {"n": "Happy R2",       "s": ":001"},
         {"n": "Dome Home",      "s": "*dome=home"},
+    ],
+}
+
+_monitor = {
+    "seq": 3,
+    "lines": [
+        {"t": "Serial monitor initialized", "c": "info"},
+        {"t": "Loaded 27 serial commands from config", "c": "info"},
+        {"t": "Dome driver ready @ RoboClaw 128", "c": "info"},
     ],
 }
 
@@ -117,6 +133,9 @@ class _Handler(SimpleHTTPRequestHandler):
         if path == "/api/info":
             self._json(_info)
             return
+        if path == "/api/monitor":
+            self._json(_monitor)
+            return
 
         # Map extension-less paths to .html (e.g. /config/general → general.html)
         local = os.path.join(_WEB_DIR, path.lstrip("/"))
@@ -130,6 +149,17 @@ class _Handler(SimpleHTTPRequestHandler):
     # ----------------------------------------------------------------- POST --
     def do_POST(self):
         path = urlparse(self.path).path
+        if path == "/api/monitor":
+            cmd = params.get("cmd", "")
+            print(f"  SERIAL  {cmd!r}")
+            _monitor["lines"].append({"t": "> " + cmd, "c": "tx"})
+            _monitor["lines"].append({"t": "  (echoed by dev server)", "c": "info"})
+            _monitor["seq"] += 1
+            # Keep buffer bounded
+            if len(_monitor["lines"]) > 32:
+                _monitor["lines"] = _monitor["lines"][-32:]
+            self._text("OK")
+            return
         if path != "/api/config":
             self._text("Not Found", 404)
             return
@@ -142,6 +172,20 @@ class _Handler(SimpleHTTPRequestHandler):
 
         print(f"  CONFIG  {key} = {value!r}")
 
+        # s=N,min,max,n,d,t,speed,reversed — servo channel config
+        if key == "s":
+            parts = value.split(",")
+            if len(parts) >= 2:
+                idx = int(parts[0]) - 1
+                if 0 <= idx < len(_config["servos"]):
+                    sv = _config["servos"][idx]
+                    if len(parts) > 1: sv["min"] = int(parts[1])
+                    if len(parts) > 2: sv["max"] = int(parts[2])
+                    if len(parts) > 3: sv["n"]   = int(parts[3])
+                    if len(parts) > 4: sv["d"]   = int(parts[4])
+                    if len(parts) > 5: sv["t"]   = int(parts[5])
+                    if len(parts) > 6: sv["sp"]  = int(parts[6])
+                    if len(parts) > 7: sv["r"]   = int(parts[7])
         # sstr_del_N — delete serial string at index N
         if key.startswith("sstr_del_"):
             idx = int(key[9:])

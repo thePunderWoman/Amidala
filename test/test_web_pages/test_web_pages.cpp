@@ -151,6 +151,28 @@ void test_dome_page_schema_keys() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_DOME, "'domercaddr'"));
 }
 
+void test_monitor_page_uses_monitor_api() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "/api/monitor"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "href=\"/\""));
+}
+
+void test_monitor_page_has_send_and_pause_ui() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "sendCmd"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "togglePause"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "clearLog"));
+}
+
+void test_servos_page_uses_config_endpoint() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_SERVOS, "/api/config"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_SERVOS, "href=\"/\""));
+}
+
+void test_servos_page_has_edit_ui() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_SERVOS, "editRow"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_SERVOS, "saveRow"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_SERVOS, "key=s&value="));
+}
+
 void test_serial_strings_page_uses_config_endpoint() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_SERIAL_STRINGS, "/api/config"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_SERIAL_STRINGS, "href=\"/\""));
@@ -312,6 +334,29 @@ void test_full_config_json_reflects_changed_serialbaud() {
     TEST_ASSERT_TRUE(contains(json.c_str(), "\"serialbaud\":115200"));
 }
 
+void test_full_config_json_servos_array() {
+    AmidalaParameters p = makeParams(); // S[] is zeroed
+    String json = buildFullConfigJson(p);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"servos\":["));
+}
+
+void test_full_config_json_servos_channel_fields() {
+    AmidalaParameters p = makeParams();
+    p.S[0].min = 10;
+    p.S[0].max = 170;
+    p.S[0].n   = 90;
+    p.S[0].d   = 5;
+    p.S[0].t   = -3;
+    p.S[0].s   = 75;
+    p.S[0].r   = true;
+    String json = buildFullConfigJson(p);
+    const char* s = json.c_str();
+    TEST_ASSERT_TRUE(contains(s, "\"min\":10"));
+    TEST_ASSERT_TRUE(contains(s, "\"max\":170"));
+    TEST_ASSERT_TRUE(contains(s, "\"sp\":75"));
+    TEST_ASSERT_TRUE(contains(s, "\"r\":1"));
+}
+
 void test_full_config_json_sstr_empty_array() {
     AmidalaParameters p = makeParams(); // serialcount == 0
     String json = buildFullConfigJson(p);
@@ -401,6 +446,10 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_audio_page_schema_keys);
     RUN_TEST(test_rc_radio_page_schema_keys);
     RUN_TEST(test_dome_page_schema_keys);
+    RUN_TEST(test_monitor_page_uses_monitor_api);
+    RUN_TEST(test_monitor_page_has_send_and_pause_ui);
+    RUN_TEST(test_servos_page_uses_config_endpoint);
+    RUN_TEST(test_servos_page_has_edit_ui);
     RUN_TEST(test_serial_strings_page_uses_config_endpoint);
     RUN_TEST(test_serial_strings_page_has_add_and_delete_ui);
 
@@ -418,6 +467,8 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_full_config_json_bool_false_encodes_as_n);
     RUN_TEST(test_full_config_json_reflects_changed_volume);
     RUN_TEST(test_full_config_json_reflects_changed_serialbaud);
+    RUN_TEST(test_full_config_json_servos_array);
+    RUN_TEST(test_full_config_json_servos_channel_fields);
     RUN_TEST(test_full_config_json_sstr_empty_array);
     RUN_TEST(test_full_config_json_sstr_with_entries);
 

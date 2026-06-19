@@ -120,6 +120,22 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     json += "\"domefront\":"     + String(p.domefront)     + ",";
     json += "\"domestall\":"     + String(p.domestall)     + ",";
 
+    // Servos — abbreviated keys to save flash; "sp" = speed to distinguish
+    // from sstr "s" (serial string value)
+    json += "\"servos\":[";
+    for (uint8_t i = 0; i < sizeof(p.S)/sizeof(p.S[0]); i++) {
+        if (i > 0) json += ",";
+        json += "{\"min\":"; json += String(p.S[i].min);
+        json += ",\"max\":"; json += String(p.S[i].max);
+        json += ",\"n\":";   json += String(p.S[i].n);
+        json += ",\"d\":";   json += String(p.S[i].d);
+        json += ",\"t\":";   json += String(p.S[i].t);
+        json += ",\"sp\":";  json += String(p.S[i].s);
+        json += ",\"r\":";   json += String(p.S[i].r ? 1 : 0);
+        json += "}";
+    }
+    json += "],";
+
     // Serial strings — abbreviated keys {n, s} to save flash
     json += "\"sstr\":[";
     for (uint8_t i = 0; i < p.serialcount && i < MAX_SERIAL_STRINGS; i++) {

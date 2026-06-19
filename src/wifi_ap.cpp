@@ -12,9 +12,32 @@
 #include "controller.h"
 #include "drive_config.h"
 
-static WebServer         sServer(80);
-static DNSServer         sDNS;
+static WebServer          sServer(80);
+static DNSServer          sDNS;
 static AmidalaController* sCtrl = nullptr;
+
+// ---------------------------------------------------------------------------
+// Serial monitor log buffer
+// ---------------------------------------------------------------------------
+
+#define MON_LINES    32
+#define MON_LINE_LEN 96
+
+struct MonLine { char text[MON_LINE_LEN]; char cls; }; // cls: 't'=tx 'r'=rx 'i'=info
+
+static MonLine   sMonBuf[MON_LINES];
+static uint8_t   sMonHead  = 0;
+static uint8_t   sMonCount = 0;
+static uint32_t  sMonSeq   = 0;
+
+static void monAppend(const char* text, char cls = 'i') {
+    strncpy(sMonBuf[sMonHead].text, text, MON_LINE_LEN - 1);
+    sMonBuf[sMonHead].text[MON_LINE_LEN - 1] = '\0';
+    sMonBuf[sMonHead].cls = cls;
+    sMonHead = (sMonHead + 1) % MON_LINES;
+    if (sMonCount < MON_LINES) sMonCount++;
+    sMonSeq++;
+}
 
 // ---------------------------------------------------------------------------
 // SD card config write-back
@@ -121,6 +144,53 @@ static bool rewriteSerialStrings() {
 }
 
 // ---------------------------------------------------------------------------
+// Servo config file helpers
+// ---------------------------------------------------------------------------
+
+static bool rewriteServos() {
+    String path = "/config.txt";
+    File f = SD.open(path, "r");
+    String out;
+    out.reserve(8192);
+
+    if (f) {
+        while (f.available()) {
+            String line = f.readStringUntil('\n');
+            if (line.endsWith("\r")) line.remove(line.length() - 1);
+            if (!line.startsWith("s="))
+                out += line + "\n";
+        }
+        f.close();
+    } else {
+        out = "#START\n#END\n";
+    }
+
+    String lines;
+    uint8_t count = sCtrl->params.getServoCount();
+    for (uint8_t i = 0; i < count; i++) {
+        const AmidalaParameters::Channel& ch = sCtrl->params.S[i];
+        lines += "s=";
+        lines += String(i + 1) + "," + String(ch.min) + "," + String(ch.max) + ",";
+        lines += String(ch.n)  + "," + String(ch.d)   + "," + String(ch.t)   + ",";
+        lines += String(ch.s)  + "," + String(ch.r ? 1 : 0);
+        lines += "\n";
+    }
+
+    int endIdx = out.lastIndexOf("#END");
+    if (endIdx >= 0)
+        out = out.substring(0, endIdx) + lines + out.substring(endIdx);
+    else
+        out += lines;
+
+    SD.remove(path);
+    File wf = SD.open(path, "w");
+    if (!wf) return false;
+    wf.print(out);
+    wf.close();
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // REST API handlers
 // ---------------------------------------------------------------------------
 
@@ -189,6 +259,17 @@ static void handleApiConfigPost() {
     String value = sServer.arg("value");
     if (key.isEmpty()) { sServer.send(400, "text/plain", "missing key"); return; }
 
+    // s=N,min,max,n,d,t,speed,reversed — servo channel config
+    if (key == "s") {
+        String cmd = "s=" + value;
+        if (!sCtrl->fConfig.processConfig(cmd.c_str())) {
+            sServer.send(400, "text/plain", "invalid servo config"); return;
+        }
+        bool ok = rewriteServos();
+        sServer.send(ok ? 200 : 207, "text/plain", ok ? "OK" : "applied but SD write failed");
+        return;
+    }
+
     // sstr_del_N — delete serial string at index N, shift remainder down
     if (key.startsWith("sstr_del_")) {
         int idx = key.substring(9).toInt();
@@ -232,6 +313,45 @@ static void handleApiConfigPost() {
     sServer.send(200, "text/plain", "OK");
 }
 
+static void handleApiMonitorGet() {
+    String json = "{\"seq\":";
+    json += String(sMonSeq);
+    json += ",\"lines\":[";
+    uint8_t start = (sMonCount < MON_LINES) ? 0 : sMonHead;
+    for (uint8_t i = 0; i < sMonCount; i++) {
+        if (i > 0) json += ",";
+        uint8_t idx = (start + i) % MON_LINES;
+        json += "{\"t\":\"";
+        for (const char* p = sMonBuf[idx].text; *p; p++) {
+            if (*p == '"' || *p == '\\') json += '\\';
+            json += *p;
+        }
+        json += "\",\"c\":\"";
+        switch (sMonBuf[idx].cls) {
+            case 't': json += "tx"; break;
+            case 'r': json += "rx"; break;
+            default:  json += "info"; break;
+        }
+        json += "\"}";
+    }
+    json += "]}";
+    sServer.send(200, "application/json", json);
+}
+
+static void handleApiMonitorPost() {
+    if (!sCtrl) { sServer.send(500, "text/plain", "no controller"); return; }
+    String cmd = sServer.arg("cmd");
+    if (cmd.isEmpty()) { sServer.send(400, "text/plain", "missing cmd"); return; }
+
+    String tx = "> " + cmd;
+    monAppend(tx.c_str(), 't');
+
+    if (!sCtrl->fConfig.processConfig(cmd.c_str()))
+        monAppend("  (unknown command)", 'i');
+
+    sServer.send(200, "text/plain", "OK");
+}
+
 // ---------------------------------------------------------------------------
 // Page handlers
 // ---------------------------------------------------------------------------
@@ -247,6 +367,8 @@ static void handleConfigAudio()         { sServer.send(200, "text/html", WEB_PAG
 static void handleConfigRcRadio()       { sServer.send(200, "text/html", WEB_PAGE_RC_RADIO);        }
 static void handleConfigDome()          { sServer.send(200, "text/html", WEB_PAGE_DOME);            }
 static void handleConfigSerialStrings() { sServer.send(200, "text/html", WEB_PAGE_SERIAL_STRINGS);  }
+static void handleConfigServos()        { sServer.send(200, "text/html", WEB_PAGE_SERVOS);           }
+static void handleMonitor()             { sServer.send(200, "text/html", WEB_PAGE_MONITOR);         }
 static void handleComingSoon()          { sServer.send(200, "text/html", WEB_PAGE_COMING_SOON);     }
 
 // ---------------------------------------------------------------------------
@@ -284,10 +406,12 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/config/dome",           HTTP_GET, handleConfigDome);
     // Remaining config pages (stubs)
     sServer.on("/config/buttons",        HTTP_GET, handleComingSoon);
-    sServer.on("/config/servos",         HTTP_GET, handleComingSoon);
+    sServer.on("/config/servos",         HTTP_GET, handleConfigServos);
     sServer.on("/config/serial-strings", HTTP_GET, handleConfigSerialStrings);
     sServer.on("/sequences",            HTTP_GET, handleComingSoon);
-    sServer.on("/monitor",              HTTP_GET, handleComingSoon);
+    sServer.on("/monitor",              HTTP_GET,  handleMonitor);
+    sServer.on("/api/monitor",          HTTP_GET,  handleApiMonitorGet);
+    sServer.on("/api/monitor",          HTTP_POST, handleApiMonitorPost);
     sServer.on("/update",               HTTP_GET, handleComingSoon);
 
     // REST API
