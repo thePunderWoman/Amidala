@@ -3368,8 +3368,32 @@ function buildPage(SCHEMA, endpoint, callback) {
 <script>
 var _cfg = null;
 
+// Operational commands — auto-available in button assignments + Droid Control
+var UPPITY_OPS = [
+  {name:'Home',           str:':PH'},
+  {name:'Raise Full',     str:':PP100'},
+  {name:'Raise Half',     str:':PP50'},
+  {name:'Random Gentle',  str:':PMG'},
+  {name:'Random Medium',  str:':PMM'},
+  {name:'Random Strong',  str:':PMA'},
+  {name:'Stop',           str:':PX'},
+  {name:'Face Forward',   str:':PA0'},
+  {name:'Spin CCW',       str:':PR30'},
+  {name:'Spin CW',        str:':PR-30'},
+  {name:'Stop Spin',      str:':PR0'},
+];
+// Config/calibration commands — one-shot buttons, not assigned to buttons/events
+var UPPITY_CFG = [
+  {name:'Calibrate',          str:'#PSC'},
+  {name:'Show Config',        str:'#PCONFIG'},
+  {name:'Default: Gentle',    str:'#PAGGRESSION0'},
+  {name:'Default: Medium',    str:'#PAGGRESSION1'},
+  {name:'Default: Aggressive',str:'#PAGGRESSION2'},
+  {name:'Restart',            str:'#PRESTART'},
+];
+
 var GADGETS = [
-  {id:0, name:'Periscope',           opts:[{v:0,l:'Disabled'},{v:2,l:'Uppity Spinner'}], serial:false},
+  {id:0, name:'Periscope', opts:[{v:0,l:'Disabled'},{v:2,l:'Uppity Spinner'}], serial:false},
   {id:1, name:'Lifeform Scanner',    opts:[{v:0,l:'Disabled'},{v:1,l:'Enabled'}],        serial:true},
   {id:2, name:'Lightsaber Launcher', opts:[{v:0,l:'Disabled'},{v:1,l:'Enabled'}],        serial:true},
   {id:3, name:'Bubble Gun',          opts:[{v:0,l:'Disabled'},{v:1,l:'Enabled'}],        serial:true},
@@ -3377,6 +3401,15 @@ var GADGETS = [
   {id:5, name:'Gripper',             opts:[{v:0,l:'Disabled'},{v:1,l:'Enabled'}],        serial:true},
   {id:6, name:'Data Probe',          opts:[{v:0,l:'Disabled'},{v:1,l:'Enabled'}],        serial:true},
 ];
+
+function gadgetCmdPost(cmd) {
+  fetch('/api/gadget-cmd', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'cmd=' + encodeURIComponent(cmd)
+  }).then(function(r) { showToast(r.ok ? 'Sent' : 'Failed', !r.ok); })
+    .catch(function() { showToast('Network error', true); });
+}
 
 function load() {
   fetch('/api/config')
@@ -3406,7 +3439,26 @@ function render() {
     h += '</select>';
     h += '</div>';
 
-    if (g.serial && cfg.type > 0) {
+    if (g.id === 0 && cfg.type === 2) {
+      h += '<div class="sstr-section">';
+      h += '<div class="sstr-label">Operational Commands</div>';
+      h += '<div style="font-size:.7rem;color:var(--dim);margin-bottom:.4rem">Auto-available in <a href="/droid-control#gadgets">Droid Control → Gadgets</a> and as button assignments.</div>';
+      h += '<div class="sstr-checks" style="flex-direction:column;gap:.15rem">';
+      UPPITY_OPS.forEach(function(c) {
+        h += '<div class="sstr-empty" style="margin:0"><span style="color:var(--gold);min-width:7rem;display:inline-block">' + c.name + '</span><span style="opacity:.5;font-size:.7rem">' + c.str + '</span></div>';
+      });
+      h += '</div>';
+      h += '</div>';
+
+      h += '<div class="sstr-section">';
+      h += '<div class="sstr-label">Calibration &amp; Setup</div>';
+      h += '<div class="sstr-tags" style="gap:.4rem">';
+      UPPITY_CFG.forEach(function(c) {
+        h += '<button class="sstr-add-btn" onclick="gadgetCmdPost(' + JSON.stringify(c.str) + ')">' + c.name + '</button>';
+      });
+      h += '</div>';
+      h += '</div>';
+    } else if (g.serial && cfg.type > 0) {
       h += '<div class="sstr-section">';
       h += '<div class="sstr-label">Serial Commands</div>';
 
@@ -4378,10 +4430,26 @@ function opt(v, label, sel) {
 function actionOptions(sel) {
   var h = opt('0', '— None —', sel);
 
-  var sstr = _cfg.sstr || [];
-  if (sstr.length) {
+  var sstr   = _cfg.sstr || [];
+  var gCfg   = _cfg.gadgets_cfg || [];
+  var percSstr = (gCfg[0] && gCfg[0].type === 2) ? (gCfg[0].sstr || []) : [];
+
+  var nonPerc = sstr.filter(function(_, i) { return percSstr.indexOf(i + 1) < 0; });
+  if (nonPerc.length) {
     h += '<optgroup label="Serial Commands">';
-    sstr.forEach(function(s, i) { h += opt('5,' + (i + 1), s.n, sel); });
+    sstr.forEach(function(s, i) {
+      if (percSstr.indexOf(i + 1) >= 0) return;
+      h += opt('5,' + (i + 1), s.n, sel);
+    });
+    h += '</optgroup>';
+  }
+
+  if (percSstr.length) {
+    h += '<optgroup label="Periscope">';
+    percSstr.forEach(function(idx) {
+      var s = sstr[idx - 1];
+      if (s) h += opt('5,' + idx, s.n.replace('Periscope: ', ''), sel);
+    });
     h += '</optgroup>';
   }
 
