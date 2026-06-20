@@ -107,10 +107,26 @@ function opt(v, label, sel) {
 function actionOptions(sel) {
   var h = opt('0', '— None —', sel);
 
-  var sstr = _cfg.sstr || [];
-  if (sstr.length) {
+  var sstr   = _cfg.sstr || [];
+  var gCfg   = _cfg.gadgets_cfg || [];
+  var percSstr = (gCfg[0] && gCfg[0].type === 2) ? (gCfg[0].sstr || []) : [];
+
+  var nonPerc = sstr.filter(function(_, i) { return percSstr.indexOf(i + 1) < 0; });
+  if (nonPerc.length) {
     h += '<optgroup label="Serial Commands">';
-    sstr.forEach(function(s, i) { h += opt('5,' + (i + 1), s.n, sel); });
+    sstr.forEach(function(s, i) {
+      if (percSstr.indexOf(i + 1) >= 0) return;
+      h += opt('5,' + (i + 1), s.n, sel);
+    });
+    h += '</optgroup>';
+  }
+
+  if (percSstr.length) {
+    h += '<optgroup label="Periscope">';
+    percSstr.forEach(function(idx) {
+      var s = sstr[idx - 1];
+      if (s) h += opt('5,' + idx, s.n.replace('Periscope: ', ''), sel);
+    });
     h += '</optgroup>';
   }
 

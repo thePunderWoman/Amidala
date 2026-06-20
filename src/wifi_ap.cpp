@@ -147,6 +147,47 @@ static String buildGadgetsCfgJson() {
 }
 
 // ---------------------------------------------------------------------------
+// Built-in gadget commands injected into params.Str[] at startup
+// ---------------------------------------------------------------------------
+
+struct BuiltinCmd { const char name[32]; const char str[16]; };
+
+// Operational commands — injected into params.Str[] so they appear in button
+// assignments and on the Droid Control → Gadgets tab.
+static const BuiltinCmd UPPITY_CMDS[] = {
+    {"Periscope: Home",           ":PH"},
+    {"Periscope: Raise Full",     ":PP100"},
+    {"Periscope: Raise Half",     ":PP50"},
+    {"Periscope: Random Gentle",  ":PMG"},
+    {"Periscope: Random Medium",  ":PMM"},
+    {"Periscope: Random Strong",  ":PMA"},
+    {"Periscope: Stop",           ":PX"},
+    {"Periscope: Face Forward",   ":PA0"},
+    {"Periscope: Spin CCW",       ":PR30"},
+    {"Periscope: Spin CW",        ":PR-30"},
+    {"Periscope: Stop Spin",      ":PR0"},
+};
+// Config/calibration commands are web-only (sent via /api/gadget-cmd) — see gadgets.html.
+static constexpr uint8_t UPPITY_CMD_COUNT = sizeof(UPPITY_CMDS) / sizeof(UPPITY_CMDS[0]);
+
+static void injectBuiltinSerialCmds() {
+    if (!sCtrl || sGadgets[0].type != GADGET_UPPITY) return;
+    AmidalaParameters& p = sCtrl->params;
+    uint8_t base = p.serialcount;
+    uint8_t added = 0;
+    for (uint8_t i = 0; i < UPPITY_CMD_COUNT; i++) {
+        if ((uint16_t)base + i >= 255) break;   // uint8_t serialstr index limit
+        strlcpy(p.Str[base + i].name, UPPITY_CMDS[i].name, sizeof(p.Str[0].name));
+        strlcpy(p.Str[base + i].str,  UPPITY_CMDS[i].str,  sizeof(p.Str[0].str));
+        added++;
+    }
+    p.serialcount = base + added;
+    sGadgets[0].sstrCnt = added;
+    for (uint8_t i = 0; i < added; i++)
+        sGadgets[0].sstr[i] = base + 1 + i; // 1-based indices
+}
+
+// ---------------------------------------------------------------------------
 // Serial-string config file helpers
 // ---------------------------------------------------------------------------
 
@@ -711,6 +752,14 @@ static void handleApiDome() {
     sServer.send(200, "text/plain", "OK");
 }
 
+static void handleApiGadgetCmd() {
+    if (!sCtrl) { sServer.send(500, "text/plain", "no controller"); return; }
+    String cmd = sServer.arg("cmd");
+    if (cmd.length() == 0) { sServer.send(400, "text/plain", "cmd required"); return; }
+    sCtrl->sendSerialString(cmd.c_str());
+    sServer.send(200, "text/plain", "OK");
+}
+
 static void handleApiSerial() {
     if (!sCtrl) { sServer.send(500, "text/plain", "no controller"); return; }
     int idx = sServer.arg("idx").toInt(); // 1-based
@@ -839,6 +888,7 @@ static void handleComingSoon()          { sServer.send(200, "text/html", WEB_PAG
 void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaController* ctrl) {
     sCtrl = ctrl;
     loadGadgetConfig();
+    injectBuiltinSerialCmds();
 
     WiFi.mode(WIFI_AP);
     WiFi.softAP(ssid, password);
@@ -883,8 +933,9 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/api/info",   HTTP_GET,  handleApiInfo);
     sServer.on("/api/estop",  HTTP_POST, handleApiEstop);
     sServer.on("/api/dome",   HTTP_POST, handleApiDome);
-    sServer.on("/api/serial", HTTP_POST, handleApiSerial);
-    sServer.on("/api/hcr",    HTTP_POST, handleApiHCR);
+    sServer.on("/api/gadget-cmd", HTTP_POST, handleApiGadgetCmd);
+    sServer.on("/api/serial",     HTTP_POST, handleApiSerial);
+    sServer.on("/api/hcr",        HTTP_POST, handleApiHCR);
     sServer.on("/api/config", HTTP_GET,  handleApiConfigGet);
     sServer.on("/api/config", HTTP_POST, handleApiConfigPost);
 

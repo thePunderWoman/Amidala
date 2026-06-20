@@ -99,10 +99,22 @@ _config = {
         {"min": 50, "max": 130, "n": 90, "d": 4, "t": -5, "sp": 30, "r": 1},
     ],
     # Serial strings — list of {n: name, s: serial_string}
+    # Indices 1-3: user-defined; 4-14: auto-injected Uppity Spinner operational commands
     "sstr": [
-        {"n": "Leia Sequence",  "s": ":LD00"},
-        {"n": "Happy R2",       "s": ":001"},
-        {"n": "Dome Home",      "s": "*dome=home"},
+        {"n": "Leia Sequence",           "s": ":LD00"},
+        {"n": "Happy R2",                "s": ":001"},
+        {"n": "Dome Home",               "s": "*dome=home"},
+        {"n": "Periscope: Home",         "s": ":PH"},
+        {"n": "Periscope: Raise Full",   "s": ":PP100"},
+        {"n": "Periscope: Raise Half",   "s": ":PP50"},
+        {"n": "Periscope: Random Gentle","s": ":PMG"},
+        {"n": "Periscope: Random Medium","s": ":PMM"},
+        {"n": "Periscope: Random Strong","s": ":PMA"},
+        {"n": "Periscope: Stop",         "s": ":PX"},
+        {"n": "Periscope: Face Forward", "s": ":PA0"},
+        {"n": "Periscope: Spin CCW",     "s": ":PR30"},
+        {"n": "Periscope: Spin CW",      "s": ":PR-30"},
+        {"n": "Periscope: Stop Spin",    "s": ":PR0"},
     ],
     # Controller settings
     "altbtn":       0,
@@ -129,8 +141,8 @@ _config = {
     # Gadget config — 7 entries, one per gadget (index matches GADGETS array)
     # type: 0=disabled, 1=enabled, 2=uppity_spinner; sstr: 1-based serial string indices
     "gadgets_cfg": [
-        {"type": 2, "sstr": []},        # 0: Periscope — Uppity Spinner
-        {"type": 1, "sstr": [1, 2]},    # 1: Lifeform Scanner — sstr 1 (Leia) + 2 (Happy R2)
+        {"type": 2, "sstr": [4,5,6,7,8,9,10,11,12,13,14]},  # 0: Periscope — auto-injected
+        {"type": 1, "sstr": [1, 2]},    # 1: Lifeform Scanner — user sstr 1 (Leia) + 2 (Happy R2)
         {"type": 0, "sstr": []},        # 2: Lightsaber Launcher — disabled
         {"type": 0, "sstr": []},        # 3: Bubble Gun — disabled
         {"type": 0, "sstr": []},        # 4: Zapper Arm — disabled
@@ -237,6 +249,13 @@ class _Handler(SimpleHTTPRequestHandler):
             cmd = params.get("cmd", "")
             print(f"  DOME    {cmd!r}")
             _monitor["lines"].append({"t": "dome=" + cmd, "c": "tx"})
+            _monitor["seq"] += 1
+            self._text("OK")
+            return
+        if path == "/api/gadget-cmd":
+            cmd = params.get("cmd", "")
+            print(f"  GADGET  {cmd!r}")
+            _monitor["lines"].append({"t": "> " + cmd, "c": "tx"})
             _monitor["seq"] += 1
             self._text("OK")
             return
