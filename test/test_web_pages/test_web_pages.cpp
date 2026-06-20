@@ -399,6 +399,118 @@ void test_full_config_json_sstr_with_entries() {
 }
 
 // ---------------------------------------------------------------------------
+// Gadgets config page
+// ---------------------------------------------------------------------------
+
+void test_gadgets_page_uses_config_endpoint() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GADGETS, "/api/config"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GADGETS, "href=\"/\""));
+}
+
+void test_gadgets_page_has_gadget_cmd_endpoint() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GADGETS, "/api/gadget-cmd"));
+}
+
+void test_gadgets_page_has_periscope_and_uppity_spinner() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GADGETS, "Periscope"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GADGETS, "Uppity Spinner"));
+}
+
+void test_gadgets_page_has_uppity_ops_and_cfg_commands() {
+    // Operational commands
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GADGETS, ":PH"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GADGETS, ":PMG"));
+    // Calibration commands
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GADGETS, "#PSC"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GADGETS, "#PRESTART"));
+}
+
+void test_gadgets_page_has_droid_control_link() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GADGETS, "/droid-control"));
+}
+
+// ---------------------------------------------------------------------------
+// Safety page
+// ---------------------------------------------------------------------------
+
+void test_safety_page_uses_config_endpoint() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_SAFETY, "/api/config"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_SAFETY, "href=\"/\""));
+}
+
+void test_safety_page_has_schema_keys() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_SAFETY, "'fst'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_SAFETY, "'domestall'"));
+}
+
+// ---------------------------------------------------------------------------
+// Controllers page
+// ---------------------------------------------------------------------------
+
+void test_controllers_page_uses_config_endpoint() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "/api/config"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "href=\"/\""));
+}
+
+void test_controllers_page_has_periscope_optgroup() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "Periscope"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "gadgets_cfg"));
+}
+
+// ---------------------------------------------------------------------------
+// Droid control page
+// ---------------------------------------------------------------------------
+
+void test_droid_control_page_uses_config_endpoint() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DROID_CONTROL, "/api/config"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DROID_CONTROL, "href=\"/\""));
+}
+
+void test_droid_control_page_has_three_tabs() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DROID_CONTROL, "Dome"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DROID_CONTROL, "Sequences"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DROID_CONTROL, "Gadgets"));
+}
+
+// ---------------------------------------------------------------------------
+// Serial strings page — respects sstr_user_cnt
+// ---------------------------------------------------------------------------
+
+void test_serial_strings_page_respects_user_cnt() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_SERIAL_STRINGS, "sstr_user_cnt"));
+}
+
+// ---------------------------------------------------------------------------
+// buildFullConfigJson — gadgets overloads
+// ---------------------------------------------------------------------------
+
+void test_full_config_json_gadgets_overload_valid_json() {
+    AmidalaParameters p = makeParams();
+    String gadgets = "[{\"type\":0,\"sstr\":[]}]";
+    String json = buildFullConfigJson(p, gadgets);
+    const char* s = json.c_str();
+    TEST_ASSERT_EQUAL('{', s[0]);
+    TEST_ASSERT_EQUAL('}', s[strlen(s) - 1]);
+    TEST_ASSERT_TRUE(contains(s, "\"gadgets_cfg\":[{\"type\":0"));
+}
+
+void test_full_config_json_with_sstr_user_cnt() {
+    AmidalaParameters p = makeParams();
+    p.serialcount = 5;
+    String gadgets = "[]";
+    String json = buildFullConfigJson(p, gadgets, 3);
+    const char* s = json.c_str();
+    TEST_ASSERT_TRUE(contains(s, "\"sstr_user_cnt\":3"));
+    TEST_ASSERT_EQUAL('}', s[strlen(s) - 1]);
+}
+
+void test_full_config_json_sstr_user_cnt_zero() {
+    AmidalaParameters p = makeParams(); // serialcount = 0
+    String json = buildFullConfigJson(p, "[]", 0);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"sstr_user_cnt\":0"));
+}
+
+// ---------------------------------------------------------------------------
 // buildInfoJson — JSON content
 // ---------------------------------------------------------------------------
 
@@ -473,6 +585,26 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_servos_page_has_edit_ui);
     RUN_TEST(test_serial_strings_page_uses_config_endpoint);
     RUN_TEST(test_serial_strings_page_has_add_and_delete_ui);
+    RUN_TEST(test_serial_strings_page_respects_user_cnt);
+
+    // Gadgets config page
+    RUN_TEST(test_gadgets_page_uses_config_endpoint);
+    RUN_TEST(test_gadgets_page_has_gadget_cmd_endpoint);
+    RUN_TEST(test_gadgets_page_has_periscope_and_uppity_spinner);
+    RUN_TEST(test_gadgets_page_has_uppity_ops_and_cfg_commands);
+    RUN_TEST(test_gadgets_page_has_droid_control_link);
+
+    // Safety page
+    RUN_TEST(test_safety_page_uses_config_endpoint);
+    RUN_TEST(test_safety_page_has_schema_keys);
+
+    // Controllers page
+    RUN_TEST(test_controllers_page_uses_config_endpoint);
+    RUN_TEST(test_controllers_page_has_periscope_optgroup);
+
+    // Droid control page
+    RUN_TEST(test_droid_control_page_uses_config_endpoint);
+    RUN_TEST(test_droid_control_page_has_three_tabs);
 
     // buildFullConfigJson
     RUN_TEST(test_full_config_json_wraps_in_braces);
@@ -492,6 +624,9 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_full_config_json_servos_channel_fields);
     RUN_TEST(test_full_config_json_sstr_empty_array);
     RUN_TEST(test_full_config_json_sstr_with_entries);
+    RUN_TEST(test_full_config_json_gadgets_overload_valid_json);
+    RUN_TEST(test_full_config_json_with_sstr_user_cnt);
+    RUN_TEST(test_full_config_json_sstr_user_cnt_zero);
 
     // buildInfoJson
     RUN_TEST(test_info_json_contains_version_key);

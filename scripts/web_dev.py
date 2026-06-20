@@ -138,6 +138,9 @@ _config = {
         {"seq": "258", "t": 5, "x": 3, "y": 0},  # 258 → Dome Home serial
         {"seq": "14",  "t": 9, "x": 0, "y": 0},  # 14  → dome random toggle
     ],
+    # User-defined serial string count (before builtin injection).
+    # The serial-strings config page only shows/edits strings 0..sstr_user_cnt-1.
+    "sstr_user_cnt": 3,
     # Gadget config — 7 entries, one per gadget (index matches GADGETS array)
     # type: 0=disabled, 1=enabled, 2=uppity_spinner; sstr: 1-based serial string indices
     "gadgets_cfg": [

@@ -16,6 +16,9 @@
 static WebServer          sServer(80);
 static DNSServer          sDNS;
 static AmidalaController* sCtrl = nullptr;
+// Count of user-defined serial strings, excluding built-in injected commands.
+// Saved before injectBuiltinSerialCmds() runs; used to bound rewriteSerialStrings().
+static uint8_t            sUserSerialCount = 0;
 
 // ---------------------------------------------------------------------------
 // Serial monitor log buffer
@@ -117,8 +120,12 @@ static bool rewriteGadgetConfig() {
         if (sGadgets[i].type == GADGET_DISABLED) continue;
         out += "gadget=";
         out += String(i); out += ","; out += String(sGadgets[i].type);
-        for (uint8_t j = 0; j < sGadgets[i].sstrCnt; j++) {
-            out += ","; out += String(sGadgets[i].sstr[j]);
+        // Periscope Uppity Spinner sstr is auto-injected at startup — don't persist
+        bool skipSstr = (i == 0 && sGadgets[i].type == GADGET_UPPITY);
+        if (!skipSstr) {
+            for (uint8_t j = 0; j < sGadgets[i].sstrCnt; j++) {
+                out += ","; out += String(sGadgets[i].sstr[j]);
+            }
         }
         out += "\n";
     }
@@ -209,9 +216,9 @@ static bool rewriteSerialStrings() {
         out = "#START\n#END\n";
     }
 
-    // Build new sstr= lines
+    // Build new sstr= lines — only user-defined strings, not builtin injected ones.
     String sstrs;
-    for (uint8_t i = 0; i < sCtrl->params.serialcount; i++) {
+    for (uint8_t i = 0; i < sUserSerialCount; i++) {
         sstrs += "sstr=";
         sstrs += sCtrl->params.Str[i].name;
         sstrs += "|";
@@ -492,7 +499,7 @@ static void handleApiInfo() {
 static void handleApiConfigGet() {
     if (!sCtrl) { sServer.send(500, "application/json", "{}"); return; }
     sServer.send(200, "application/json",
-        buildFullConfigJson(sCtrl->params, buildGadgetsCfgJson()));
+        buildFullConfigJson(sCtrl->params, buildGadgetsCfgJson(), sUserSerialCount));
 }
 
 static void setSerialStringFields(SerialString& s, const char* val) {
@@ -531,28 +538,61 @@ static void handleApiConfigPost() {
     // sstr_del_N — delete serial string at index N, shift remainder down
     if (key.startsWith("sstr_del_")) {
         int idx = key.substring(9).toInt();
-        if (idx < 0 || idx >= (int)sCtrl->params.serialcount) {
+        // Only allow deletion of user-defined strings (not builtin injected ones)
+        if (idx < 0 || idx >= (int)sUserSerialCount) {
             sServer.send(400, "text/plain", "index out of range"); return;
         }
+        // Shift all strings (including injected) down by one
         for (int j = idx; j < (int)sCtrl->params.serialcount - 1; j++)
             sCtrl->params.Str[j] = sCtrl->params.Str[j + 1];
         memset(&sCtrl->params.Str[sCtrl->params.serialcount - 1], 0, sizeof(SerialString));
         sCtrl->params.serialcount--;
+        sUserSerialCount--;
+        // Update gadget sstr indices: entries pointing past idx shift down; the
+        // deleted entry (idx+1, 1-based) is removed from any gadget assignment.
+        bool gadgetsDirty = false;
+        for (int g = 0; g < GADGET_COUNT; g++) {
+            uint8_t wk = 0;
+            for (uint8_t k = 0; k < sGadgets[g].sstrCnt; k++) {
+                uint8_t ref = sGadgets[g].sstr[k]; // 1-based
+                if (ref == (uint8_t)(idx + 1)) { gadgetsDirty = true; continue; }
+                if (ref > (uint8_t)(idx + 1))  { ref--; gadgetsDirty = true; }
+                sGadgets[g].sstr[wk++] = ref;
+            }
+            sGadgets[g].sstrCnt = wk;
+        }
         bool ok = rewriteSerialStrings();
+        if (gadgetsDirty) rewriteGadgetConfig();
         sServer.send(ok ? 200 : 207, "text/plain", ok ? "OK" : "deleted but SD write failed");
         return;
     }
 
-    // sstr_N — update (or append when N == serialcount) serial string at index N
+    // sstr_N — update serial string at index N (or append when N == sUserSerialCount)
     if (key.startsWith("sstr_")) {
         int idx = key.substring(5).toInt();
-        if (idx < 0 || idx > (int)sCtrl->params.serialcount ||
-            idx >= (int)sCtrl->params.getSerialStringCount()) {
+        bool isAppend = (idx == (int)sUserSerialCount);
+        bool isEdit   = (idx >= 0 && idx < (int)sUserSerialCount);
+        if (!isEdit && !isAppend) {
             sServer.send(400, "text/plain", "index out of range"); return;
         }
-        setSerialStringFields(sCtrl->params.Str[idx], value.c_str());
-        if (idx == (int)sCtrl->params.serialcount)
+        if (isAppend) {
+            // Guard against full Str[] array
+            if ((int)sCtrl->params.serialcount >= (int)sCtrl->params.getSerialStringCount()) {
+                sServer.send(507, "text/plain", "serial string buffer full"); return;
+            }
+            // Shift injected strings up one slot to insert the new user string
+            for (int j = (int)sCtrl->params.serialcount; j > (int)sUserSerialCount; j--)
+                sCtrl->params.Str[j] = sCtrl->params.Str[j - 1];
+            memset(&sCtrl->params.Str[sUserSerialCount], 0, sizeof(SerialString));
             sCtrl->params.serialcount++;
+            // Update gadget sstr indices: entries at or above new position shift up
+            for (int g = 0; g < GADGET_COUNT; g++)
+                for (uint8_t k = 0; k < sGadgets[g].sstrCnt; k++)
+                    if (sGadgets[g].sstr[k] > (uint8_t)idx)
+                        sGadgets[g].sstr[k]++;
+            sUserSerialCount++;
+        }
+        setSerialStringFields(sCtrl->params.Str[idx], value.c_str());
         bool ok = rewriteSerialStrings();
         sServer.send(ok ? 200 : 207, "text/plain", ok ? "OK" : "applied but SD write failed");
         return;
@@ -888,6 +928,7 @@ static void handleComingSoon()          { sServer.send(200, "text/html", WEB_PAG
 void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaController* ctrl) {
     sCtrl = ctrl;
     loadGadgetConfig();
+    sUserSerialCount = sCtrl->params.serialcount; // snapshot before builtin injection
     injectBuiltinSerialCmds();
 
     WiFi.mode(WIFI_AP);

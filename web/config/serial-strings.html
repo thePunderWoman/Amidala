@@ -46,7 +46,10 @@ var _isNew = false; // true while adding an unsaved entry
 
 function load() {
   fetch('/api/config').then(function(r){return r.json();}).then(function(d){
-    _d = d.sstr || [];
+    var allSstr = d.sstr || [];
+    // sstr_user_cnt tells us how many are user-defined vs builtin-injected.
+    var userCnt = (d.sstr_user_cnt !== undefined) ? d.sstr_user_cnt : allSstr.length;
+    _d = allSstr.slice(0, userCnt);
     render();
   }).catch(function(){
     document.getElementById('main').innerHTML='<div id="status">Failed to load</div>';

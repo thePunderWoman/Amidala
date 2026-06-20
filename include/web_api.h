@@ -256,10 +256,24 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
 // Overload that appends gadget configuration (JSON array string built by caller).
 inline String buildFullConfigJson(const AmidalaParameters& p, const String& gadgetsCfgJson) {
     String j = buildFullConfigJson(p);
-    // Insert gadgets_cfg before the closing brace
     j = j.substring(0, j.length() - 1);
     j += ",\"gadgets_cfg\":";
     j += gadgetsCfgJson;
+    j += "}";
+    return j;
+}
+
+// Overload that also includes sstr_user_cnt — the number of user-defined serial
+// strings, excluding any builtin strings injected at startup.  The serial-strings
+// config page uses this to avoid showing or editing builtin commands.
+inline String buildFullConfigJson(const AmidalaParameters& p, const String& gadgetsCfgJson,
+                                   uint8_t userSstrCnt) {
+    String j = buildFullConfigJson(p);
+    j = j.substring(0, j.length() - 1);
+    j += ",\"gadgets_cfg\":";
+    j += gadgetsCfgJson;
+    j += ",\"sstr_user_cnt\":";
+    j += String(userSstrCnt);
     j += "}";
     return j;
 }
