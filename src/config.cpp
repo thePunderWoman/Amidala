@@ -836,6 +836,8 @@ bool AmidalaConfig::processConfig(const char *cmd) {
     return true;
   } else if (intparam(cmd, "mutebutton=", params.mutebutton, 0, 9)) {
     return true;
+  } else if (boolparam(cmd, "auxserial3=", params.auxserial3)) {
+    return true;
   } else if (boolparam(cmd, "wifion=", params.wifion)) {
     return true;
   } else if (startswith(cmd, "wifissid=")) {

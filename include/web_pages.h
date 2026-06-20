@@ -147,6 +147,7 @@ header{text-align:center;padding:2rem 1rem 1.5rem;border-bottom:1px solid var(--
   <a class="card" href="/monitor"><div class="icon">&#9680;</div><div class="name">Serial Monitor</div></a>
   <a class="card" href="/update"><div class="icon">&#8679;</div><div class="name">Firmware Update</div></a>
   <a class="card" href="/safety"><div class="icon">&#9888;</div><div class="name">Safety</div></a>
+  <a class="card" href="/diagnostics"><div class="icon">&#9679;</div><div class="name">Droid Status</div></a>
 </nav>
 <script>
 Promise.all([
@@ -544,6 +545,7 @@ var SCHEMA = [
   {key:'serialbaud', label:'Baud Rate',          type:'number', min:300, max:115200},
   {key:'serialdelim',label:'Delimiter (ASCII)',  type:'number', min:0,   max:255},
   {key:'serialeol',  label:'EOL (ASCII)',         type:'number', min:0,   max:255},
+  {key:'auxserial3', label:'Aux Serial 3 (Software Serial)', type:'bool'},
   {section:'I²C'},
   {key:'myi2c',      label:"This Board's Address", type:'number', min:0, max:100}
 ];
@@ -6697,6 +6699,427 @@ a:hover{color:var(--gold)}
 <div class="big">&#9670;</div>
 <p>COMING SOON</p>
 <a href="/">&#9664; BACK TO HOME</a>
+</body>
+</html>
+)html";
+
+static const char WEB_PAGE_DIAGNOSTICS[] = R"html(<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Droid Status — AMIDALA</title>
+<style>
+/* Amidala web UI — shared styles.
+   Embed script inlines this into every page's <style> block.
+   In dev mode (scripts/web_dev.py) it's served as a real file from /assets/common.css. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --gold:   #ffe81f;
+  --red:    #c00;
+  --bg:     #000;
+  --card:   #0a0a0a;
+  --dim:    #555;
+  --border: #ffe81f22;
+}
+
+body {
+  background: var(--bg);
+  color: var(--gold);
+  font-family: 'Courier New', Courier, monospace;
+  min-height: 100vh;
+  font-size: 15px;
+}
+
+a {
+  color: var(--gold);
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #111;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  padding: .55rem 1.4rem;
+  font-size: .78rem;
+  letter-spacing: .08em;
+  pointer-events: none;
+  white-space: nowrap;
+  animation: _tfi .15s ease, _tfo .3s 1.9s ease forwards;
+  z-index: 9999;
+}
+.toast-err {
+  border-color: var(--red);
+  color: var(--red);
+}
+@keyframes _tfi {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px) }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) }
+}
+@keyframes _tfo {
+  from { opacity: 1 }
+  to   { opacity: 0 }
+}
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }
+</style>
+<style>
+.page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
+.back{font-size:.8rem;color:var(--dim);letter-spacing:.1em;white-space:nowrap}
+.back:hover{color:var(--gold)}
+.page-title{flex:1;text-align:center;font-size:.9rem;letter-spacing:.25em;text-transform:uppercase}
+main{max-width:660px;margin:0 auto;padding:1rem}
+.section-label{font-size:.6rem;color:var(--dim);letter-spacing:.25em;text-transform:uppercase;padding:.5rem 0 .4rem;border-bottom:1px solid var(--border);margin-bottom:.2rem}
+.row{display:flex;align-items:center;padding:.7rem .2rem;border-bottom:1px solid #0f0f0f;gap:.5rem}
+.row-label{flex:1;font-size:.82rem;color:#ccc}
+.row-note{font-size:.65rem;color:var(--dim);margin-left:.35rem}
+.gpio{font-size:.65rem;color:var(--dim);min-width:4rem;text-align:right}
+.pin-led{font-size:1.1rem;min-width:2.5rem;text-align:right;transition:color .15s}
+.pin-led.high{color:#3c3}
+.pin-led.low{color:#222}
+.pin-state{font-size:.72rem;min-width:2.5rem;text-align:left;letter-spacing:.06em}
+.pin-state.high{color:#3c3}
+.pin-state.low{color:var(--dim)}
+.ain-val{font-size:.82rem;color:var(--gold);min-width:4rem;text-align:right}
+#ts{text-align:center;padding:.6rem;color:var(--dim);font-size:.65rem;letter-spacing:.1em;border-top:1px solid var(--border);margin-top:.5rem}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; Back</a>
+  <div class="page-title">&#9670; Droid Status &#9670;</div>
+</div>
+<main id="main">
+  <div id="ts">LOADING&#8230;</div>
+</main>
+<script>
+/* Amidala web UI — edit-in-place widget + shared config page helpers.
+   Embed script inlines this into every config sub-page.
+   In dev mode (scripts/web_dev.py) it's served as /assets/edit.js. */
+
+// ------------------------------------------------------------------ toast ---
+
+function showToast(msg, isErr) {
+  var t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' toast-err' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
+}
+
+// -------------------------------------------------------- edit-in-place -----
+
+function startEdit(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
+  row.querySelector('.rv').hidden = true;
+  row.querySelector('.ri').hidden = false;
+  btn.hidden = true;
+  row.querySelector('.bs').hidden = false;
+  row.querySelector('.bc').hidden = false;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  row.querySelector('.rv').hidden = false;
+  row.querySelector('.ri').hidden = true;
+  row.querySelector('.be').hidden = false;
+  row.querySelector('.bs').hidden = true;
+  btn.hidden = true;
+}
+
+async function doSave(btn) {
+  var row = btn.closest('.row');
+  var key = row.dataset.key;
+  var inp = row.querySelector('input,select');
+  var val = inp.value;
+  var prev = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    var r = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'key=' + encodeURIComponent(key) + '&value=' + encodeURIComponent(val)
+    });
+    if (r.ok) {
+      var dv = row.querySelector('.rv');
+      var rt = row.dataset.type;
+      if (rt === 'bool' || rt === 'select') {
+        var sel = row.querySelector('select');
+        dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'password') {
+        dv.textContent = '••••••••';
+      } else {
+        dv.textContent = val;
+      }
+      doCancel(row.querySelector('.bc'));
+      showToast('Saved');
+    } else {
+      showToast('Save failed: ' + await r.text(), true);
+    }
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+// ------------------------------------------------ schema-driven row builder --
+
+function dispValue(s, val) {
+  if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
+  if (s.type === 'select') {
+    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    return found ? found.l : val;
+  }
+  if (s.type === 'password') return '••••••••';
+  return String(val);
+}
+
+function buildInput(s, val) {
+  if (s.type === 'bool') {
+    return '<select>'
+      + '<option value="y"' + (val === 'y' ? ' selected' : '') + '>On</option>'
+      + '<option value="n"' + (val === 'n' ? ' selected' : '') + '>Off</option>'
+      + '</select>';
+  }
+  if (s.type === 'select') {
+    var opts = (s.options || []).map(function(op) {
+      return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
+    }).join('');
+    return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'number') {
+    return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
+  }
+  if (s.type === 'password') {
+    return '<input type="password" value="' + val + '" maxlength="' + (s.maxlength || 64) + '">';
+  }
+  return '<input type="text" value="' + val + '"' + (s.maxlength ? ' maxlength="' + s.maxlength + '"' : '') + '>';
+}
+
+async function doAction(btn) {
+  var cmd      = btn.dataset.cmd;
+  var endpoint = btn.dataset.endpoint || '/api/monitor';
+  var prev = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
+  try {
+    var r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'cmd=' + encodeURIComponent(cmd)
+    });
+    showToast(r.ok ? 'Sent' : 'Failed', !r.ok);
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+function buildRow(s, val) {
+  if (s.type === 'action') {
+    return '<div class="row">'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<button class="be" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
+      + (s.btnLabel || 'Send') + '</button>'
+      + '</div>';
+  }
+  var disp = dispValue(s, val);
+  var note = s.note ? '<span style="font-size:.65rem;color:var(--dim);margin-left:.3rem">' + s.note + '</span>' : '';
+  if (s.readOnly) {
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<div class="rv">' + disp + '</div>'
+      + '</div>';
+  }
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    + '<div class="row-label">' + s.label + '</div>'
+    + '<div class="rv">' + disp + '</div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
+    + '<button class="bs" hidden onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '</div>';
+}
+
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.textContent = 'E-Stop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  document.body.appendChild(b);
+})();
+
+// ------------------------------------------------- hash-based tab nav --------
+// initHashTabs(defaultTab, onSwitch)
+//   Reads location.hash to pick the active tab on load, then listens for
+//   hashchange (browser back/forward) and re-activates accordingly.
+//   Expects .tab elements with data-tab="<id>" attributes on the page.
+//   onSwitch(tabId) is called whenever the active tab changes.
+//
+// showHashTab(t)
+//   Call from tab button onclick. Pushes a history entry then lets the
+//   hashchange handler do the actual switch (single code path for all sources).
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
+
+function buildPage(SCHEMA, endpoint, callback) {
+  fetch(endpoint)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var html = '';
+      var skip = false;
+      SCHEMA.forEach(function(s) {
+        if (s.section) {
+          skip = s.when ? !s.when(d) : false;
+          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          return;
+        }
+        if (skip) return;
+        if (s.when && !s.when(d)) return;
+        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
+        html += buildRow(s, val);
+      });
+      document.querySelector('main').innerHTML = html;
+      if (callback) callback(d);
+    })
+    .catch(function() {
+      var el = document.getElementById('status');
+      if (el) el.textContent = 'Failed to load settings.';
+    });
+}
+</script>
+<script>
+var DOUT = [
+  {id:'dout0', label:'Digital 1', gpio:'GPIO39'},
+  {id:'dout1', label:'Digital 2', gpio:'GPIO40', note:'dome hall sensor'},
+  {id:'dout2', label:'Digital 3', gpio:'GPIO41'},
+  {id:'dout3', label:'Digital 4', gpio:'GPIO42'}
+];
+var AIN = [
+  {id:'ain0', label:'Analog 1', gpio:'GPIO1'},
+  {id:'ain1', label:'Analog 2', gpio:'GPIO2'}
+];
+
+function buildUI() {
+  var html = '<div class="section-label">Digital Outputs</div>';
+  DOUT.forEach(function(d) {
+    var note = d.note ? '<span class="row-note">(' + d.note + ')</span>' : '';
+    html += '<div class="row">'
+      + '<div class="row-label">' + d.label + note + '</div>'
+      + '<span class="gpio">' + d.gpio + '</span>'
+      + '<div class="pin-led low" id="' + d.id + '_led">&#9679;</div>'
+      + '<div class="pin-state low" id="' + d.id + '_st">LOW</div>'
+      + '</div>';
+  });
+  html += '<div class="section-label">Analog Inputs</div>';
+  AIN.forEach(function(a) {
+    html += '<div class="row">'
+      + '<div class="row-label">' + a.label + '</div>'
+      + '<span class="gpio">' + a.gpio + '</span>'
+      + '<div class="ain-val" id="' + a.id + '">&#8212;</div>'
+      + '</div>';
+  });
+  html += '<div id="ts">&#8212;</div>';
+  document.getElementById('main').innerHTML = html;
+}
+
+function refresh() {
+  fetch('/api/pins')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      d.dout.forEach(function(v,i){
+        var led = document.getElementById(DOUT[i].id+'_led');
+        var st  = document.getElementById(DOUT[i].id+'_st');
+        if(!led||!st) return;
+        var cls = v ? 'high' : 'low';
+        led.className = 'pin-led '+cls;
+        st.className  = 'pin-state '+cls;
+        st.textContent = v ? 'HIGH' : 'LOW';
+      });
+      d.ain.forEach(function(v,i){
+        var el = document.getElementById(AIN[i].id);
+        if(el) el.textContent = v;
+      });
+      var ts = document.getElementById('ts');
+      if(ts) ts.textContent = 'Updated '+new Date().toLocaleTimeString();
+    })
+    .catch(function(){
+      var ts = document.getElementById('ts');
+      if(ts) ts.textContent = 'Connection error';
+    });
+}
+
+buildUI();
+refresh();
+setInterval(refresh, 2000);
+</script>
 </body>
 </html>
 )html";

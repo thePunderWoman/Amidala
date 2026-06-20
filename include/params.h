@@ -179,6 +179,10 @@ struct AmidalaParameters {
   // altbtn — a quick double-tap fires mute while a held press is the alt modifier.
   uint8_t mutebutton;
 
+  // ---- Aux serial (Serial 3 / SW-UART header, GPIO21 TX / GPIO38 RX) ------
+  // auxserial3: enable UART2 at startup (default false).
+  bool    auxserial3;
+
   // ---- WiFi access point -----------------------------------------------
   // wifion: enable the on-board WiFi soft-AP (default true).
   // wifiSSID: network name broadcast by the AP (max 32 chars).
@@ -267,6 +271,7 @@ struct AmidalaParameters {
       altbtn = 0;
       altdomestick = 0;
       mutebutton = 0;
+      auxserial3 = false;
       wifion = true;
       strncpy(wifiSSID, "amidala", sizeof(wifiSSID));
       strncpy(wifiPassword, "Astromech", sizeof(wifiPassword));

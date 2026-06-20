@@ -47,13 +47,12 @@
 
 #define SD_CS_PIN   10
 
-// ---- Mode select pin --------------------------------------------------------
-// SEL2 A: available on GPIO21 unless AUX serial is enabled.
-//   Define ESP32_AUX_SERIAL to use GPIO21/38 as UART2; SEL2 is then unavailable.
+// ---- AUX serial (UART2 / Serial 3 header) -----------------------------------
+// GPIO21 TX / GPIO38 RX.  Always compiled in; enabled at runtime via auxserial3=.
 
-#ifndef ESP32_AUX_SERIAL
-#define SEL2_PIN    21   // SEL2 A; SEL2 B (GPIO38) reserved for future 2-bit expansion
-#endif
+#define AUX_SERIAL         Serial2
+#define AUX_SERIAL_TX_PIN  21
+#define AUX_SERIAL_RX_PIN  38
 
 // ---- SPI bus pins -----------------------------------------------------------
 
@@ -70,14 +69,6 @@
 #define I2C_SDA_PIN  8
 #define I2C_SCL_PIN  9
 
-// ---- AUX serial (UART2 on SW-UART header) -----------------------------------
-// Mutually exclusive with SEL2 A/B.  Enable with -DESP32_AUX_SERIAL.
-
-#ifdef ESP32_AUX_SERIAL
-#define AUX_SERIAL         Serial2
-#define AUX_SERIAL_TX_PIN  21
-#define AUX_SERIAL_RX_PIN  38
-#endif
 
 // ---- Serial port assignments ------------------------------------------------
 // Serial  = USB-CDC console  (ARDUINO_USB_CDC_ON_BOOT=1)
