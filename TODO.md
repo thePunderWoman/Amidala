@@ -59,9 +59,9 @@
   - [x] SSID (wifiSSID), password (wifiPassword), enable (wifion)
 
 ## Droid Control
-- [ ] Sequences (`/sequences`) — mobile-friendly touch-triggered list of serial strings
-- [ ] Periscope (`/periscope`) — mobile-friendly
-- [ ] Gadgets (`/gadgets`) — mobile-friendly
+- [x] Dome (`/droid-control#dome`) — STOP, Go Home, angle presets, relative moves (±45°/±90°), Random/Abs-Stick toggles
+- [x] Sequences (`/droid-control#sequences`) — grid of serial command buttons + HCR audio (musing toggle, 4 emotions × 2 levels); `/api/serial` and `/api/hcr` endpoints
+- [ ] Gadgets (`/droid-control#gadgets`) — coming soon placeholder; needs gadget configuration page first
 
 ## Tools
 - [x] Serial monitor (`/monitor`) — polls `/api/monitor`, color-coded TX/RX, pause/clear

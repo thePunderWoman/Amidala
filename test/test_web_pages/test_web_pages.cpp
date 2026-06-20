@@ -46,7 +46,7 @@ void test_home_page_has_all_config_nav_links() {
 }
 
 void test_home_page_has_tools_nav_links() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/sequences"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/droid-control"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/monitor"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/update"));
 }

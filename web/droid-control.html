@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Droid Control — AMIDALA</title>
+<link rel="stylesheet" href="/assets/common.css">
+<style>
+.page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
+.back{font-size:.8rem;color:var(--dim);letter-spacing:.1em;white-space:nowrap}
+.back:hover{color:var(--gold)}
+.page-title{flex:1;text-align:center;font-size:.9rem;letter-spacing:.25em;text-transform:uppercase}
+/* Tabs — identical to controllers page */
+.tabs{display:flex;border-bottom:1px solid var(--border)}
+.tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);font-family:inherit;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;padding:.85rem 1rem;cursor:pointer}
+.tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+/* Dome */
+.ctrl-section{padding:.75rem 1rem 1.2rem}
+.dome-stop{width:100%;padding:1.1rem;background:#3a0000;border:1px solid #7a0000;color:#ff4444;font-size:1.1rem;font-weight:bold;border-radius:4px;cursor:pointer;letter-spacing:.1em;margin-bottom:.9rem;-webkit-tap-highlight-color:transparent}
+.dome-stop:hover,.dome-stop:active{background:#4a0000}
+.btn-group{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.4rem}
+.dc-btn{background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:.85rem .5rem;border-radius:4px;cursor:pointer;font-size:.88rem;text-align:center;-webkit-tap-highlight-color:transparent}
+.dc-btn:hover,.dc-btn:active{background:#0e0e0e}
+.angle-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem}
+.angle-btn{background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:.8rem .2rem;border-radius:4px;cursor:pointer;font-size:.88rem;text-align:center;-webkit-tap-highlight-color:transparent}
+.angle-btn:hover,.angle-btn:active{background:#0e0e0e}
+.custom-row{display:flex;gap:.5rem;align-items:center;margin-top:.6rem}
+.custom-row span{font-size:.78rem;color:var(--dim);white-space:nowrap}
+.custom-row input[type=number]{flex:1;max-width:6rem;background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:.7rem .6rem;border-radius:4px;font-size:.9rem}
+/* Sequences — big touch grid */
+.cmd-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+.grid-btn{background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:1rem .5rem;border-radius:4px;cursor:pointer;font-size:.88rem;text-align:center;line-height:1.3;-webkit-tap-highlight-color:transparent;min-height:3.5rem}
+.grid-btn:hover,.grid-btn:active{background:#0e0e0e}
+.grid-btn.full{grid-column:1/-1}
+.empty-note{padding:.75rem 0;color:var(--dim);font-size:.82rem}
+.empty-note a{color:var(--fg)}
+/* Coming soon */
+.coming-soon{text-align:center;padding:3.5rem 1rem;color:var(--dim)}
+.cs-icon{font-size:2.5rem;margin-bottom:.8rem;opacity:.35}
+.cs-title{font-size:.85rem;letter-spacing:.2em;text-transform:uppercase;margin-bottom:.8rem}
+.cs-text{font-size:.8rem;line-height:1.65;max-width:380px;margin:0 auto}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; Back</a>
+  <div class="page-title">&#9670; Droid Control &#9670;</div>
+</div>
+<div class="tabs">
+  <button class="tab" data-tab="dome"      onclick="showHashTab('dome')">Dome</button>
+  <button class="tab" data-tab="sequences" onclick="showHashTab('sequences')">Sequences</button>
+  <button class="tab" data-tab="gadgets"   onclick="showHashTab('gadgets')">Gadgets</button>
+</div>
+<div id="main"><div id="status">LOADING&#8230;</div></div>
+<script src="/assets/edit.js"></script>
+<script>
+var _cfg = null;
+var _tab = 'dome';
+
+var ANGLES = [0,45,90,135,180,225,270,315];
+/* Happy/Sad/Mad/Scared only — Overload has no level so it's handled separately */
+var HCR_EMOS = ['Happy','Sad','Mad','Scared'];
+
+function load() {
+  fetch('/api/config')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      _cfg = d;
+      initHashTabs('dome', function(t) { _tab = t; render(); });
+    })
+    .catch(function() {
+      document.getElementById('status').textContent = 'Failed to load.';
+    });
+}
+
+function render() {
+  if (_tab === 'dome')           renderDome();
+  else if (_tab === 'sequences') renderSequences();
+  else                           renderGadgets();
+}
+
+/* ---- API helpers ---- */
+
+function domePost(cmd) {
+  fetch('/api/dome', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'cmd=' + encodeURIComponent(cmd)
+  }).then(function(r) { showToast(r.ok ? 'Sent' : 'Failed', !r.ok); })
+    .catch(function() { showToast('Network error', true); });
+}
+
+function serialPost(idx) {
+  fetch('/api/serial', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'idx=' + idx
+  }).then(function(r) { showToast(r.ok ? 'Sent' : 'Failed', !r.ok); })
+    .catch(function() { showToast('Network error', true); });
+}
+
+function hcrPost(cmd, emotion, level) {
+  var body = 'cmd=' + encodeURIComponent(cmd);
+  if (cmd === 'emote') body += '&emotion=' + emotion + '&level=' + level;
+  fetch('/api/hcr', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: body
+  }).then(function(r) { showToast(r.ok ? 'Sent' : 'Failed', !r.ok); })
+    .catch(function() { showToast('Network error', true); });
+}
+
+/* ---- dome tab ---- */
+
+function domeMoveTo() {
+  var v = document.getElementById('dome-angle').value;
+  var n = parseInt(v, 10);
+  if (isNaN(n) || n < 0 || n > 359) { showToast('Enter 0–359', true); return; }
+  domePost(String(n));
+}
+
+function renderDome() {
+  var h = '<div class="ctrl-section">';
+
+  h += '<button class="dome-stop" onclick="domePost(\'stop\')">&#9632;&nbsp; STOP</button>';
+
+  h += '<div class="sec-hdr" style="margin-top:.2rem">Position</div>';
+  h += '<div class="btn-group" style="grid-template-columns:1fr">';
+  h += '<button class="dc-btn" onclick="domePost(\'home\')">Go Home</button>';
+  h += '</div>';
+
+  h += '<div class="sec-hdr">Go to Angle</div>';
+  h += '<div class="angle-grid">';
+  ANGLES.forEach(function(a) {
+    h += '<button class="angle-btn" onclick="domePost(\'' + a + '\')">' + a + '&#176;</button>';
+  });
+  h += '</div>';
+  h += '<div class="custom-row">';
+  h += '<span>Custom:</span>';
+  h += '<input id="dome-angle" name="dome-angle" type="number" min="0" max="359" placeholder="0–359">';
+  h += '<button class="dc-btn" onclick="domeMoveTo()">Go</button>';
+  h += '</div>';
+
+  h += '<div class="sec-hdr">Relative Move</div>';
+  h += '<div class="angle-grid">';
+  h += '<button class="angle-btn" onclick="domePost(\'-90\')">&#9664;&#9664; 90&#176;</button>';
+  h += '<button class="angle-btn" onclick="domePost(\'-45\')">&#9664; 45&#176;</button>';
+  h += '<button class="angle-btn" onclick="domePost(\'+45\')">45&#176; &#9654;</button>';
+  h += '<button class="angle-btn" onclick="domePost(\'+90\')">90&#176; &#9654;&#9654;</button>';
+  h += '</div>';
+
+  h += '<div class="sec-hdr">Modes</div>';
+  h += '<div class="btn-group">';
+  h += '<button class="dc-btn" onclick="domePost(\'rand\')">Toggle Random</button>';
+  h += '<button class="dc-btn" onclick="domePost(\'abstick\')">Toggle Abs-Stick</button>';
+  h += '</div>';
+
+  h += '</div>';
+  document.getElementById('main').innerHTML = h;
+}
+
+/* ---- sequences tab ---- */
+
+function renderSequences() {
+  var sstr = _cfg.sstr || [];
+  var h = '<div class="ctrl-section">';
+
+  h += '<div class="sec-hdr" style="margin-top:0">Serial Commands</div>';
+  if (sstr.length === 0) {
+    h += '<div class="empty-note">No serial commands configured. <a href="/config/serial-strings">Add some in Serial Commands.</a></div>';
+  } else {
+    h += '<div class="cmd-grid">';
+    sstr.forEach(function(s, i) {
+      h += '<button class="grid-btn" onclick="serialPost(' + (i + 1) + ')">' + s.n + '</button>';
+    });
+    h += '</div>';
+  }
+
+  if (_cfg.audiohw === 'hcr') {
+    h += '<div class="sec-hdr">HCR Audio</div>';
+    h += '<div class="cmd-grid">';
+    h += '<button class="grid-btn full" onclick="hcrPost(\'muse\')">Toggle Musing</button>';
+    HCR_EMOS.forEach(function(emo, ei) {
+      h += '<button class="grid-btn" onclick="hcrPost(\'emote\',' + ei + ',0)">' + emo + '<br><span style="font-size:.72rem;opacity:.7">Moderate</span></button>';
+      h += '<button class="grid-btn" onclick="hcrPost(\'emote\',' + ei + ',1)">' + emo + '<br><span style="font-size:.72rem;opacity:.7">Strong</span></button>';
+    });
+    h += '</div>';
+  }
+
+  h += '</div>';
+  document.getElementById('main').innerHTML = h;
+}
+
+/* ---- gadgets tab ---- */
+
+function renderGadgets() {
+  document.getElementById('main').innerHTML =
+    '<div class="coming-soon">' +
+    '<div class="cs-icon">&#9881;</div>' +
+    '<div class="cs-title">Coming Soon</div>' +
+    '<div class="cs-text">Gadget control will allow triggering dome accessories ' +
+    'like the periscope, life form scanner, zapper, data probe, gripper, and bubble gun.' +
+    '<br><br>A gadgets configuration page will let you specify which accessories ' +
+    'are installed in your build.</div>' +
+    '</div>';
+}
+
+load();
+</script>
+</body>
+</html>

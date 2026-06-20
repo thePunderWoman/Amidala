@@ -229,6 +229,34 @@ class _Handler(SimpleHTTPRequestHandler):
             _monitor["seq"] += 1
             self._text("OK")
             return
+        if path == "/api/serial":
+            idx = int(params.get("idx", 0))
+            sstr = _config.get("sstr", [])
+            if 1 <= idx <= len(sstr):
+                s = sstr[idx - 1]
+                print(f"  SERIAL  idx={idx} name={s['n']!r} str={s['s']!r}")
+                _monitor["lines"].append({"t": "> " + s["s"], "c": "tx"})
+                _monitor["seq"] += 1
+                self._text("OK")
+            else:
+                self._text("idx out of range", 400)
+            return
+        if path == "/api/hcr":
+            cmd = params.get("cmd", "")
+            if cmd == "muse":
+                print("  HCR     muse toggle")
+                _monitor["lines"].append({"t": "HCR: muse toggle", "c": "tx"})
+            elif cmd == "emote":
+                emo = int(params.get("emotion", 0))
+                lvl = int(params.get("level", 0))
+                print(f"  HCR     emote={emo} level={lvl}")
+                _monitor["lines"].append({"t": f"HCR: emote={emo} level={lvl}", "c": "tx"})
+            else:
+                self._text("unknown cmd", 400)
+                return
+            _monitor["seq"] += 1
+            self._text("OK")
+            return
         if path != "/api/config":
             self._text("Not Found", 404)
             return

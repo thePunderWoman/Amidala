@@ -577,6 +577,33 @@ static void handleApiDome() {
     sServer.send(200, "text/plain", "OK");
 }
 
+static void handleApiSerial() {
+    if (!sCtrl) { sServer.send(500, "text/plain", "no controller"); return; }
+    int idx = sServer.arg("idx").toInt(); // 1-based
+    if (idx < 1 || idx > (int)sCtrl->params.serialcount) {
+        sServer.send(400, "text/plain", "idx out of range");
+        return;
+    }
+    sCtrl->sendSerialString(sCtrl->params.Str[idx - 1].str);
+    sServer.send(200, "text/plain", "OK");
+}
+
+static void handleApiHCR() {
+    if (!sCtrl) { sServer.send(500, "text/plain", "no controller"); return; }
+    String cmd = sServer.arg("cmd");
+    if (cmd == "muse") {
+        sCtrl->fAudio.toggleMuse();
+    } else if (cmd == "emote") {
+        uint8_t emotion = (uint8_t)sServer.arg("emotion").toInt();
+        uint8_t level   = (uint8_t)sServer.arg("level").toInt();
+        sCtrl->fAudio.playEmote(emotion, level);
+    } else {
+        sServer.send(400, "text/plain", "unknown cmd");
+        return;
+    }
+    sServer.send(200, "text/plain", "OK");
+}
+
 static void handleApiMonitorGet() {
     String json = "{\"seq\":";
     json += String(sMonSeq);
@@ -666,6 +693,7 @@ static void handleConfigServos()        { sServer.send(200, "text/html", WEB_PAG
 static void handleConfigControllers()   { sServer.send(200, "text/html", WEB_PAGE_CONTROLLERS);     }
 static void handleMonitor()             { sServer.send(200, "text/html", WEB_PAGE_MONITOR);         }
 static void handleUpdatePage()          { sServer.send(200, "text/html", WEB_PAGE_UPDATE);          }
+static void handleDroidControl()        { sServer.send(200, "text/html", WEB_PAGE_DROID_CONTROL);   }
 static void handleComingSoon()          { sServer.send(200, "text/html", WEB_PAGE_COMING_SOON);     }
 
 // ---------------------------------------------------------------------------
@@ -705,7 +733,8 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/config/buttons",        HTTP_GET, handleConfigControllers);  // legacy alias
     sServer.on("/config/servos",         HTTP_GET, handleConfigServos);
     sServer.on("/config/serial-strings", HTTP_GET, handleConfigSerialStrings);
-    sServer.on("/sequences",            HTTP_GET, handleComingSoon);
+    sServer.on("/droid-control",        HTTP_GET, handleDroidControl);
+    sServer.on("/sequences",            HTTP_GET, handleDroidControl);  // legacy alias
     sServer.on("/monitor",              HTTP_GET,  handleMonitor);
     sServer.on("/api/monitor",          HTTP_GET,  handleApiMonitorGet);
     sServer.on("/api/monitor",          HTTP_POST, handleApiMonitorPost);
@@ -716,6 +745,8 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/api/info",   HTTP_GET,  handleApiInfo);
     sServer.on("/api/estop",  HTTP_POST, handleApiEstop);
     sServer.on("/api/dome",   HTTP_POST, handleApiDome);
+    sServer.on("/api/serial", HTTP_POST, handleApiSerial);
+    sServer.on("/api/hcr",    HTTP_POST, handleApiHCR);
     sServer.on("/api/config", HTTP_GET,  handleApiConfigGet);
     sServer.on("/api/config", HTTP_POST, handleApiConfigPost);
 

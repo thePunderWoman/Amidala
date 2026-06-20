@@ -5,6 +5,7 @@
 static const char WEB_PAGE_HOME[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AMIDALA</title>
@@ -141,7 +142,7 @@ header{text-align:center;padding:2rem 1rem 1.5rem;border-bottom:1px solid var(--
 </nav>
 <div class="sh">&#9670;&#9670; Tools &#9670;&#9670;</div>
 <nav class="grid">
-  <a class="card" href="/sequences"><div class="icon">&#9654;</div><div class="name">Sequences</div></a>
+  <a class="card" href="/droid-control"><div class="icon">&#9654;</div><div class="name">Droid Control</div></a>
   <a class="card" href="/monitor"><div class="icon">&#9680;</div><div class="name">Serial Monitor</div></a>
   <a class="card" href="/update"><div class="icon">&#8679;</div><div class="name">Firmware Update</div></a>
 </nav>
@@ -184,6 +185,7 @@ Promise.all([
 static const char WEB_PAGE_GENERAL[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>General Settings — AMIDALA</title>
@@ -552,6 +554,7 @@ buildPage(SCHEMA, '/api/config');
 static const char WEB_PAGE_WIFI[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>WiFi — AMIDALA</title>
@@ -914,6 +917,7 @@ buildPage(SCHEMA, '/api/config');
 static const char WEB_PAGE_XBEE[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>XBee — AMIDALA</title>
@@ -1275,6 +1279,7 @@ buildPage(SCHEMA, '/api/config');
 static const char WEB_PAGE_AUDIO[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Audio — AMIDALA</title>
@@ -1756,6 +1761,7 @@ buildPage(SCHEMA, '/api/config', function(d) {
 static const char WEB_PAGE_RC_RADIO[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RC Radio — AMIDALA</title>
@@ -2139,6 +2145,7 @@ buildPage(SCHEMA, '/api/config', function(d) {
 static const char WEB_PAGE_DOME[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dome Drive — AMIDALA</title>
@@ -2526,6 +2533,7 @@ buildPage(SCHEMA, '/api/config');
 static const char WEB_PAGE_SERIAL_STRINGS[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Serial Commands — AMIDALA</title>
@@ -3003,6 +3011,7 @@ load();
 static const char WEB_PAGE_SERVOS[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Servos — AMIDALA</title>
@@ -3462,6 +3471,7 @@ load();
 static const char WEB_PAGE_CONTROLLERS[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Controllers — AMIDALA</title>
@@ -3986,7 +3996,7 @@ function renderButtons() {
 
   /* Alt Button */
   h += '<div class="row"><div class="row-label">Alt Button</div>';
-  h += '<select class="row-sel" onchange="saveGlobal(\'altbtn\',this.value)">';
+  h += '<select name="altbtn" class="row-sel" onchange="saveGlobal(\'altbtn\',this.value)">';
   h += opt('0', 'None', altbtn === 0 ? '0' : String(altbtn));
   for (var i = 1; i <= 9; i++) {
     var ctrl = i <= 5 ? 'Right' : 'Left';
@@ -3996,7 +4006,7 @@ function renderButtons() {
 
   /* Mute Button */
   h += '<div class="row"><div class="row-label">Mute Button</div>';
-  h += '<select class="row-sel" onchange="saveGlobal(\'mutebutton\',this.value)">';
+  h += '<select name="mutebutton" class="row-sel" onchange="saveGlobal(\'mutebutton\',this.value)">';
   h += opt('0', 'None', mutebutton === 0 ? '0' : String(mutebutton));
   for (var i = 1; i <= 9; i++) {
     var ctrl = i <= 5 ? 'Right' : 'Left';
@@ -4006,7 +4016,7 @@ function renderButtons() {
 
   /* Alt Dome Stick */
   h += '<div class="row"><div class="row-label">Alt Dome Stick</div>';
-  h += '<select class="row-sel" onchange="saveGlobal(\'altdomestick\',this.value)">';
+  h += '<select name="altdomestick" class="row-sel" onchange="saveGlobal(\'altdomestick\',this.value)">';
   h += opt('0', 'Off',                            String(ads));
   h += opt('1', 'On — joystick → dome heading', String(ads));
   h += '</select></div>';
@@ -4040,12 +4050,12 @@ function renderBtnCard(n, showAlt, altbtn, mutebutton) {
   var h = '<div class="btn-card">';
   h += '<div class="btn-title">' + title + '</div>';
   h += '<div class="lyr-row"><div class="lyr-label">Press</div>';
-  h += '<select class="act-sel" onchange="saveBtn(' + n + ',\'p\',this)">' + actionOptions(getBtnValue(n, 'p')) + '</select></div>';
+  h += '<select name="btn-' + n + '-press" class="act-sel" onchange="saveBtn(' + n + ',\'p\',this)">' + actionOptions(getBtnValue(n, 'p')) + '</select></div>';
   h += '<div class="lyr-row"><div class="lyr-label">Long Press</div>';
-  h += '<select class="act-sel" onchange="saveBtn(' + n + ',\'l\',this)">' + actionOptions(getBtnValue(n, 'l')) + '</select></div>';
+  h += '<select name="btn-' + n + '-long" class="act-sel" onchange="saveBtn(' + n + ',\'l\',this)">' + actionOptions(getBtnValue(n, 'l')) + '</select></div>';
   if (showAlt) {
     h += '<div class="lyr-row"><div class="lyr-label">Alt Press</div>';
-    h += '<select class="act-sel" onchange="saveBtn(' + n + ',\'a\',this)">' + actionOptions(getBtnValue(n, 'a')) + '</select></div>';
+    h += '<select name="btn-' + n + '-alt" class="act-sel" onchange="saveBtn(' + n + ',\'a\',this)">' + actionOptions(getBtnValue(n, 'a')) + '</select></div>';
   }
   h += '</div>';
   return h;
@@ -4103,7 +4113,7 @@ function renderGestures() {
     gestures.forEach(function(g, i) {
       h += '<div class="gest-row">';
       h += '<div class="gest-seq">' + g.seq + '</div>';
-      h += '<select class="act-sel" style="flex:1" onchange="saveGest(' + i + ',\'' + g.seq + '\',this)">' + actionOptions(gestToVal(g)) + '</select>';
+      h += '<select name="gest-' + i + '-action" class="act-sel" style="flex:1" onchange="saveGest(' + i + ',\'' + g.seq + '\',this)">' + actionOptions(gestToVal(g)) + '</select>';
       h += '<button class="gest-del" onclick="delGest(' + i + ')" title="Delete gesture">✕</button>';
       h += '</div>';
     });
@@ -4124,9 +4134,538 @@ load();
 </html>
 )html";
 
+static const char WEB_PAGE_DROID_CONTROL[] = R"html(<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Droid Control — AMIDALA</title>
+<style>
+/* Amidala web UI — shared styles.
+   Embed script inlines this into every page's <style> block.
+   In dev mode (scripts/web_dev.py) it's served as a real file from /assets/common.css. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --gold:   #ffe81f;
+  --red:    #c00;
+  --bg:     #000;
+  --card:   #0a0a0a;
+  --dim:    #555;
+  --border: #ffe81f22;
+}
+
+body {
+  background: var(--bg);
+  color: var(--gold);
+  font-family: 'Courier New', Courier, monospace;
+  min-height: 100vh;
+  font-size: 15px;
+}
+
+a {
+  color: var(--gold);
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #111;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  padding: .55rem 1.4rem;
+  font-size: .78rem;
+  letter-spacing: .08em;
+  pointer-events: none;
+  white-space: nowrap;
+  animation: _tfi .15s ease, _tfo .3s 1.9s ease forwards;
+  z-index: 9999;
+}
+.toast-err {
+  border-color: var(--red);
+  color: var(--red);
+}
+@keyframes _tfi {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px) }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) }
+}
+@keyframes _tfo {
+  from { opacity: 1 }
+  to   { opacity: 0 }
+}
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }
+</style>
+<style>
+.page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
+.back{font-size:.8rem;color:var(--dim);letter-spacing:.1em;white-space:nowrap}
+.back:hover{color:var(--gold)}
+.page-title{flex:1;text-align:center;font-size:.9rem;letter-spacing:.25em;text-transform:uppercase}
+/* Tabs — identical to controllers page */
+.tabs{display:flex;border-bottom:1px solid var(--border)}
+.tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);font-family:inherit;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;padding:.85rem 1rem;cursor:pointer}
+.tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+/* Dome */
+.ctrl-section{padding:.75rem 1rem 1.2rem}
+.dome-stop{width:100%;padding:1.1rem;background:#3a0000;border:1px solid #7a0000;color:#ff4444;font-size:1.1rem;font-weight:bold;border-radius:4px;cursor:pointer;letter-spacing:.1em;margin-bottom:.9rem;-webkit-tap-highlight-color:transparent}
+.dome-stop:hover,.dome-stop:active{background:#4a0000}
+.btn-group{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.4rem}
+.dc-btn{background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:.85rem .5rem;border-radius:4px;cursor:pointer;font-size:.88rem;text-align:center;-webkit-tap-highlight-color:transparent}
+.dc-btn:hover,.dc-btn:active{background:#0e0e0e}
+.angle-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem}
+.angle-btn{background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:.8rem .2rem;border-radius:4px;cursor:pointer;font-size:.88rem;text-align:center;-webkit-tap-highlight-color:transparent}
+.angle-btn:hover,.angle-btn:active{background:#0e0e0e}
+.custom-row{display:flex;gap:.5rem;align-items:center;margin-top:.6rem}
+.custom-row span{font-size:.78rem;color:var(--dim);white-space:nowrap}
+.custom-row input[type=number]{flex:1;max-width:6rem;background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:.7rem .6rem;border-radius:4px;font-size:.9rem}
+/* Sequences — big touch grid */
+.cmd-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+.grid-btn{background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:1rem .5rem;border-radius:4px;cursor:pointer;font-size:.88rem;text-align:center;line-height:1.3;-webkit-tap-highlight-color:transparent;min-height:3.5rem}
+.grid-btn:hover,.grid-btn:active{background:#0e0e0e}
+.grid-btn.full{grid-column:1/-1}
+.empty-note{padding:.75rem 0;color:var(--dim);font-size:.82rem}
+.empty-note a{color:var(--fg)}
+/* Coming soon */
+.coming-soon{text-align:center;padding:3.5rem 1rem;color:var(--dim)}
+.cs-icon{font-size:2.5rem;margin-bottom:.8rem;opacity:.35}
+.cs-title{font-size:.85rem;letter-spacing:.2em;text-transform:uppercase;margin-bottom:.8rem}
+.cs-text{font-size:.8rem;line-height:1.65;max-width:380px;margin:0 auto}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; Back</a>
+  <div class="page-title">&#9670; Droid Control &#9670;</div>
+</div>
+<div class="tabs">
+  <button class="tab" data-tab="dome"      onclick="showHashTab('dome')">Dome</button>
+  <button class="tab" data-tab="sequences" onclick="showHashTab('sequences')">Sequences</button>
+  <button class="tab" data-tab="gadgets"   onclick="showHashTab('gadgets')">Gadgets</button>
+</div>
+<div id="main"><div id="status">LOADING&#8230;</div></div>
+<script>
+/* Amidala web UI — edit-in-place widget + shared config page helpers.
+   Embed script inlines this into every config sub-page.
+   In dev mode (scripts/web_dev.py) it's served as /assets/edit.js. */
+
+// ------------------------------------------------------------------ toast ---
+
+function showToast(msg, isErr) {
+  var t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' toast-err' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
+}
+
+// -------------------------------------------------------- edit-in-place -----
+
+function startEdit(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
+  row.querySelector('.rv').hidden = true;
+  row.querySelector('.ri').hidden = false;
+  btn.hidden = true;
+  row.querySelector('.bs').hidden = false;
+  row.querySelector('.bc').hidden = false;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  row.querySelector('.rv').hidden = false;
+  row.querySelector('.ri').hidden = true;
+  row.querySelector('.be').hidden = false;
+  row.querySelector('.bs').hidden = true;
+  btn.hidden = true;
+}
+
+async function doSave(btn) {
+  var row = btn.closest('.row');
+  var key = row.dataset.key;
+  var inp = row.querySelector('input,select');
+  var val = inp.value;
+  var prev = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    var r = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'key=' + encodeURIComponent(key) + '&value=' + encodeURIComponent(val)
+    });
+    if (r.ok) {
+      var dv = row.querySelector('.rv');
+      var rt = row.dataset.type;
+      if (rt === 'bool' || rt === 'select') {
+        var sel = row.querySelector('select');
+        dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'password') {
+        dv.textContent = '••••••••';
+      } else {
+        dv.textContent = val;
+      }
+      doCancel(row.querySelector('.bc'));
+      showToast('Saved');
+    } else {
+      showToast('Save failed: ' + await r.text(), true);
+    }
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+// ------------------------------------------------ schema-driven row builder --
+
+function dispValue(s, val) {
+  if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
+  if (s.type === 'select') {
+    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    return found ? found.l : val;
+  }
+  if (s.type === 'password') return '••••••••';
+  return String(val);
+}
+
+function buildInput(s, val) {
+  if (s.type === 'bool') {
+    return '<select>'
+      + '<option value="y"' + (val === 'y' ? ' selected' : '') + '>On</option>'
+      + '<option value="n"' + (val === 'n' ? ' selected' : '') + '>Off</option>'
+      + '</select>';
+  }
+  if (s.type === 'select') {
+    var opts = (s.options || []).map(function(op) {
+      return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
+    }).join('');
+    return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'number') {
+    return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
+  }
+  if (s.type === 'password') {
+    return '<input type="password" value="' + val + '" maxlength="' + (s.maxlength || 64) + '">';
+  }
+  return '<input type="text" value="' + val + '"' + (s.maxlength ? ' maxlength="' + s.maxlength + '"' : '') + '>';
+}
+
+async function doAction(btn) {
+  var cmd      = btn.dataset.cmd;
+  var endpoint = btn.dataset.endpoint || '/api/monitor';
+  var prev = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
+  try {
+    var r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'cmd=' + encodeURIComponent(cmd)
+    });
+    showToast(r.ok ? 'Sent' : 'Failed', !r.ok);
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+function buildRow(s, val) {
+  if (s.type === 'action') {
+    return '<div class="row">'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<button class="be" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
+      + (s.btnLabel || 'Send') + '</button>'
+      + '</div>';
+  }
+  var disp = dispValue(s, val);
+  var note = s.note ? '<span style="font-size:.65rem;color:var(--dim);margin-left:.3rem">' + s.note + '</span>' : '';
+  if (s.readOnly) {
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<div class="rv">' + disp + '</div>'
+      + '</div>';
+  }
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    + '<div class="row-label">' + s.label + '</div>'
+    + '<div class="rv">' + disp + '</div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
+    + '<button class="bs" hidden onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '</div>';
+}
+
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.textContent = 'E-Stop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  document.body.appendChild(b);
+})();
+
+// ------------------------------------------------- hash-based tab nav --------
+// initHashTabs(defaultTab, onSwitch)
+//   Reads location.hash to pick the active tab on load, then listens for
+//   hashchange (browser back/forward) and re-activates accordingly.
+//   Expects .tab elements with data-tab="<id>" attributes on the page.
+//   onSwitch(tabId) is called whenever the active tab changes.
+//
+// showHashTab(t)
+//   Call from tab button onclick. Pushes a history entry then lets the
+//   hashchange handler do the actual switch (single code path for all sources).
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
+
+function buildPage(SCHEMA, endpoint, callback) {
+  fetch(endpoint)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var html = '';
+      var skip = false;
+      SCHEMA.forEach(function(s) {
+        if (s.section) {
+          skip = s.when ? !s.when(d) : false;
+          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          return;
+        }
+        if (skip) return;
+        if (s.when && !s.when(d)) return;
+        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
+        html += buildRow(s, val);
+      });
+      document.querySelector('main').innerHTML = html;
+      if (callback) callback(d);
+    })
+    .catch(function() {
+      var el = document.getElementById('status');
+      if (el) el.textContent = 'Failed to load settings.';
+    });
+}
+</script>
+<script>
+var _cfg = null;
+var _tab = 'dome';
+
+var ANGLES = [0,45,90,135,180,225,270,315];
+/* Happy/Sad/Mad/Scared only — Overload has no level so it's handled separately */
+var HCR_EMOS = ['Happy','Sad','Mad','Scared'];
+
+function load() {
+  fetch('/api/config')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      _cfg = d;
+      initHashTabs('dome', function(t) { _tab = t; render(); });
+    })
+    .catch(function() {
+      document.getElementById('status').textContent = 'Failed to load.';
+    });
+}
+
+function render() {
+  if (_tab === 'dome')           renderDome();
+  else if (_tab === 'sequences') renderSequences();
+  else                           renderGadgets();
+}
+
+/* ---- API helpers ---- */
+
+function domePost(cmd) {
+  fetch('/api/dome', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'cmd=' + encodeURIComponent(cmd)
+  }).then(function(r) { showToast(r.ok ? 'Sent' : 'Failed', !r.ok); })
+    .catch(function() { showToast('Network error', true); });
+}
+
+function serialPost(idx) {
+  fetch('/api/serial', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'idx=' + idx
+  }).then(function(r) { showToast(r.ok ? 'Sent' : 'Failed', !r.ok); })
+    .catch(function() { showToast('Network error', true); });
+}
+
+function hcrPost(cmd, emotion, level) {
+  var body = 'cmd=' + encodeURIComponent(cmd);
+  if (cmd === 'emote') body += '&emotion=' + emotion + '&level=' + level;
+  fetch('/api/hcr', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: body
+  }).then(function(r) { showToast(r.ok ? 'Sent' : 'Failed', !r.ok); })
+    .catch(function() { showToast('Network error', true); });
+}
+
+/* ---- dome tab ---- */
+
+function domeMoveTo() {
+  var v = document.getElementById('dome-angle').value;
+  var n = parseInt(v, 10);
+  if (isNaN(n) || n < 0 || n > 359) { showToast('Enter 0–359', true); return; }
+  domePost(String(n));
+}
+
+function renderDome() {
+  var h = '<div class="ctrl-section">';
+
+  h += '<button class="dome-stop" onclick="domePost(\'stop\')">&#9632;&nbsp; STOP</button>';
+
+  h += '<div class="sec-hdr" style="margin-top:.2rem">Position</div>';
+  h += '<div class="btn-group" style="grid-template-columns:1fr">';
+  h += '<button class="dc-btn" onclick="domePost(\'home\')">Go Home</button>';
+  h += '</div>';
+
+  h += '<div class="sec-hdr">Go to Angle</div>';
+  h += '<div class="angle-grid">';
+  ANGLES.forEach(function(a) {
+    h += '<button class="angle-btn" onclick="domePost(\'' + a + '\')">' + a + '&#176;</button>';
+  });
+  h += '</div>';
+  h += '<div class="custom-row">';
+  h += '<span>Custom:</span>';
+  h += '<input id="dome-angle" name="dome-angle" type="number" min="0" max="359" placeholder="0–359">';
+  h += '<button class="dc-btn" onclick="domeMoveTo()">Go</button>';
+  h += '</div>';
+
+  h += '<div class="sec-hdr">Relative Move</div>';
+  h += '<div class="angle-grid">';
+  h += '<button class="angle-btn" onclick="domePost(\'-90\')">&#9664;&#9664; 90&#176;</button>';
+  h += '<button class="angle-btn" onclick="domePost(\'-45\')">&#9664; 45&#176;</button>';
+  h += '<button class="angle-btn" onclick="domePost(\'+45\')">45&#176; &#9654;</button>';
+  h += '<button class="angle-btn" onclick="domePost(\'+90\')">90&#176; &#9654;&#9654;</button>';
+  h += '</div>';
+
+  h += '<div class="sec-hdr">Modes</div>';
+  h += '<div class="btn-group">';
+  h += '<button class="dc-btn" onclick="domePost(\'rand\')">Toggle Random</button>';
+  h += '<button class="dc-btn" onclick="domePost(\'abstick\')">Toggle Abs-Stick</button>';
+  h += '</div>';
+
+  h += '</div>';
+  document.getElementById('main').innerHTML = h;
+}
+
+/* ---- sequences tab ---- */
+
+function renderSequences() {
+  var sstr = _cfg.sstr || [];
+  var h = '<div class="ctrl-section">';
+
+  h += '<div class="sec-hdr" style="margin-top:0">Serial Commands</div>';
+  if (sstr.length === 0) {
+    h += '<div class="empty-note">No serial commands configured. <a href="/config/serial-strings">Add some in Serial Commands.</a></div>';
+  } else {
+    h += '<div class="cmd-grid">';
+    sstr.forEach(function(s, i) {
+      h += '<button class="grid-btn" onclick="serialPost(' + (i + 1) + ')">' + s.n + '</button>';
+    });
+    h += '</div>';
+  }
+
+  if (_cfg.audiohw === 'hcr') {
+    h += '<div class="sec-hdr">HCR Audio</div>';
+    h += '<div class="cmd-grid">';
+    h += '<button class="grid-btn full" onclick="hcrPost(\'muse\')">Toggle Musing</button>';
+    HCR_EMOS.forEach(function(emo, ei) {
+      h += '<button class="grid-btn" onclick="hcrPost(\'emote\',' + ei + ',0)">' + emo + '<br><span style="font-size:.72rem;opacity:.7">Moderate</span></button>';
+      h += '<button class="grid-btn" onclick="hcrPost(\'emote\',' + ei + ',1)">' + emo + '<br><span style="font-size:.72rem;opacity:.7">Strong</span></button>';
+    });
+    h += '</div>';
+  }
+
+  h += '</div>';
+  document.getElementById('main').innerHTML = h;
+}
+
+/* ---- gadgets tab ---- */
+
+function renderGadgets() {
+  document.getElementById('main').innerHTML =
+    '<div class="coming-soon">' +
+    '<div class="cs-icon">&#9881;</div>' +
+    '<div class="cs-title">Coming Soon</div>' +
+    '<div class="cs-text">Gadget control will allow triggering dome accessories ' +
+    'like the periscope, life form scanner, zapper, data probe, gripper, and bubble gun.' +
+    '<br><br>A gadgets configuration page will let you specify which accessories ' +
+    'are installed in your build.</div>' +
+    '</div>';
+}
+
+load();
+</script>
+</body>
+</html>
+)html";
+
 static const char WEB_PAGE_MONITOR[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Serial Monitor — AMIDALA</title>
@@ -4568,6 +5107,7 @@ setInterval(poll, 1500);
 static const char WEB_PAGE_UPDATE[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Firmware Update &#9670; AMIDALA</title>
@@ -5072,6 +5612,7 @@ function pollForRestart() {
 static const char WEB_PAGE_COMING_SOON[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AMIDALA</title>
