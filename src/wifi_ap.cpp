@@ -734,7 +734,6 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/config/servos",         HTTP_GET, handleConfigServos);
     sServer.on("/config/serial-strings", HTTP_GET, handleConfigSerialStrings);
     sServer.on("/droid-control",        HTTP_GET, handleDroidControl);
-    sServer.on("/sequences",            HTTP_GET, handleDroidControl);  // legacy alias
     sServer.on("/monitor",              HTTP_GET,  handleMonitor);
     sServer.on("/api/monitor",          HTTP_GET,  handleApiMonitorGet);
     sServer.on("/api/monitor",          HTTP_POST, handleApiMonitorPost);
