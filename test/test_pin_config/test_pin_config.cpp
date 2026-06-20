@@ -73,15 +73,11 @@ void test_i2c_pins() {
     TEST_ASSERT_EQUAL(9, I2C_SCL_PIN);
 }
 
-// ---- Mode-select pins: conditional on build flags ---------------------------
+// ---- AUX serial (Serial 3 / SW-UART header) ---------------------------------
 
-void test_sel2_pin_defined_by_default() {
-    // SEL2_PIN (GPIO21) is available unless AUX serial is enabled.
-#ifdef SEL2_PIN
-    TEST_ASSERT_EQUAL(21, SEL2_PIN);
-#else
-    TEST_FAIL_MESSAGE("SEL2_PIN should be defined unless -DESP32_AUX_SERIAL is set");
-#endif
+void test_aux_serial_pins() {
+    TEST_ASSERT_EQUAL(21, AUX_SERIAL_TX_PIN);
+    TEST_ASSERT_EQUAL(38, AUX_SERIAL_RX_PIN);
 }
 
 // ---- SERIAL defined when drive serials absent -------------------------------
@@ -108,7 +104,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_sd_cs_pin);
     RUN_TEST(test_spi_pins);
     RUN_TEST(test_i2c_pins);
-    RUN_TEST(test_sel2_pin_defined_by_default);
+    RUN_TEST(test_aux_serial_pins);
     RUN_TEST(test_serial_defined_when_drive_serials_absent);
 
     return UNITY_END();

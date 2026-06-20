@@ -100,6 +100,9 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     json += "\"serialeol\":"     + String(p.serialeol)                 + ",";
     json += "\"myi2c\":"         + String(p.myi2c)                    + ",";
 
+    // Aux serial
+    json += "\"auxserial3\":\"" + String(p.auxserial3 ? "y" : "n") + "\",";
+
     // WiFi
     json += "\"wifion\":\""       + String(p.wifion ? "y" : "n")      + "\",";
     json += "\"wifissid\":\""     + String(p.wifiSSID)                 + "\",";

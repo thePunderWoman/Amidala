@@ -100,6 +100,8 @@ void AmidalaController::setup() {
   sendSerialString(params.serialinit);
   fAudio.init(this);
 #endif
+  if (params.auxserial3)
+    AUX_SERIAL.begin(params.serialbaud, SERIAL_8N1, AUX_SERIAL_RX_PIN, AUX_SERIAL_TX_PIN);
 
   remote[0]->addr = params.xbr;
   remote[1]->addr = params.xbl;

@@ -827,6 +827,19 @@ static void handleApiHCR() {
     sServer.send(200, "text/plain", "OK");
 }
 
+static void handleApiPins() {
+    String json = "{\"dout\":[";
+    json += String(digitalRead(DOUT1_PIN)); json += ",";
+    json += String(digitalRead(DOUT2_PIN)); json += ",";
+    json += String(digitalRead(DOUT3_PIN)); json += ",";
+    json += String(digitalRead(DOUT4_PIN));
+    json += "],\"ain\":[";
+    json += String(analogRead(ANALOG1_PIN)); json += ",";
+    json += String(analogRead(ANALOG2_PIN));
+    json += "]}";
+    sServer.send(200, "application/json", json);
+}
+
 static void handleApiMonitorGet() {
     String json = "{\"seq\":";
     json += String(sMonSeq);
@@ -920,6 +933,7 @@ static void handleDroidControl()        { sServer.send(200, "text/html", WEB_PAG
 static void handleConfigGadgets()       { sServer.send(200, "text/html", WEB_PAGE_GADGETS);         }
 static void handleSafety()             { sServer.send(200, "text/html", WEB_PAGE_SAFETY);           }
 static void handleComingSoon()          { sServer.send(200, "text/html", WEB_PAGE_COMING_SOON);     }
+static void handleDiagnostics()         { sServer.send(200, "text/html", WEB_PAGE_DIAGNOSTICS);      }
 
 // ---------------------------------------------------------------------------
 // AmidalaWiFiAP
@@ -979,6 +993,8 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/api/hcr",        HTTP_POST, handleApiHCR);
     sServer.on("/api/config", HTTP_GET,  handleApiConfigGet);
     sServer.on("/api/config", HTTP_POST, handleApiConfigPost);
+    sServer.on("/api/pins",   HTTP_GET,  handleApiPins);
+    sServer.on("/diagnostics", HTTP_GET, handleDiagnostics);
 
     // Catch-all: any other URL redirects home (supports captive-portal flow)
     sServer.onNotFound(handleHome);

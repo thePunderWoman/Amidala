@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Droid Status — AMIDALA</title>
+<link rel="stylesheet" href="/assets/common.css">
+<style>
+.page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
+.back{font-size:.8rem;color:var(--dim);letter-spacing:.1em;white-space:nowrap}
+.back:hover{color:var(--gold)}
+.page-title{flex:1;text-align:center;font-size:.9rem;letter-spacing:.25em;text-transform:uppercase}
+main{max-width:660px;margin:0 auto;padding:1rem}
+.section-label{font-size:.6rem;color:var(--dim);letter-spacing:.25em;text-transform:uppercase;padding:.5rem 0 .4rem;border-bottom:1px solid var(--border);margin-bottom:.2rem}
+.row{display:flex;align-items:center;padding:.7rem .2rem;border-bottom:1px solid #0f0f0f;gap:.5rem}
+.row-label{flex:1;font-size:.82rem;color:#ccc}
+.row-note{font-size:.65rem;color:var(--dim);margin-left:.35rem}
+.gpio{font-size:.65rem;color:var(--dim);min-width:4rem;text-align:right}
+.pin-led{font-size:1.1rem;min-width:2.5rem;text-align:right;transition:color .15s}
+.pin-led.high{color:#3c3}
+.pin-led.low{color:#222}
+.pin-state{font-size:.72rem;min-width:2.5rem;text-align:left;letter-spacing:.06em}
+.pin-state.high{color:#3c3}
+.pin-state.low{color:var(--dim)}
+.ain-val{font-size:.82rem;color:var(--gold);min-width:4rem;text-align:right}
+#ts{text-align:center;padding:.6rem;color:var(--dim);font-size:.65rem;letter-spacing:.1em;border-top:1px solid var(--border);margin-top:.5rem}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; Back</a>
+  <div class="page-title">&#9670; Droid Status &#9670;</div>
+</div>
+<main id="main">
+  <div id="ts">LOADING&#8230;</div>
+</main>
+<script src="/assets/edit.js"></script>
+<script>
+var DOUT = [
+  {id:'dout0', label:'Digital 1', gpio:'GPIO39'},
+  {id:'dout1', label:'Digital 2', gpio:'GPIO40', note:'dome hall sensor'},
+  {id:'dout2', label:'Digital 3', gpio:'GPIO41'},
+  {id:'dout3', label:'Digital 4', gpio:'GPIO42'}
+];
+var AIN = [
+  {id:'ain0', label:'Analog 1', gpio:'GPIO1'},
+  {id:'ain1', label:'Analog 2', gpio:'GPIO2'}
+];
+
+function buildUI() {
+  var html = '<div class="section-label">Digital Outputs</div>';
+  DOUT.forEach(function(d) {
+    var note = d.note ? '<span class="row-note">(' + d.note + ')</span>' : '';
+    html += '<div class="row">'
+      + '<div class="row-label">' + d.label + note + '</div>'
+      + '<span class="gpio">' + d.gpio + '</span>'
+      + '<div class="pin-led low" id="' + d.id + '_led">&#9679;</div>'
+      + '<div class="pin-state low" id="' + d.id + '_st">LOW</div>'
+      + '</div>';
+  });
+  html += '<div class="section-label">Analog Inputs</div>';
+  AIN.forEach(function(a) {
+    html += '<div class="row">'
+      + '<div class="row-label">' + a.label + '</div>'
+      + '<span class="gpio">' + a.gpio + '</span>'
+      + '<div class="ain-val" id="' + a.id + '">&#8212;</div>'
+      + '</div>';
+  });
+  html += '<div id="ts">&#8212;</div>';
+  document.getElementById('main').innerHTML = html;
+}
+
+function refresh() {
+  fetch('/api/pins')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      d.dout.forEach(function(v,i){
+        var led = document.getElementById(DOUT[i].id+'_led');
+        var st  = document.getElementById(DOUT[i].id+'_st');
+        if(!led||!st) return;
+        var cls = v ? 'high' : 'low';
+        led.className = 'pin-led '+cls;
+        st.className  = 'pin-state '+cls;
+        st.textContent = v ? 'HIGH' : 'LOW';
+      });
+      d.ain.forEach(function(v,i){
+        var el = document.getElementById(AIN[i].id);
+        if(el) el.textContent = v;
+      });
+      var ts = document.getElementById('ts');
+      if(ts) ts.textContent = 'Updated '+new Date().toLocaleTimeString();
+    })
+    .catch(function(){
+      var ts = document.getElementById('ts');
+      if(ts) ts.textContent = 'Connection error';
+    });
+}
+
+buildUI();
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
