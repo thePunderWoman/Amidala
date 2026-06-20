@@ -25,6 +25,7 @@ PAGES = [
     ("config/dome.html",            "WEB_PAGE_DOME"),
     ("config/serial-strings.html",  "WEB_PAGE_SERIAL_STRINGS"),
     ("config/servos.html",          "WEB_PAGE_SERVOS"),
+    ("config/controllers.html",     "WEB_PAGE_CONTROLLERS"),
     ("monitor.html",                "WEB_PAGE_MONITOR"),
     ("update.html",                 "WEB_PAGE_UPDATE"),
     ("config/coming-soon.html",     "WEB_PAGE_COMING_SOON"),
@@ -32,6 +33,15 @@ PAGES = [
 
 _LINK_RE   = re.compile(r'[ \t]*<link rel="stylesheet" href="/assets/common\.css">\n?')
 _SCRIPT_RE = re.compile(r'[ \t]*<script src="/assets/edit\.js"></script>\n?')
+
+# Content-Security-Policy injected into every page.
+# 'unsafe-inline' is required for <script> blocks and onclick= handlers.
+# 'unsafe-eval' is intentionally absent — we don't use eval/new Function.
+_CSP = ("default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "connect-src 'self'")
+_CSP_TAG = f'<meta http-equiv="Content-Security-Policy" content="{_CSP}">\n'
 
 
 def run(project_dir: str) -> None:
@@ -56,6 +66,7 @@ def run(project_dir: str) -> None:
 
         html = _LINK_RE.sub(f"<style>\n{css}\n</style>\n", html)
         html = _SCRIPT_RE.sub(f"<script>\n{js}\n</script>\n", html)
+        html = html.replace("<head>\n", f"<head>\n{_CSP_TAG}", 1)
 
         if ')html"' in html:
             raise ValueError(f"{rel_path}: content contains ')html\"' which breaks the raw-string delimiter")

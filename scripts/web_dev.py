@@ -104,6 +104,28 @@ _config = {
         {"n": "Happy R2",       "s": ":001"},
         {"n": "Dome Home",      "s": "*dome=home"},
     ],
+    # Controller settings
+    "altbtn":       0,
+    "mutebutton":   0,
+    "altdomestick": 0,
+    # Button assignments — 9 buttons × {p=press, l=long, a=alt}
+    # t=action type, x=param1, y=param2 (omit if zero)
+    "buttons": [
+        {"p": {"t": 5, "x": 1}, "l": {"t": 0},       "a": {"t": 0}},  # 1: press=Leia
+        {"p": {"t": 0},         "l": {"t": 9, "x": 0},"a": {"t": 0}},  # 2: long=dome rand
+        {"p": {"t": 0},         "l": {"t": 0},         "a": {"t": 0}},  # 3
+        {"p": {"t": 0},         "l": {"t": 0},         "a": {"t": 0}},  # 4
+        {"p": {"t": 0},         "l": {"t": 0},         "a": {"t": 0}},  # 5 stick press
+        {"p": {"t": 5, "x": 2}, "l": {"t": 0},         "a": {"t": 0}},  # 6: press=Happy R2
+        {"p": {"t": 0},         "l": {"t": 0},         "a": {"t": 0}},  # 7
+        {"p": {"t": 0},         "l": {"t": 0},         "a": {"t": 0}},  # 8
+        {"p": {"t": 0},         "l": {"t": 0},         "a": {"t": 0}},  # 9
+    ],
+    # Gesture assignments — list of {seq, t, x, y}
+    "gestures": [
+        {"seq": "258", "t": 5, "x": 3, "y": 0},  # 258 → Dome Home serial
+        {"seq": "14",  "t": 9, "x": 0, "y": 0},  # 14  → dome random toggle
+    ],
 }
 
 _monitor = {
@@ -130,9 +152,19 @@ _info = {
 }
 
 
+_CSP = ("default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "connect-src 'self'")
+
+
 class _Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=_WEB_DIR, **kwargs)
+
+    def end_headers(self):
+        self.send_header("Content-Security-Policy", _CSP)
+        super().end_headers()
 
     # ------------------------------------------------------------------ GET --
     def do_GET(self):
@@ -236,6 +268,63 @@ class _Handler(SimpleHTTPRequestHandler):
                     _config["sbs"][idx] = entry
             self._text("OK")
             return
+        # btn_N_press / btn_N_long / btn_N_alt — update button layer action
+        if key.startswith("btn_"):
+            parts = key.split("_")  # ["btn", N, "press"|"long"|"alt"]
+            if len(parts) == 3:
+                n   = int(parts[1]) - 1
+                lyr = {"press": "p", "long": "l", "alt": "a"}.get(parts[2])
+                if 0 <= n < 9 and lyr:
+                    if value == "altbtn":
+                        _config["altbtn"] = n + 1
+                        _config["buttons"][n]["p"] = {"t": 0}
+                    elif value == "mutebutton":
+                        _config["mutebutton"] = n + 1
+                        _config["buttons"][n]["p"] = {"t": 0}
+                    else:
+                        nums = [int(x) for x in value.split(",") if x] if value and value != "0" else [0]
+                        t = nums[0] if nums else 0
+                        act = {"t": t}
+                        if t == 5 and len(nums) > 1:    act["x"] = nums[1]
+                        if t == 7 and len(nums) > 2:    act["x"] = nums[1]; act["y"] = nums[2]
+                        if t == 9 and len(nums) > 1:    act["x"] = nums[1]
+                        _config["buttons"][n][lyr] = act
+            self._text("OK")
+            return
+
+        # gesture_del_N — delete gesture at index N
+        if key.startswith("gesture_del_"):
+            idx = int(key[12:])
+            if 0 <= idx < len(_config["gestures"]):
+                _config["gestures"].pop(idx)
+            self._text("OK")
+            return
+
+        # gesture_add — append gesture; value: "SEQ,type[,p1[,p2]]"
+        if key == "gesture_add":
+            parts = value.split(",", 1)
+            seq   = parts[0]
+            nums  = [int(x) for x in parts[1].split(",")] if len(parts) > 1 else [0]
+            t = nums[0] if nums else 0
+            g = {"seq": seq, "t": t, "x": nums[1] if len(nums) > 1 else 0, "y": nums[2] if len(nums) > 2 else 0}
+            _config["gestures"].append(g)
+            self._text("OK")
+            return
+
+        # gesture_N — update gesture at index N; value: "SEQ,type[,p1[,p2]]"
+        if key.startswith("gesture_") and key[8:].isdigit():
+            idx   = int(key[8:])
+            parts = value.split(",", 1)
+            seq   = parts[0]
+            nums  = [int(x) for x in parts[1].split(",")] if len(parts) > 1 else [0]
+            t = nums[0] if nums else 0
+            if 0 <= idx < len(_config["gestures"]):
+                _config["gestures"][idx] = {"seq": seq, "t": t,
+                                             "x": nums[1] if len(nums) > 1 else 0,
+                                             "y": nums[2] if len(nums) > 2 else 0}
+            self._text("OK")
+            return
+
         # sstr_del_N — delete serial string at index N
         if key.startswith("sstr_del_"):
             idx = int(key[9:])

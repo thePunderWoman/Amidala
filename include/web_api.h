@@ -49,6 +49,34 @@ inline String buildInfoJson(const char* drive, const char* dome,
 }
 
 // ---------------------------------------------------------------------------
+// buttonActionJson — serialize one ButtonAction to a compact JSON object.
+// Only emits the fields that are relevant to the action type:
+//   {t:TYPE}              for kNone / kHCRMuse
+//   {t:5,  x:SERIALIDX}  for kSerialStr   (1-based index into Str[])
+//   {t:7,  x:EMO,y:LVL}  for kHCREmote
+//   {t:9,  x:SUBCMD}     for kDomeCmd
+// ---------------------------------------------------------------------------
+inline String buttonActionJson(const ButtonAction& b) {
+    String j = "{\"t\":";
+    j += String(b.action);
+    switch (b.action) {
+    case ButtonAction::kSerialStr:
+        j += ",\"x\":"; j += String(b.serial.serialstr);
+        break;
+    case ButtonAction::kHCREmote:
+        j += ",\"x\":"; j += String(b.emote.emotion);
+        j += ",\"y\":"; j += String(b.emote.level);
+        break;
+    case ButtonAction::kDomeCmd:
+        j += ",\"x\":"; j += String(b.dome.subcmd);
+        break;
+    default: break;
+    }
+    j += "}";
+    return j;
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/config  (all tuneable settings in one flat object)
 // Every config sub-page fetches this single endpoint and reads the keys it
 // needs — no per-page endpoints required.
@@ -177,6 +205,47 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
         json += "\",\"s\":\"";
         json += String(p.Str[i].str);
         json += "\"}";
+    }
+    json += "],";
+
+    // Controller settings
+    json += "\"altbtn\":"       + String(p.altbtn)       + ",";
+    json += "\"mutebutton\":"   + String(p.mutebutton)   + ",";
+    json += "\"altdomestick\":" + String(p.altdomestick) + ",";
+
+    // Button assignments — 9 buttons × 3 layers {p=press, l=long, a=alt}
+    json += "\"buttons\":[";
+    for (unsigned i = 0; i < sizeof(p.B) / sizeof(p.B[0]); i++) {
+        if (i > 0) json += ",";
+        json += "{\"p\":"; json += buttonActionJson(p.B[i]);
+        json += ",\"l\":"; json += buttonActionJson(p.LB[i]);
+        json += ",\"a\":"; json += buttonActionJson(p.AB[i]);
+        json += "}";
+    }
+    json += "],";
+
+    // Gesture assignments
+    json += "\"gestures\":[";
+    char gseq[MAX_GESTURE_LENGTH + 1];
+    for (uint8_t gi = 0; gi < p.gcount; gi++) {
+        if (gi > 0) json += ",";
+        p.G[gi].gesture.getGestureString(gseq);
+        json += "{\"seq\":\""; json += String(gseq); json += "\"";
+        json += ",\"t\":";     json += String(p.G[gi].action.action);
+        switch (p.G[gi].action.action) {
+        case ButtonAction::kSerialStr:
+            json += ",\"x\":"; json += String(p.G[gi].action.serial.serialstr);
+            break;
+        case ButtonAction::kHCREmote:
+            json += ",\"x\":"; json += String(p.G[gi].action.emote.emotion);
+            json += ",\"y\":"; json += String(p.G[gi].action.emote.level);
+            break;
+        case ButtonAction::kDomeCmd:
+            json += ",\"x\":"; json += String(p.G[gi].action.dome.subcmd);
+            break;
+        default: break;
+        }
+        json += "}";
     }
     json += "]";
 

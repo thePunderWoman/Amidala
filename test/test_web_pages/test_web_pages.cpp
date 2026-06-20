@@ -37,7 +37,7 @@ void test_home_page_has_all_config_nav_links() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/general"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/audio"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/dome"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/buttons"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/controllers"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/servos"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/xbee"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/serial-strings"));

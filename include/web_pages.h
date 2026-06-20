@@ -132,7 +132,7 @@ header{text-align:center;padding:2rem 1rem 1.5rem;border-bottom:1px solid var(--
   <a class="card" href="/config/general"><div class="icon">&#9881;</div><div class="name">General</div></a>
   <a class="card" href="/config/audio"><div class="icon">&#9834;</div><div class="name">Audio</div></a>
   <a class="card" href="/config/dome"><div class="icon">&#8853;</div><div class="name">Dome Drive</div></a>
-  <a class="card" href="/config/buttons"><div class="icon">&#9711;</div><div class="name">Buttons &amp; Gestures</div></a>
+  <a class="card" href="/config/controllers"><div class="icon">&#9711;</div><div class="name">Controllers</div></a>
   <a class="card" href="/config/servos"><div class="icon">&#9699;</div><div class="name">Servos</div></a>
   <a class="card" href="/config/xbee"><div class="icon">&#9702;</div><div class="name">XBee</div></a>
   <a class="card" href="/config/serial-strings"><div class="icon">&#9166;</div><div class="name">Serial Commands</div></a>
@@ -474,6 +474,35 @@ function buildRow(s, val) {
   document.body.appendChild(b);
 })();
 
+// ------------------------------------------------- hash-based tab nav --------
+// initHashTabs(defaultTab, onSwitch)
+//   Reads location.hash to pick the active tab on load, then listens for
+//   hashchange (browser back/forward) and re-activates accordingly.
+//   Expects .tab elements with data-tab="<id>" attributes on the page.
+//   onSwitch(tabId) is called whenever the active tab changes.
+//
+// showHashTab(t)
+//   Call from tab button onclick. Pushes a history entry then lets the
+//   hashchange handler do the actual switch (single code path for all sources).
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
@@ -813,6 +842,35 @@ function buildRow(s, val) {
   document.body.appendChild(b);
 })();
 
+// ------------------------------------------------- hash-based tab nav --------
+// initHashTabs(defaultTab, onSwitch)
+//   Reads location.hash to pick the active tab on load, then listens for
+//   hashchange (browser back/forward) and re-activates accordingly.
+//   Expects .tab elements with data-tab="<id>" attributes on the page.
+//   onSwitch(tabId) is called whenever the active tab changes.
+//
+// showHashTab(t)
+//   Call from tab button onclick. Pushes a history entry then lets the
+//   hashchange handler do the actual switch (single code path for all sources).
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
@@ -1145,6 +1203,35 @@ function buildRow(s, val) {
   };
   document.body.appendChild(b);
 })();
+
+// ------------------------------------------------- hash-based tab nav --------
+// initHashTabs(defaultTab, onSwitch)
+//   Reads location.hash to pick the active tab on load, then listens for
+//   hashchange (browser back/forward) and re-activates accordingly.
+//   Expects .tab elements with data-tab="<id>" attributes on the page.
+//   onSwitch(tabId) is called whenever the active tab changes.
+//
+// showHashTab(t)
+//   Call from tab button onclick. Pushes a history entry then lets the
+//   hashchange handler do the actual switch (single code path for all sources).
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
 
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
@@ -1486,6 +1573,35 @@ function buildRow(s, val) {
   };
   document.body.appendChild(b);
 })();
+
+// ------------------------------------------------- hash-based tab nav --------
+// initHashTabs(defaultTab, onSwitch)
+//   Reads location.hash to pick the active tab on load, then listens for
+//   hashchange (browser back/forward) and re-activates accordingly.
+//   Expects .tab elements with data-tab="<id>" attributes on the page.
+//   onSwitch(tabId) is called whenever the active tab changes.
+//
+// showHashTab(t)
+//   Call from tab button onclick. Pushes a history entry then lets the
+//   hashchange handler do the actual switch (single code path for all sources).
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
 
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
@@ -1931,6 +2047,35 @@ function buildRow(s, val) {
   document.body.appendChild(b);
 })();
 
+// ------------------------------------------------- hash-based tab nav --------
+// initHashTabs(defaultTab, onSwitch)
+//   Reads location.hash to pick the active tab on load, then listens for
+//   hashchange (browser back/forward) and re-activates accordingly.
+//   Expects .tab elements with data-tab="<id>" attributes on the page.
+//   onSwitch(tabId) is called whenever the active tab changes.
+//
+// showHashTab(t)
+//   Call from tab button onclick. Pushes a history entry then lets the
+//   hashchange handler do the actual switch (single code path for all sources).
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
@@ -2283,6 +2428,35 @@ function buildRow(s, val) {
   };
   document.body.appendChild(b);
 })();
+
+// ------------------------------------------------- hash-based tab nav --------
+// initHashTabs(defaultTab, onSwitch)
+//   Reads location.hash to pick the active tab on load, then listens for
+//   hashchange (browser back/forward) and re-activates accordingly.
+//   Expects .tab elements with data-tab="<id>" attributes on the page.
+//   onSwitch(tabId) is called whenever the active tab changes.
+//
+// showHashTab(t)
+//   Call from tab button onclick. Pushes a history entry then lets the
+//   hashchange handler do the actual switch (single code path for all sources).
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
 
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
@@ -2647,6 +2821,35 @@ function buildRow(s, val) {
   };
   document.body.appendChild(b);
 })();
+
+// ------------------------------------------------- hash-based tab nav --------
+// initHashTabs(defaultTab, onSwitch)
+//   Reads location.hash to pick the active tab on load, then listens for
+//   hashchange (browser back/forward) and re-activates accordingly.
+//   Expects .tab elements with data-tab="<id>" attributes on the page.
+//   onSwitch(tabId) is called whenever the active tab changes.
+//
+// showHashTab(t)
+//   Call from tab button onclick. Pushes a history entry then lets the
+//   hashchange handler do the actual switch (single code path for all sources).
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
 
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
@@ -3102,6 +3305,35 @@ function buildRow(s, val) {
   document.body.appendChild(b);
 })();
 
+// ------------------------------------------------- hash-based tab nav --------
+// initHashTabs(defaultTab, onSwitch)
+//   Reads location.hash to pick the active tab on load, then listens for
+//   hashchange (browser back/forward) and re-activates accordingly.
+//   Expects .tab elements with data-tab="<id>" attributes on the page.
+//   onSwitch(tabId) is called whenever the active tab changes.
+//
+// showHashTab(t)
+//   Call from tab button onclick. Pushes a history entry then lets the
+//   hashchange handler do the actual switch (single code path for all sources).
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
@@ -3219,6 +3451,671 @@ function saveRow(i) {
     render();
     showToast('Saved');
   }).catch(function(){ showToast('Save failed', true); });
+}
+
+load();
+</script>
+</body>
+</html>
+)html";
+
+static const char WEB_PAGE_CONTROLLERS[] = R"html(<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Controllers — AMIDALA</title>
+<style>
+/* Amidala web UI — shared styles.
+   Embed script inlines this into every page's <style> block.
+   In dev mode (scripts/web_dev.py) it's served as a real file from /assets/common.css. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --gold:   #ffe81f;
+  --red:    #c00;
+  --bg:     #000;
+  --card:   #0a0a0a;
+  --dim:    #555;
+  --border: #ffe81f22;
+}
+
+body {
+  background: var(--bg);
+  color: var(--gold);
+  font-family: 'Courier New', Courier, monospace;
+  min-height: 100vh;
+  font-size: 15px;
+}
+
+a {
+  color: var(--gold);
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #111;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  padding: .55rem 1.4rem;
+  font-size: .78rem;
+  letter-spacing: .08em;
+  pointer-events: none;
+  white-space: nowrap;
+  animation: _tfi .15s ease, _tfo .3s 1.9s ease forwards;
+  z-index: 9999;
+}
+.toast-err {
+  border-color: var(--red);
+  color: var(--red);
+}
+@keyframes _tfi {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px) }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) }
+}
+@keyframes _tfo {
+  from { opacity: 1 }
+  to   { opacity: 0 }
+}
+
+#estop {
+  position: fixed;
+  top: .5rem;
+  right: .7rem;
+  background: #900;
+  color: #fff;
+  border: 1px solid #c44;
+  padding: .28rem .75rem;
+  font-size: .7rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 9998;
+}
+#estop:hover, #estop:active { background: #c00; border-color: #f44; }
+</style>
+<style>
+.page-header{display:flex;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--border);gap:1rem}
+.back{font-size:.8rem;color:var(--dim);letter-spacing:.1em;white-space:nowrap}
+.back:hover{color:var(--gold)}
+.page-title{flex:1;text-align:center;font-size:.9rem;letter-spacing:.25em;text-transform:uppercase}
+/* Control type strip */
+.ctrl-type-strip{text-align:center;padding:.5rem 1rem;border-bottom:1px solid var(--border);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.ctrl-type-strip span{color:var(--gold)}
+/* Tabs */
+.tabs{display:flex;border-bottom:1px solid var(--border)}
+.tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);font-family:inherit;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;padding:.85rem 1rem;cursor:pointer}
+.tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+/* Settings rows (Controller Settings section) */
+.ctrl-section{max-width:660px;margin:0 auto}
+.row{display:flex;align-items:center;padding:.65rem 1rem;border-bottom:1px solid var(--border);gap:.5rem}
+.row-label{flex:0 0 130px;font-size:.78rem;color:var(--dim)}
+.row-sel{flex:1;background:#111;border:1px solid var(--dim);color:var(--gold);padding:.3rem .5rem;font-family:inherit;font-size:.8rem}
+.row-sel option{background:#111}
+/* Section / subsection headings */
+.sec-hdr{font-size:.58rem;letter-spacing:.22em;text-transform:uppercase;color:var(--dim);padding:.55rem 1rem .35rem;border-bottom:1px solid var(--border);max-width:660px;margin:0 auto}
+.sub-hdr{font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);padding:.4rem 1rem .25rem;border-bottom:1px solid var(--border);background:#0b0b0b;max-width:660px;margin:0 auto}
+/* Button assignment cards */
+.btn-card{max-width:660px;margin:0 auto;border-bottom:1px solid var(--border);padding:.5rem 1rem .4rem}
+.btn-title{font-size:.78rem;color:#ccc;margin-bottom:.3rem}
+.badge{display:inline-block;font-size:.55rem;background:var(--gold);color:#000;padding:.05rem .3rem;border-radius:2px;vertical-align:middle;margin-left:.3rem}
+.lyr-row{display:flex;align-items:center;margin:.15rem 0}
+.lyr-label{flex:0 0 80px;font-size:.68rem;color:var(--dim)}
+.act-sel{flex:1;background:#111;border:1px solid var(--dim);color:var(--gold);padding:.25rem .4rem;font-family:inherit;font-size:.75rem}
+.act-sel option,.act-sel optgroup{background:#111}
+/* Gestures */
+.gest-note{max-width:660px;margin:0 auto;font-size:.72rem;color:var(--dim);padding:.6rem 1rem;border-bottom:1px solid var(--border);line-height:1.7}
+.gest-row{max-width:660px;margin:0 auto;display:flex;align-items:center;padding:.4rem 1rem;border-bottom:1px solid var(--border);gap:.6rem}
+.gest-seq{flex:0 0 72px;font-size:.88rem;letter-spacing:.12em;color:var(--gold);font-family:monospace}
+.gest-del{background:none;border:1px solid var(--border);color:var(--dim);cursor:pointer;padding:.15rem .45rem;font-size:.7rem;flex-shrink:0}
+.gest-del:hover{color:var(--gold);border-color:var(--gold)}
+.add-form{max-width:660px;margin:0 auto;display:flex;align-items:center;padding:.7rem 1rem;gap:.5rem;border-bottom:1px solid var(--border)}
+.add-form input{flex:0 0 80px;background:#111;border:1px solid var(--dim);color:var(--gold);padding:.3rem .5rem;font-family:monospace;font-size:.8rem}
+.add-btn{background:none;border:1px solid var(--gold);color:var(--gold);cursor:pointer;padding:.3rem .9rem;font-size:.72rem;flex-shrink:0}
+.add-btn:hover{background:var(--gold);color:#000}
+.empty-note{max-width:660px;margin:0 auto;padding:.8rem 1rem;font-size:.75rem;color:var(--dim)}
+#status{text-align:center;padding:2rem;color:var(--dim);font-size:.8rem;letter-spacing:.1em}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; Back</a>
+  <div class="page-title">&#9670; Controllers &#9670;</div>
+</div>
+<div class="ctrl-type-strip">Control Type: <span id="ctrl-type-val">&#8212;</span></div>
+<div class="tabs">
+  <button class="tab" data-tab="btn"  onclick="showHashTab('btn')">Buttons</button>
+  <button class="tab" data-tab="gest" onclick="showHashTab('gest')">Gestures</button>
+</div>
+<div id="main"><div id="status">LOADING&#8230;</div></div>
+<script>
+/* Amidala web UI — edit-in-place widget + shared config page helpers.
+   Embed script inlines this into every config sub-page.
+   In dev mode (scripts/web_dev.py) it's served as /assets/edit.js. */
+
+// ------------------------------------------------------------------ toast ---
+
+function showToast(msg, isErr) {
+  var t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' toast-err' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
+}
+
+// -------------------------------------------------------- edit-in-place -----
+
+function startEdit(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
+  row.querySelector('.rv').hidden = true;
+  row.querySelector('.ri').hidden = false;
+  btn.hidden = true;
+  row.querySelector('.bs').hidden = false;
+  row.querySelector('.bc').hidden = false;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  row.querySelector('.rv').hidden = false;
+  row.querySelector('.ri').hidden = true;
+  row.querySelector('.be').hidden = false;
+  row.querySelector('.bs').hidden = true;
+  btn.hidden = true;
+}
+
+async function doSave(btn) {
+  var row = btn.closest('.row');
+  var key = row.dataset.key;
+  var inp = row.querySelector('input,select');
+  var val = inp.value;
+  var prev = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    var r = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'key=' + encodeURIComponent(key) + '&value=' + encodeURIComponent(val)
+    });
+    if (r.ok) {
+      var dv = row.querySelector('.rv');
+      var rt = row.dataset.type;
+      if (rt === 'bool' || rt === 'select') {
+        var sel = row.querySelector('select');
+        dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'password') {
+        dv.textContent = '••••••••';
+      } else {
+        dv.textContent = val;
+      }
+      doCancel(row.querySelector('.bc'));
+      showToast('Saved');
+    } else {
+      showToast('Save failed: ' + await r.text(), true);
+    }
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+// ------------------------------------------------ schema-driven row builder --
+
+function dispValue(s, val) {
+  if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
+  if (s.type === 'select') {
+    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    return found ? found.l : val;
+  }
+  if (s.type === 'password') return '••••••••';
+  return String(val);
+}
+
+function buildInput(s, val) {
+  if (s.type === 'bool') {
+    return '<select>'
+      + '<option value="y"' + (val === 'y' ? ' selected' : '') + '>On</option>'
+      + '<option value="n"' + (val === 'n' ? ' selected' : '') + '>Off</option>'
+      + '</select>';
+  }
+  if (s.type === 'select') {
+    var opts = (s.options || []).map(function(op) {
+      return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
+    }).join('');
+    return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'number') {
+    return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
+  }
+  if (s.type === 'password') {
+    return '<input type="password" value="' + val + '" maxlength="' + (s.maxlength || 64) + '">';
+  }
+  return '<input type="text" value="' + val + '"' + (s.maxlength ? ' maxlength="' + s.maxlength + '"' : '') + '>';
+}
+
+async function doAction(btn) {
+  var cmd      = btn.dataset.cmd;
+  var endpoint = btn.dataset.endpoint || '/api/monitor';
+  var prev = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
+  try {
+    var r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'cmd=' + encodeURIComponent(cmd)
+    });
+    showToast(r.ok ? 'Sent' : 'Failed', !r.ok);
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+function buildRow(s, val) {
+  if (s.type === 'action') {
+    return '<div class="row">'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<button class="be" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
+      + (s.btnLabel || 'Send') + '</button>'
+      + '</div>';
+  }
+  var disp = dispValue(s, val);
+  var note = s.note ? '<span style="font-size:.65rem;color:var(--dim);margin-left:.3rem">' + s.note + '</span>' : '';
+  if (s.readOnly) {
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<div class="rv">' + disp + '</div>'
+      + '</div>';
+  }
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    + '<div class="row-label">' + s.label + '</div>'
+    + '<div class="rv">' + disp + '</div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<button class="be" onclick="startEdit(this)" title="Edit">&#9998;</button>'
+    + '<button class="bs" hidden onclick="doSave(this)" title="Save">&#10003;</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)" title="Cancel">&#10005;</button>'
+    + '</div>';
+}
+
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.textContent = 'E-Stop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  document.body.appendChild(b);
+})();
+
+// ------------------------------------------------- hash-based tab nav --------
+// initHashTabs(defaultTab, onSwitch)
+//   Reads location.hash to pick the active tab on load, then listens for
+//   hashchange (browser back/forward) and re-activates accordingly.
+//   Expects .tab elements with data-tab="<id>" attributes on the page.
+//   onSwitch(tabId) is called whenever the active tab changes.
+//
+// showHashTab(t)
+//   Call from tab button onclick. Pushes a history entry then lets the
+//   hashchange handler do the actual switch (single code path for all sources).
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
+
+function buildPage(SCHEMA, endpoint, callback) {
+  fetch(endpoint)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var html = '';
+      var skip = false;
+      SCHEMA.forEach(function(s) {
+        if (s.section) {
+          skip = s.when ? !s.when(d) : false;
+          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          return;
+        }
+        if (skip) return;
+        if (s.when && !s.when(d)) return;
+        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
+        html += buildRow(s, val);
+      });
+      document.querySelector('main').innerHTML = html;
+      if (callback) callback(d);
+    })
+    .catch(function() {
+      var el = document.getElementById('status');
+      if (el) el.textContent = 'Failed to load settings.';
+    });
+}
+</script>
+<script>
+var _cfg = null;
+var _tab = 'btn';  // kept as state; updated by initHashTabs callback
+
+var BTN_NAMES = [
+  '', // index 0 unused (buttons are 1-based)
+  'Trigger Right', 'Trigger Left', 'Top', 'Bottom', 'Stick Press',
+  'Trigger Right', 'Trigger Left', 'Top', 'Bottom'
+];
+
+function controlTypeName(cfg) {
+  var xbeeSet = (cfg.xbr && cfg.xbr !== '00000000') || (cfg.xbl && cfg.xbl !== '00000000');
+  if (xbeeSet)       return 'XBee Pocket Remote';
+  if (cfg.rcchn > 0) return 'RC Radio';
+  return 'XBee Pocket Remote';  // default when nothing explicitly configured
+}
+
+function load() {
+  fetch('/api/config')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      _cfg = d;
+      document.getElementById('ctrl-type-val').textContent = controlTypeName(d);
+      render();
+    })
+    .catch(function() { document.getElementById('status').textContent = 'Failed to load.'; });
+}
+
+initHashTabs('btn', function(t) {
+  _tab = t;
+  if (_cfg) render();
+});
+
+function render() {
+  if (!_cfg) return;
+  _tab === 'btn' ? renderButtons() : renderGestures();
+}
+
+/* ---- action dropdown helpers ---- */
+
+function opt(v, label, sel) {
+  return '<option value="' + v + '"' + (String(sel) === String(v) ? ' selected' : '') + '>' + label + '</option>';
+}
+
+function actionOptions(sel) {
+  var h = opt('0', '— None —', sel);
+
+  var sstr = _cfg.sstr || [];
+  if (sstr.length) {
+    h += '<optgroup label="Serial Commands">';
+    sstr.forEach(function(s, i) { h += opt('5,' + (i + 1), s.n, sel); });
+    h += '</optgroup>';
+  }
+
+  h += '<optgroup label="Dome">';
+  h += opt('9,0', 'Random Mode Toggle', sel);
+  h += opt('9,8', 'Abs-Stick Toggle',   sel);
+  h += '</optgroup>';
+
+  if (_cfg.audiohw === 'hcr') {
+    h += '<optgroup label="HCR Audio">';
+    h += opt('8', 'Musing Toggle', sel);
+    var emos  = ['Happy','Sad','Mad','Scared','Overload'];
+    var lvls  = ['Moderate','Strong'];
+    lvls.forEach(function(lvl, li) {
+      emos.forEach(function(emo, ei) {
+        h += opt('7,' + ei + ',' + li, emo + ' (' + lvl + ')', sel);
+      });
+    });
+    h += '</optgroup>';
+  }
+
+  h += '<optgroup label="Special">';
+  h += opt('altbtn',     'Set as Alt Modifier',  sel);
+  h += opt('mutebutton', 'Set as Mute Button',   sel);
+  h += '</optgroup>';
+
+  return h;
+}
+
+function actToVal(act) {
+  if (!act || act.t === 0) return '0';
+  if (act.t === 5) return '5,' + (act.x || 0);
+  if (act.t === 7) return '7,' + (act.x || 0) + ',' + (act.y || 0);
+  if (act.t === 8) return '8';
+  if (act.t === 9) return '9,' + (act.x || 0);
+  return '0';
+}
+
+function getBtnValue(n, lyr) {
+  if (lyr === 'p') {
+    if (_cfg.altbtn    === n) return 'altbtn';
+    if (_cfg.mutebutton === n) return 'mutebutton';
+  }
+  var btns = _cfg.buttons || [];
+  var btn  = btns[n - 1];
+  if (!btn) return '0';
+  return actToVal(btn[lyr]);
+}
+
+/* ---- save helpers ---- */
+
+function apiPost(key, value, cb) {
+  fetch('/api/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'key=' + encodeURIComponent(key) + '&value=' + encodeURIComponent(value)
+  }).then(function(r) {
+    if (r.ok) {
+      showToast('Saved');
+      fetch('/api/config').then(function(r2) { return r2.json(); }).then(function(d) {
+        _cfg = d;
+        render();
+        if (cb) cb();
+      });
+    } else {
+      showToast('Save failed', true);
+    }
+  }).catch(function() { showToast('Network error', true); });
+}
+
+function saveGlobal(key, value) {
+  apiPost(key, value);
+}
+
+function saveBtn(n, lyr, sel) {
+  var val = sel.value;
+  var layerName = lyr === 'p' ? 'press' : lyr === 'l' ? 'long' : 'alt';
+  if (val === 'altbtn' || val === 'mutebutton') {
+    apiPost(val, String(n));
+  } else {
+    apiPost('btn_' + n + '_' + layerName, val);
+  }
+}
+
+/* ---- buttons tab ---- */
+
+function renderButtons() {
+  var altbtn    = _cfg.altbtn    || 0;
+  var mutebutton= _cfg.mutebutton || 0;
+  var ads       = _cfg.altdomestick || 0;
+  var showAlt   = altbtn > 0;
+
+  var h = '';
+
+  /* Controller Settings */
+  h += '<div class="sec-hdr">Controller Settings</div>';
+  h += '<div class="ctrl-section">';
+
+  /* Alt Button */
+  h += '<div class="row"><div class="row-label">Alt Button</div>';
+  h += '<select class="row-sel" onchange="saveGlobal(\'altbtn\',this.value)">';
+  h += opt('0', 'None', altbtn === 0 ? '0' : String(altbtn));
+  for (var i = 1; i <= 9; i++) {
+    var ctrl = i <= 5 ? 'Right' : 'Left';
+    h += opt(String(i), ctrl + ' — ' + BTN_NAMES[i], String(altbtn));
+  }
+  h += '</select></div>';
+
+  /* Mute Button */
+  h += '<div class="row"><div class="row-label">Mute Button</div>';
+  h += '<select class="row-sel" onchange="saveGlobal(\'mutebutton\',this.value)">';
+  h += opt('0', 'None', mutebutton === 0 ? '0' : String(mutebutton));
+  for (var i = 1; i <= 9; i++) {
+    var ctrl = i <= 5 ? 'Right' : 'Left';
+    h += opt(String(i), ctrl + ' — ' + BTN_NAMES[i], String(mutebutton));
+  }
+  h += '</select></div>';
+
+  /* Alt Dome Stick */
+  h += '<div class="row"><div class="row-label">Alt Dome Stick</div>';
+  h += '<select class="row-sel" onchange="saveGlobal(\'altdomestick\',this.value)">';
+  h += opt('0', 'Off',                            String(ads));
+  h += opt('1', 'On — joystick → dome heading', String(ads));
+  h += '</select></div>';
+
+  h += '</div>'; /* ctrl-section */
+
+  /* Column header note */
+  h += '<div class="sec-hdr">Button Assignments</div>';
+  if (showAlt) h += '<div class="gest-note" style="font-size:.65rem">Alt Press column is active (Alt Button = ' + BTN_NAMES[altbtn] + '). Hold the alt button then press another to trigger its alt action.</div>';
+
+  /* Right controller */
+  h += '<div class="sub-hdr">Right Controller</div>';
+  for (var i = 1; i <= 5; i++) h += renderBtnCard(i, showAlt, altbtn, mutebutton);
+
+  /* Left controller */
+  h += '<div class="sub-hdr">Left Controller</div>';
+  for (var i = 6; i <= 9; i++) h += renderBtnCard(i, showAlt, altbtn, mutebutton);
+
+  h += '<div class="gest-note" style="font-size:.65rem">Left Stick Press (button 10) initiates gesture sequences and is not configurable here.</div>';
+
+  document.getElementById('main').innerHTML = h;
+}
+
+function renderBtnCard(n, showAlt, altbtn, mutebutton) {
+  var isAlt  = (altbtn    === n);
+  var isMute = (mutebutton === n);
+  var title  = BTN_NAMES[n];
+  if (isAlt)  title += '<span class="badge">ALT</span>';
+  if (isMute) title += '<span class="badge">MUTE</span>';
+
+  var h = '<div class="btn-card">';
+  h += '<div class="btn-title">' + title + '</div>';
+  h += '<div class="lyr-row"><div class="lyr-label">Press</div>';
+  h += '<select class="act-sel" onchange="saveBtn(' + n + ',\'p\',this)">' + actionOptions(getBtnValue(n, 'p')) + '</select></div>';
+  h += '<div class="lyr-row"><div class="lyr-label">Long Press</div>';
+  h += '<select class="act-sel" onchange="saveBtn(' + n + ',\'l\',this)">' + actionOptions(getBtnValue(n, 'l')) + '</select></div>';
+  if (showAlt) {
+    h += '<div class="lyr-row"><div class="lyr-label">Alt Press</div>';
+    h += '<select class="act-sel" onchange="saveBtn(' + n + ',\'a\',this)">' + actionOptions(getBtnValue(n, 'a')) + '</select></div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+/* ---- gestures tab ---- */
+
+function gestToVal(g) {
+  return actToVal({t: g.t, x: g.x, y: g.y});
+}
+
+function saveGest(i, seq, sel) {
+  var val = sel.value;
+  var body = seq + (val !== '0' ? ',' + val : ',0');
+  fetch('/api/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'key=gesture_' + i + '&value=' + encodeURIComponent(body)
+  }).then(function(r) {
+    showToast(r.ok ? 'Saved' : 'Failed', !r.ok);
+  }).catch(function() { showToast('Network error', true); });
+}
+
+function delGest(i) {
+  apiPost('gesture_del_' + i, '');
+}
+
+function addGest() {
+  var seqEl = document.getElementById('new-seq');
+  var actEl = document.getElementById('new-act');
+  var seq   = seqEl.value.trim();
+  var val   = actEl.value;
+  if (!seq || !/^[1-9]+$/.test(seq)) { showToast('Enter a valid sequence (digits 1–9)', true); return; }
+  var body  = seq + (val !== '0' ? ',' + val : ',0');
+  apiPost('gesture_add', body, function() {
+    seqEl.value = '';
+    actEl.value = '0';
+  });
+}
+
+function renderGestures() {
+  var gestures = _cfg.gestures || [];
+  var h = '';
+
+  h += '<div class="gest-note">';
+  h += '<b>Joystick grid positions:</b><br>';
+  h += '1=up-left &nbsp;&nbsp;&nbsp; 2=up-center &nbsp;&nbsp; 3=up-right<br>';
+  h += '4=mid-left &nbsp;&nbsp; 5=center &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 6=mid-right<br>';
+  h += '7=down-left &nbsp; 8=down-center &nbsp; 9=down-right';
+  h += '</div>';
+
+  if (gestures.length === 0) {
+    h += '<div class="empty-note">No gestures configured.</div>';
+  } else {
+    gestures.forEach(function(g, i) {
+      h += '<div class="gest-row">';
+      h += '<div class="gest-seq">' + g.seq + '</div>';
+      h += '<select class="act-sel" style="flex:1" onchange="saveGest(' + i + ',\'' + g.seq + '\',this)">' + actionOptions(gestToVal(g)) + '</select>';
+      h += '<button class="gest-del" onclick="delGest(' + i + ')" title="Delete gesture">✕</button>';
+      h += '</div>';
+    });
+  }
+
+  h += '<div class="add-form">';
+  h += '<input id="new-seq" type="text" placeholder="e.g. 258" maxlength="8">';
+  h += '<select id="new-act" class="act-sel" style="flex:1">' + actionOptions('0') + '</select>';
+  h += '<button class="add-btn" onclick="addGest()">Add</button>';
+  h += '</div>';
+
+  document.getElementById('main').innerHTML = h;
 }
 
 load();
@@ -3538,6 +4435,35 @@ function buildRow(s, val) {
   };
   document.body.appendChild(b);
 })();
+
+// ------------------------------------------------- hash-based tab nav --------
+// initHashTabs(defaultTab, onSwitch)
+//   Reads location.hash to pick the active tab on load, then listens for
+//   hashchange (browser back/forward) and re-activates accordingly.
+//   Expects .tab elements with data-tab="<id>" attributes on the page.
+//   onSwitch(tabId) is called whenever the active tab changes.
+//
+// showHashTab(t)
+//   Call from tab button onclick. Pushes a history entry then lets the
+//   hashchange handler do the actual switch (single code path for all sources).
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
 
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
@@ -3978,6 +4904,35 @@ function buildRow(s, val) {
   };
   document.body.appendChild(b);
 })();
+
+// ------------------------------------------------- hash-based tab nav --------
+// initHashTabs(defaultTab, onSwitch)
+//   Reads location.hash to pick the active tab on load, then listens for
+//   hashchange (browser back/forward) and re-activates accordingly.
+//   Expects .tab elements with data-tab="<id>" attributes on the page.
+//   onSwitch(tabId) is called whenever the active tab changes.
+//
+// showHashTab(t)
+//   Call from tab button onclick. Pushes a history entry then lets the
+//   hashchange handler do the actual switch (single code path for all sources).
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
 
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)

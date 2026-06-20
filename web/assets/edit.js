@@ -168,6 +168,35 @@ function buildRow(s, val) {
   document.body.appendChild(b);
 })();
 
+// ------------------------------------------------- hash-based tab nav --------
+// initHashTabs(defaultTab, onSwitch)
+//   Reads location.hash to pick the active tab on load, then listens for
+//   hashchange (browser back/forward) and re-activates accordingly.
+//   Expects .tab elements with data-tab="<id>" attributes on the page.
+//   onSwitch(tabId) is called whenever the active tab changes.
+//
+// showHashTab(t)
+//   Call from tab button onclick. Pushes a history entry then lets the
+//   hashchange handler do the actual switch (single code path for all sources).
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
