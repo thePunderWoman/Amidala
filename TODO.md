@@ -36,11 +36,11 @@
   - [x] Seek range (domeseekl, domeseekr, domefudge)
   - [x] RoboClaw-specific (domercaddr, domercchan, domercqpps, domefront, domestall) — gated by `domehw === 'roboclaw'`
   - [x] Dome commands (home, calibrate, stop, front, random) — action buttons via `/api/dome`
-- [ ] Buttons & Gestures (`/config/buttons`)
-  - [ ] Button mapping table (b=, lb=, ab=)
-  - [ ] Alt button config (altbtn, altdomestick)
-  - [ ] Mute button config (mutebutton)
-  - [ ] Gesture mapping table (g=)
+- [x] Controllers (`/config/controllers`)
+  - [x] Button mapping table (b=, lb=, ab=) — 9 buttons × press/long/alt layers
+  - [x] Alt button config (altbtn, altdomestick)
+  - [x] Mute button config (mutebutton)
+  - [x] Gesture mapping table (g=) — add/delete/edit gesture sequences
   - [ ] Special gestures (rnd, ackgest, slowgest, domegest)
 - [x] Servos (`/config/servos`)
   - [x] Per-channel min/max/neutral/deadzone/trim/speed/reversed

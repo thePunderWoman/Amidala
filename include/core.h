@@ -45,7 +45,7 @@ public:
       setGesture(gestureStr);
   }
 
-  bool isEmpty() { return fGesture == 0; }
+  bool isEmpty() const { return fGesture == 0; }
 
   uint8_t getGestureType(char ch) {
     switch (ch) {
@@ -91,7 +91,7 @@ public:
     return (*s == '\0');
   }
 
-  char *getGestureString(char *str) {
+  char *getGestureString(char *str) const {
     char *s = str;
     unsigned cnt = 0;
     uint32_t quotient = fGesture;

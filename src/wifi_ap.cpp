@@ -185,6 +185,127 @@ static bool rewriteSoundBanks() {
 }
 
 // ---------------------------------------------------------------------------
+// Button / gesture config file helpers
+// ---------------------------------------------------------------------------
+
+// Serialize a ButtonAction's parameters as "type[,p1[,p2]]"
+static String buttonActionStr(const ButtonAction& b) {
+    String s = String(b.action);
+    switch (b.action) {
+    case ButtonAction::kSerialStr: s += "," + String(b.serial.serialstr);                                    break;
+    case ButtonAction::kHCREmote:  s += "," + String(b.emote.emotion) + "," + String(b.emote.level);        break;
+    case ButtonAction::kDomeCmd:   s += "," + String(b.dome.subcmd);                                         break;
+    default: break;
+    }
+    return s;
+}
+
+// Parse "type[,p1[,p2]]" value string into a ButtonAction
+static void parseButtonAction(ButtonAction& b, const String& value) {
+    memset(&b, 0, sizeof(b));
+    if (value.isEmpty() || value == "0") return;
+    int c1   = value.indexOf(',');
+    int type = value.substring(0, c1 > 0 ? c1 : (int)value.length()).toInt();
+    switch (type) {
+    case ButtonAction::kSerialStr:
+        b.action = type;
+        if (c1 > 0) b.serial.serialstr = (uint8_t)value.substring(c1 + 1).toInt();
+        break;
+    case ButtonAction::kHCREmote: {
+        b.action = type;
+        int c2 = c1 > 0 ? value.indexOf(',', c1 + 1) : -1;
+        if (c1 > 0) b.emote.emotion = (uint8_t)value.substring(c1 + 1, c2 > 0 ? c2 : (int)value.length()).toInt();
+        if (c2 > 0) b.emote.level   = (uint8_t)value.substring(c2 + 1).toInt();
+        break;
+    }
+    case ButtonAction::kHCRMuse:
+        b.action = type;
+        break;
+    case ButtonAction::kDomeCmd:
+        b.action = type;
+        if (c1 > 0) b.dome.subcmd = (uint8_t)value.substring(c1 + 1).toInt();
+        break;
+    default: break;
+    }
+}
+
+// Rewrite all b=, lb=, ab= lines in config.txt from current params
+static bool rewriteButtons() {
+    String path = "/config.txt";
+    File f = SD.open(path, "r");
+    String out;
+    out.reserve(8192);
+    if (f) {
+        while (f.available()) {
+            String line = f.readStringUntil('\n');
+            if (line.endsWith("\r")) line.remove(line.length() - 1);
+            if (!line.startsWith("b=") && !line.startsWith("lb=") && !line.startsWith("ab="))
+                out += line + "\n";
+        }
+        f.close();
+    } else {
+        out = "#START\n#END\n";
+    }
+    String lines;
+    for (int i = 0; i < 9; i++) {
+        if (sCtrl->params.B[i].action  != ButtonAction::kNone)
+            lines += "b="  + String(i + 1) + "," + buttonActionStr(sCtrl->params.B[i])  + "\n";
+        if (sCtrl->params.LB[i].action != ButtonAction::kNone)
+            lines += "lb=" + String(i + 1) + "," + buttonActionStr(sCtrl->params.LB[i]) + "\n";
+        if (sCtrl->params.AB[i].action != ButtonAction::kNone)
+            lines += "ab=" + String(i + 1) + "," + buttonActionStr(sCtrl->params.AB[i]) + "\n";
+    }
+    int endIdx = out.lastIndexOf("#END");
+    if (endIdx >= 0)
+        out = out.substring(0, endIdx) + lines + out.substring(endIdx);
+    else
+        out += lines;
+    SD.remove(path);
+    File wf = SD.open(path, "w");
+    if (!wf) return false;
+    wf.print(out);
+    wf.close();
+    return true;
+}
+
+// Rewrite all g= lines in config.txt from current params
+static bool rewriteGestures() {
+    String path = "/config.txt";
+    File f = SD.open(path, "r");
+    String out;
+    out.reserve(8192);
+    if (f) {
+        while (f.available()) {
+            String line = f.readStringUntil('\n');
+            if (line.endsWith("\r")) line.remove(line.length() - 1);
+            if (!line.startsWith("g="))
+                out += line + "\n";
+        }
+        f.close();
+    } else {
+        out = "#START\n#END\n";
+    }
+    String lines;
+    char seqbuf[MAX_GESTURE_LENGTH + 1];
+    for (uint8_t i = 0; i < sCtrl->params.gcount; i++) {
+        if (sCtrl->params.G[i].gesture.isEmpty()) continue;
+        sCtrl->params.G[i].gesture.getGestureString(seqbuf);
+        lines += "g=" + String(seqbuf) + "," + buttonActionStr(sCtrl->params.G[i].action) + "\n";
+    }
+    int endIdx = out.lastIndexOf("#END");
+    if (endIdx >= 0)
+        out = out.substring(0, endIdx) + lines + out.substring(endIdx);
+    else
+        out += lines;
+    SD.remove(path);
+    File wf = SD.open(path, "w");
+    if (!wf) return false;
+    wf.print(out);
+    wf.close();
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // REST API handlers
 // ---------------------------------------------------------------------------
 
@@ -338,6 +459,95 @@ static void handleApiConfigPost() {
         return;
     }
 
+    // btn_N_press / btn_N_long / btn_N_alt — update a single button layer
+    if (key.startsWith("btn_")) {
+        int us = key.indexOf('_', 4);
+        if (us < 0) { sServer.send(400, "text/plain", "bad key format"); return; }
+        int    btnNum = key.substring(4, us).toInt();
+        String layer  = key.substring(us + 1);  // "press", "long", or "alt"
+        if (btnNum < 1 || btnNum > 9) { sServer.send(400, "text/plain", "button 1–9 only"); return; }
+        int idx = btnNum - 1;
+
+        if (value == "altbtn") {
+            sCtrl->params.altbtn = (uint8_t)btnNum;
+            memset(&sCtrl->params.B[idx], 0, sizeof(ButtonAction));
+            bool ok  = updateConfigFile("altbtn", String(btnNum).c_str());
+            bool ok2 = rewriteButtons();
+            sServer.send((ok && ok2) ? 200 : 207, "text/plain", (ok && ok2) ? "OK" : "applied but SD write failed");
+            return;
+        }
+        if (value == "mutebutton") {
+            sCtrl->params.mutebutton = (uint8_t)btnNum;
+            memset(&sCtrl->params.B[idx], 0, sizeof(ButtonAction));
+            bool ok  = updateConfigFile("mutebutton", String(btnNum).c_str());
+            bool ok2 = rewriteButtons();
+            sServer.send((ok && ok2) ? 200 : 207, "text/plain", (ok && ok2) ? "OK" : "applied but SD write failed");
+            return;
+        }
+
+        // Regular action: clear alt/mute role if this button previously held it
+        if (layer == "press") {
+            if (sCtrl->params.altbtn    == (uint8_t)btnNum) { sCtrl->params.altbtn    = 0; updateConfigFile("altbtn",    "0"); }
+            if (sCtrl->params.mutebutton == (uint8_t)btnNum) { sCtrl->params.mutebutton = 0; updateConfigFile("mutebutton","0"); }
+        }
+        ButtonAction* arr = (layer == "long") ? sCtrl->params.LB
+                          : (layer == "alt")  ? sCtrl->params.AB
+                          :                     sCtrl->params.B;
+        parseButtonAction(arr[idx], value);
+        bool ok = rewriteButtons();
+        sServer.send(ok ? 200 : 207, "text/plain", ok ? "OK" : "applied but SD write failed");
+        return;
+    }
+
+    // gesture_del_N — delete gesture at index N and shift remainder down
+    if (key.startsWith("gesture_del_")) {
+        int idx = key.substring(12).toInt();
+        if (idx < 0 || idx >= (int)sCtrl->params.gcount) {
+            sServer.send(400, "text/plain", "index out of range"); return;
+        }
+        for (int j = idx; j < (int)sCtrl->params.gcount - 1; j++)
+            sCtrl->params.G[j] = sCtrl->params.G[j + 1];
+        memset(&sCtrl->params.G[sCtrl->params.gcount - 1], 0, sizeof(GestureAction));
+        sCtrl->params.gcount--;
+        bool ok = rewriteGestures();
+        sServer.send(ok ? 200 : 207, "text/plain", ok ? "OK" : "deleted but SD write failed");
+        return;
+    }
+
+    // gesture_add — append a new gesture; value: "SEQ,type[,p1[,p2]]"
+    if (key == "gesture_add") {
+        if ((int)sCtrl->params.gcount >= (int)sCtrl->params.getGestureCount()) {
+            sServer.send(400, "text/plain", "gesture limit reached"); return;
+        }
+        int    c1  = value.indexOf(',');
+        String seq = c1 > 0 ? value.substring(0, c1) : value;
+        String act = c1 > 0 ? value.substring(c1 + 1) : "0";
+        GestureAction& g = sCtrl->params.G[sCtrl->params.gcount];
+        memset(&g, 0, sizeof(g));
+        g.gesture.setGesture(seq.c_str());
+        parseButtonAction(g.action, act);
+        sCtrl->params.gcount++;
+        bool ok = rewriteGestures();
+        sServer.send(ok ? 200 : 207, "text/plain", ok ? "OK" : "applied but SD write failed");
+        return;
+    }
+
+    // gesture_N — update gesture at index N; value: "SEQ,type[,p1[,p2]]"
+    if (key.startsWith("gesture_") && key.length() > 8 && isDigit(key.charAt(8))) {
+        int idx = key.substring(8).toInt();
+        if (idx < 0 || idx >= (int)sCtrl->params.gcount) {
+            sServer.send(400, "text/plain", "index out of range"); return;
+        }
+        int    c1  = value.indexOf(',');
+        String seq = c1 > 0 ? value.substring(0, c1) : value;
+        String act = c1 > 0 ? value.substring(c1 + 1) : "0";
+        sCtrl->params.G[idx].gesture.setGesture(seq.c_str());
+        parseButtonAction(sCtrl->params.G[idx].action, act);
+        bool ok = rewriteGestures();
+        sServer.send(ok ? 200 : 207, "text/plain", ok ? "OK" : "applied but SD write failed");
+        return;
+    }
+
     // Generic key=value — delegate to processConfig
     String cmd = key + "=" + value;
     if (!sCtrl->fConfig.processConfig(cmd.c_str())) {
@@ -453,6 +663,7 @@ static void handleConfigRcRadio()       { sServer.send(200, "text/html", WEB_PAG
 static void handleConfigDome()          { sServer.send(200, "text/html", WEB_PAGE_DOME);            }
 static void handleConfigSerialStrings() { sServer.send(200, "text/html", WEB_PAGE_SERIAL_STRINGS);  }
 static void handleConfigServos()        { sServer.send(200, "text/html", WEB_PAGE_SERVOS);           }
+static void handleConfigControllers()   { sServer.send(200, "text/html", WEB_PAGE_CONTROLLERS);     }
 static void handleMonitor()             { sServer.send(200, "text/html", WEB_PAGE_MONITOR);         }
 static void handleUpdatePage()          { sServer.send(200, "text/html", WEB_PAGE_UPDATE);          }
 static void handleComingSoon()          { sServer.send(200, "text/html", WEB_PAGE_COMING_SOON);     }
@@ -490,8 +701,8 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/config/audio",          HTTP_GET, handleConfigAudio);
     sServer.on("/config/rc-radio",       HTTP_GET, handleConfigRcRadio);
     sServer.on("/config/dome",           HTTP_GET, handleConfigDome);
-    // Remaining config pages (stubs)
-    sServer.on("/config/buttons",        HTTP_GET, handleComingSoon);
+    sServer.on("/config/controllers",    HTTP_GET, handleConfigControllers);
+    sServer.on("/config/buttons",        HTTP_GET, handleConfigControllers);  // legacy alias
     sServer.on("/config/servos",         HTTP_GET, handleConfigServos);
     sServer.on("/config/serial-strings", HTTP_GET, handleConfigSerialStrings);
     sServer.on("/sequences",            HTTP_GET, handleComingSoon);
