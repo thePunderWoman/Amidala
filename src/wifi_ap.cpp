@@ -117,8 +117,12 @@ static bool rewriteGadgetConfig() {
         if (sGadgets[i].type == GADGET_DISABLED) continue;
         out += "gadget=";
         out += String(i); out += ","; out += String(sGadgets[i].type);
-        for (uint8_t j = 0; j < sGadgets[i].sstrCnt; j++) {
-            out += ","; out += String(sGadgets[i].sstr[j]);
+        // Periscope Uppity Spinner sstr is auto-injected at startup — don't persist
+        bool skipSstr = (i == 0 && sGadgets[i].type == GADGET_UPPITY);
+        if (!skipSstr) {
+            for (uint8_t j = 0; j < sGadgets[i].sstrCnt; j++) {
+                out += ","; out += String(sGadgets[i].sstr[j]);
+            }
         }
         out += "\n";
     }
