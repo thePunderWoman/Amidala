@@ -11,6 +11,7 @@ Then open http://localhost:8080 in your browser.
 
 import json
 import os
+import re
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -19,146 +20,224 @@ _PROJECT_DIR = os.path.dirname(_HERE)
 _WEB_DIR     = os.path.join(_PROJECT_DIR, "web")
 _PORT        = 8080
 
-# Flat config dict — mirrors buildFullConfigJson() in web_api.h.
-# POST /api/config mutates this in memory.
-_config = {
-    # General
-    "volume":        50,
-    "startup":       "y",
-    "rndon":         "y",
-    "mindelay":      60,
-    "maxdelay":      120,
-    "ackon":         "n",
-    "goslow":        "n",
-    "mix12":         "n",
-    "auto":          "n",
-    "serialbaud":    9600,
-    "serialdelim":   58,
-    "serialeol":     13,
-    "myi2c":         0,
-    # WiFi
-    "wifion":        "y",
-    "wifissid":      "amidala",
-    "wifipassword":  "Astromech",
-    # XBee
-    "xbr":           "00000000",
-    "xbl":           "00000000",
-    # Audio
-    "audiohw":       "hcr",
-    "volumeChA":     50,
-    "volumeChB":     50,
-    "volumewheel":   0,
-    "altvolumewheel":0,
-    "startupem":     0,
-    "startuplvl":    0,
-    "ackem":         0,
-    "acklvl":        0,
-    # RC Radio
-    "rcchn":         6,
-    "rcd":           30,
-    "rcj":           5,
-    "fst":           1000,
-    "rvrmin":        0,
-    "rvrmax":        1023,
-    "rvlmin":        0,
-    "rvlmax":        1023,
-    "j1adjv":        0,
-    "j1adjh":        0,
-    # Dome
-    "domespeed":     80,
-    "domespeedhome": 50,
-    "domespeedseek": 50,
-    "domespeedmin":  10,
-    "domedecelzone": 20,
-    "domehome":      0,
-    "domeflip":      "n",
-    "domeimu":       "y",
-    "domech6":       "n",
-    "domeseekl":     90,
-    "domeseekr":     90,
-    "domefudge":     5,
-    "domercaddr":    128,
-    "domercchan":    1,
-    "domercqpps":    1000,
-    "domefront":     0,
-    "domestall":     2000,
-    # Global servo pulse limits
-    "minpulse":      1000,
-    "maxpulse":      2000,
-    # Dome hardware type (compile-time constant)
-    "domehw":        "roboclaw",
-    # Sound banks (VMusic only; empty when using HCR)
-    # Switch audiohw to 'vmusic' below to test the VMusic UI with sample data.
-    "sbs": [],
-    # "sbs": [{"dir": "HAPPY", "n": 8, "r": True}, {"dir": "SAD", "n": 5, "r": False}],
-    # Servos — list of {min, max, n, d, t, sp, r}
-    "servos": [
-        {"min":  0, "max": 180, "n": 90, "d": 4, "t":  0, "sp": 50, "r": 0},
-        {"min":  0, "max": 180, "n": 90, "d": 4, "t":  0, "sp": 50, "r": 0},
-        {"min":  0, "max": 180, "n": 90, "d": 4, "t":  0, "sp": 50, "r": 0},
-        {"min": 50, "max": 130, "n": 90, "d": 4, "t": -5, "sp": 30, "r": 1},
-    ],
-    # Serial strings — list of {n: name, s: serial_string}
-    # Indices 1-3: user-defined; 4-14: auto-injected Uppity Spinner operational commands
-    "sstr": [
-        {"n": "Leia Sequence",           "s": ":LD00"},
-        {"n": "Happy R2",                "s": ":001"},
-        {"n": "Dome Home",               "s": "*dome=home"},
-        {"n": "Periscope: Home",         "s": ":PH"},
-        {"n": "Periscope: Raise Full",   "s": ":PP100"},
-        {"n": "Periscope: Raise Half",   "s": ":PP50"},
-        {"n": "Periscope: Random Gentle","s": ":PMG"},
-        {"n": "Periscope: Random Medium","s": ":PMM"},
-        {"n": "Periscope: Random Strong","s": ":PMA"},
-        {"n": "Periscope: Stop",         "s": ":PX"},
-        {"n": "Periscope: Face Forward", "s": ":PA0"},
-        {"n": "Periscope: Spin CCW",     "s": ":PR30"},
-        {"n": "Periscope: Spin CW",      "s": ":PR-30"},
-        {"n": "Periscope: Stop Spin",    "s": ":PR0"},
-    ],
-    # Controller settings
-    "altbtn":       0,
-    "mutebutton":   0,
-    "altdomestick": 0,
-    # Button assignments — 9 buttons × {p=press, l=long, a=alt}
-    # t=action type, x=param1, y=param2 (omit if zero)
-    "buttons": [
-        {"p": {"t": 5, "x": 1}, "l": {"t": 0},       "a": {"t": 0}},  # 1: press=Leia
-        {"p": {"t": 0},         "l": {"t": 9, "x": 0},"a": {"t": 0}},  # 2: long=dome rand
-        {"p": {"t": 0},         "l": {"t": 0},         "a": {"t": 0}},  # 3
-        {"p": {"t": 0},         "l": {"t": 0},         "a": {"t": 0}},  # 4
-        {"p": {"t": 0},         "l": {"t": 0},         "a": {"t": 0}},  # 5 stick press
-        {"p": {"t": 5, "x": 2}, "l": {"t": 0},         "a": {"t": 0}},  # 6: press=Happy R2
-        {"p": {"t": 0},         "l": {"t": 0},         "a": {"t": 0}},  # 7
-        {"p": {"t": 0},         "l": {"t": 0},         "a": {"t": 0}},  # 8
-        {"p": {"t": 0},         "l": {"t": 0},         "a": {"t": 0}},  # 9
-    ],
-    # Gesture assignments — list of {seq, t, x, y}
-    "gestures": [
-        {"seq": "258", "t": 5, "x": 3, "y": 0},  # 258 → Dome Home serial
-        {"seq": "14",  "t": 9, "x": 0, "y": 0},  # 14  → dome random toggle
-    ],
-    # User-defined serial string count (before builtin injection).
-    # The serial-strings config page only shows/edits strings 0..sstr_user_cnt-1.
-    "sstr_user_cnt": 3,
-    # Gadget config — 7 entries, one per gadget (index matches GADGETS array)
-    # type: 0=disabled, 1=enabled, 2=uppity_spinner; sstr: 1-based serial string indices
-    "gadgets_cfg": [
-        {"type": 2, "sstr": [4,5,6,7,8,9,10,11,12,13,14]},  # 0: Periscope — auto-injected
-        {"type": 1, "sstr": [1, 2]},    # 1: Lifeform Scanner — user sstr 1 (Leia) + 2 (Happy R2)
-        {"type": 0, "sstr": []},        # 2: Lightsaber Launcher — disabled
-        {"type": 0, "sstr": []},        # 3: Bubble Gun — disabled
-        {"type": 0, "sstr": []},        # 4: Zapper Arm — disabled
-        {"type": 0, "sstr": []},        # 5: Gripper — disabled
-        {"type": 0, "sstr": []},        # 6: Data Probe — disabled
-    ],
-}
+
+# ---------------------------------------------------------------------------
+# example_config.txt parser
+# Mirrors the firmware's processConfig() so the dev server shows real data.
+# ---------------------------------------------------------------------------
+
+def _parse_action(parts, offset=0):
+    """Parse Action[,Arg1[,Arg2]] from a list of string parts starting at offset."""
+    t = int(parts[offset]) if offset < len(parts) else 0
+    x = int(parts[offset + 1]) if offset + 1 < len(parts) else 0
+    y = int(parts[offset + 2]) if offset + 2 < len(parts) else 0
+    act = {"t": t}
+    if x: act["x"] = x
+    if y: act["y"] = y
+    return act
+
+
+def _make_button():
+    return {"p": {"t": 0}, "l": {"t": 0}, "a": {"t": 0}}
+
+
+def parse_example_config(path):
+    """Read path and return a _config dict matching buildFullConfigJson()."""
+    # Firmware defaults
+    cfg = {
+        "volume":        50,
+        "startup":       "n",
+        "rndon":         "n",
+        "mindelay":      60,
+        "maxdelay":      120,
+        "ackon":         "n",
+        "goslow":        "n",
+        "mix12":         "n",
+        "auto":          "n",
+        "serialbaud":    9600,
+        "serialdelim":   58,
+        "serialeol":     13,
+        "myi2c":         0,
+        "wifion":        "y",
+        "wifissid":      "amidala",
+        "wifipassword":  "Astromech",
+        "xbr":           "00000000",
+        "xbl":           "00000000",
+        "audiohw":       "hcr",
+        "volumeChA":     50,
+        "volumeChB":     50,
+        "volumewheel":   0,
+        "altvolumewheel":0,
+        "startupem":     0,
+        "startuplvl":    0,
+        "ackem":         0,
+        "acklvl":        0,
+        "rcchn":         6,
+        "rcd":           30,
+        "rcj":           5,
+        "fst":           1000,
+        "rvrmin":        0,
+        "rvrmax":        1023,
+        "rvlmin":        0,
+        "rvlmax":        1023,
+        "j1adjv":        0,
+        "j1adjh":        0,
+        "domespeed":     80,
+        "domespeedhome": 50,
+        "domespeedseek": 50,
+        "domespeedmin":  10,
+        "domedecelzone": 20,
+        "domehome":      0,
+        "domeflip":      "n",
+        "domeimu":       "n",
+        "domech6":       "n",
+        "domeseekl":     90,
+        "domeseekr":     90,
+        "domefudge":     5,
+        "domercaddr":    128,
+        "domercchan":    1,
+        "domercqpps":    1000,
+        "domefront":     0,
+        "domestall":     2000,
+        "minpulse":      1000,
+        "maxpulse":      2000,
+        "domehw":        "roboclaw",
+        "altbtn":        0,
+        "mutebutton":    0,
+        "altdomestick":  0,
+        "sbs":      [],
+        "servos":   [],
+        "sstr":     [],
+        "buttons":  [_make_button() for _ in range(9)],
+        "gestures": [],
+        "gadgets_cfg": [{"type": 0, "sstr": []} for _ in range(7)],
+        "sstr_user_cnt": 0,
+    }
+
+    # Simple scalar keys that map directly
+    _int_keys  = {"volume", "mindelay", "maxdelay", "serialbaud", "serialdelim",
+                  "serialeol", "myi2c", "rcchn", "rcd", "rcj", "fst",
+                  "rvrmin", "rvrmax", "rvlmin", "rvlmax", "j1adjv", "j1adjh",
+                  "domespeed", "domespeedhome", "domespeedseek", "domespeedmin",
+                  "domedecelzone", "domehome", "domeseekl", "domeseekr",
+                  "domefudge", "domercaddr", "domercchan", "domercqpps",
+                  "domefront", "domestall", "minpulse", "maxpulse",
+                  "altbtn", "mutebutton", "altdomestick",
+                  "startupem", "startuplvl", "ackem", "acklvl",
+                  "volumeChA", "volumeChB", "volumewheel", "altvolumewheel"}
+    _str_keys  = {"startup", "rndon", "ackon", "goslow", "mix12", "auto",
+                  "wifion", "wifissid", "wifipassword", "xbr", "xbl",
+                  "audiohw", "domeflip", "domeimu", "domech6"}
+
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        print(f"  [web_dev] Warning: {path} not found — using default config")
+        return cfg
+
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#") or line.startswith("//"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        val = val.strip()
+
+        if key in _int_keys:
+            try:
+                cfg[key] = int(val)
+            except ValueError:
+                pass
+            continue
+
+        if key in _str_keys:
+            cfg[key] = val
+            continue
+
+        # Servo: s=N,min,max,neutral,deadzone,trim,speed,reversed
+        if key == "s":
+            p = val.split(",")
+            if len(p) >= 1:
+                idx = int(p[0]) - 1
+                while len(cfg["servos"]) <= idx:
+                    cfg["servos"].append({"min": 0, "max": 180, "n": 90,
+                                          "d": 4, "t": 0, "sp": 50, "r": 0})
+                sv = cfg["servos"][idx]
+                if len(p) > 1: sv["min"] = int(p[1])
+                if len(p) > 2: sv["max"] = int(p[2])
+                if len(p) > 3: sv["n"]   = int(p[3])
+                if len(p) > 4: sv["d"]   = int(p[4])
+                if len(p) > 5: sv["t"]   = int(p[5])
+                if len(p) > 6: sv["sp"]  = int(p[6])
+                if len(p) > 7: sv["r"]   = int(p[7])
+            continue
+
+        # Sound bank: sb=dir,numfiles[,r]  (r = random flag for VMusic)
+        if key == "sb":
+            p = val.split(",")
+            if len(p) >= 2:
+                cfg["sbs"].append({
+                    "dir": p[0],
+                    "n":   int(p[1]),
+                    "r":   len(p) > 2 and p[2].strip() == "r",
+                })
+            continue
+
+        # Serial string: sstr=Name|command  (or sstr=command if no name)
+        if key == "sstr":
+            if "|" in val:
+                name, s = val.split("|", 1)
+            else:
+                name, s = "", val
+            cfg["sstr"].append({"n": name, "s": s})
+            continue
+
+        # Button: b=N,Action[,Arg1[,Arg2]]
+        if key in ("b", "lb", "ab"):
+            p = val.split(",")
+            if len(p) >= 2:
+                btn_idx = int(p[0]) - 1
+                if 0 <= btn_idx < 9:
+                    act = _parse_action(p, offset=1)
+                    layer = {"b": "p", "lb": "l", "ab": "a"}[key]
+                    cfg["buttons"][btn_idx][layer] = act
+            continue
+
+        # Gesture: g=GestureStr,Action[,Arg1[,Arg2]]
+        if key == "g":
+            p = val.split(",")
+            if len(p) >= 2:
+                seq = p[0]
+                act = _parse_action(p, offset=1)
+                cfg["gestures"].append({
+                    "seq": seq,
+                    "t": act.get("t", 0),
+                    "x": act.get("x", 0),
+                    "y": act.get("y", 0),
+                })
+            continue
+
+        # Ignored firmware-only keys: domemode, domegest, rnd, ackgest, etc.
+
+    cfg["sstr_user_cnt"] = len(cfg["sstr"])
+    return cfg
+
+
+# ---------------------------------------------------------------------------
+# Config state — loaded from example_config.txt, mutated by POST /api/config
+# ---------------------------------------------------------------------------
+
+_EXAMPLE_CONFIG = os.path.join(_PROJECT_DIR, "example_config.txt")
+_config = parse_example_config(_EXAMPLE_CONFIG)
 
 _monitor = {
     "seq": 3,
     "lines": [
         {"t": "Serial monitor initialized", "c": "info"},
-        {"t": "Loaded 27 serial commands from config", "c": "info"},
+        {"t": f"Loaded {len(_config['sstr'])} serial commands from config", "c": "info"},
         {"t": "Dome driver ready @ RoboClaw 128", "c": "info"},
     ],
 }
@@ -167,13 +246,13 @@ _info = {
     "version":   "1.3",
     "board_rev": "1.1",
     "mcu":       "ESP32-S3 N16R8",
-    "date":      "Jun 19 2026",
+    "date":      "Jun 23 2026",
     "drive":    "roboteq-pwm",
     "dome":     "roboclaw",
-    "audio":    "hcr",
-    "wifi_ssid":  "amidala",
+    "audio":    _config.get("audiohw", "hcr"),
+    "wifi_ssid":  _config.get("wifissid", "amidala"),
     "wifi_ip":    "192.168.4.1",
-    "sstr_used":  3,
+    "sstr_used":  len(_config["sstr"]),
     "free_heap":  290816,
 }
 
@@ -234,7 +313,13 @@ class _Handler(SimpleHTTPRequestHandler):
             return
         if path == "/api/estop":
             print("  ESTOP!")
-            _monitor["lines"].append({"t": "! EMERGENCY STOP", "c": "tx"})
+            _monitor["lines"].append({"t": "! EMERGENCY STOP", "c": "info"})
+            _monitor["seq"] += 1
+            self._text("OK")
+            return
+        if path == "/api/resume":
+            print("  RESUME")
+            _monitor["lines"].append({"t": "RESUME", "c": "info"})
             _monitor["seq"] += 1
             self._text("OK")
             return
@@ -244,8 +329,8 @@ class _Handler(SimpleHTTPRequestHandler):
             _monitor["lines"].append({"t": "> " + cmd, "c": "tx"})
             _monitor["lines"].append({"t": "  (echoed by dev server)", "c": "info"})
             _monitor["seq"] += 1
-            if len(_monitor["lines"]) > 32:
-                _monitor["lines"] = _monitor["lines"][-32:]
+            if len(_monitor["lines"]) > 256:
+                _monitor["lines"] = _monitor["lines"][-256:]
             self._text("OK")
             return
         if path == "/api/dome":

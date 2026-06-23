@@ -22,24 +22,8 @@ static uint8_t            sUserSerialCount = 0;
 // Serial monitor log buffer
 // ---------------------------------------------------------------------------
 
-#define MON_LINES    256
-#define MON_LINE_LEN 96
-
-struct MonLine { char text[MON_LINE_LEN]; char cls; }; // cls: 't'=tx 'r'=rx 'i'=info
-
-static MonLine   sMonBuf[MON_LINES];
-static uint8_t   sMonHead  = 0;
-static uint8_t   sMonCount = 0;
-static uint32_t  sMonSeq   = 0;
-
-static void monAppend(const char* text, char cls = 'i') {
-    strncpy(sMonBuf[sMonHead].text, text, MON_LINE_LEN - 1);
-    sMonBuf[sMonHead].text[MON_LINE_LEN - 1] = '\0';
-    sMonBuf[sMonHead].cls = cls;
-    sMonHead = (sMonHead + 1) % MON_LINES;
-    if (sMonCount < MON_LINES) sMonCount++;
-    sMonSeq++;
-}
+#define MONITOR_BUF_OWNER
+#include "monitor_buf.h"
 
 // ---------------------------------------------------------------------------
 // SD card config write-back
@@ -855,10 +839,10 @@ static void handleApiMonitorGet() {
     String json = "{\"seq\":";
     json += String(sMonSeq);
     json += ",\"lines\":[";
-    uint8_t start = (sMonCount < MON_LINES) ? 0 : sMonHead;
-    for (uint8_t i = 0; i < sMonCount; i++) {
+    uint16_t start = (sMonCount < MON_LINES) ? 0 : sMonHead;
+    for (uint16_t i = 0; i < sMonCount; i++) {
         if (i > 0) json += ",";
-        uint8_t idx = (start + i) % MON_LINES;
+        uint16_t idx = (start + i) % MON_LINES;
         json += "{\"t\":\"";
         for (const char* p = sMonBuf[idx].text; *p; p++) {
             if (*p == '"' || *p == '\\') json += '\\';
