@@ -7872,6 +7872,21 @@ footer a:hover { opacity: 1; }
 </style>
 <style>
 .note-row{padding:.3rem 0 .6rem;color:var(--muted);font-size:.72rem;line-height:1.5;border-bottom:1px solid var(--border)}
+.sc-section{margin-top:1.6rem}
+.sc-heading{font-size:.72rem;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;padding:.5rem 0 .4rem;border-bottom:1px solid var(--border)}
+.sc-desc{font-size:.72rem;color:var(--muted);padding:.5rem 0 .3rem;line-height:1.55}
+.sc-row{display:flex;align-items:center;padding:.45rem 0;border-bottom:1px solid var(--border);gap:.5rem}
+.sc-val{flex:1;font-size:.78rem;font-family:ui-monospace,'SF Mono',Menlo,monospace;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-row input{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.3rem .5rem;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.78rem;box-sizing:border-box;border-radius:4px}
+.sc-row input:focus{outline:none;border-color:var(--accent)}
+.sc-acts{display:flex;gap:.1rem;flex-shrink:0}
+.be,.bs,.bc,.bd{background:none;border:none;color:var(--muted);font-size:1rem;padding:.2rem .4rem;opacity:.7;cursor:pointer}
+.be:hover,.bs:hover{opacity:1;color:var(--accent)}
+.bc:hover,.bd:hover{opacity:1}
+.add-row{padding:.7rem 0}
+.btn-add{background:none;border:1px solid var(--border);color:var(--text);padding:.35rem 1.1rem;font-family:inherit;font-size:.78rem;letter-spacing:.12em;cursor:pointer;border-radius:4px;transition:border-color .15s,color .15s}
+.btn-add:hover{border-color:var(--accent);color:var(--accent)}
+.sc-empty{color:var(--muted);font-size:.78rem;padding:.6rem 0;letter-spacing:.08em}
 </style>
 <script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
 </head>
@@ -7880,7 +7895,7 @@ footer a:hover { opacity: 1; }
   <a class="back" href="/">&#9664; BACK</a>
   <div class="page-title"><span class="dot"></span><span class="label">Safety</span><span class="dot"></span></div>
 </div>
-<main>
+<main id="main">
   <div id="status">LOADING&#8230;</div>
 </main>
 <script>
@@ -8141,6 +8156,8 @@ function buildPage(SCHEMA, endpoint, callback) {
 }
 </script>
 <script>
+// ---- Schema-driven fields (failsafe + stall timeout) -----------------------
+
 var SCHEMA = [
   {section:'Controller Failsafe'},
   {key:'fst', label:'Failsafe Timeout', type:'number', min:1000, max:3000, note:'ms'},
@@ -8148,20 +8165,123 @@ var SCHEMA = [
   {key:'domestall', label:'Stall Timeout', type:'number', min:100, max:5000, note:'ms'},
 ];
 
+// ---- Safety broadcast lists ------------------------------------------------
+
+var _estop  = [];
+var _resume = [];
+var _edKey  = null; // 'estop' or 'resume'
+var _edIdx  = -1;
+var _isNew  = false;
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderList(arr, listKey, containerId) {
+  var h = '';
+  if (arr.length === 0 && !(_isNew && _edKey === listKey)) {
+    h += '<div class="sc-empty">No commands configured.</div>';
+  }
+  arr.forEach(function(cmd, i) {
+    if (_edKey === listKey && _edIdx === i && !_isNew) {
+      h += '<div class="sc-row">'
+        + '<input type="text" id="sc-input" value="'+esc(cmd)+'" placeholder="Serial command">'
+        + '<div class="sc-acts">'
+        + '<button class="bs" onclick="saveEdit(\''+listKey+'\','+i+')" title="Save">&#10003;</button>'
+        + '<button class="bc" onclick="cancelEdit()" title="Cancel">&#10005;</button>'
+        + '</div></div>';
+    } else {
+      h += '<div class="sc-row">'
+        + '<div class="sc-val">'+esc(cmd)+'</div>'
+        + '<div class="sc-acts">'
+        + '<button class="be" onclick="startEdit(\''+listKey+'\','+i+')" title="Edit">&#9998;</button>'
+        + '<button class="bd" onclick="delCmd(\''+listKey+'\','+i+')" title="Delete">&#10005;</button>'
+        + '</div></div>';
+    }
+  });
+  if (_isNew && _edKey === listKey) {
+    h += '<div class="sc-row">'
+      + '<input type="text" id="sc-input" value="" placeholder="Serial command">'
+      + '<div class="sc-acts">'
+      + '<button class="bs" onclick="saveNew(\''+listKey+'\')" title="Save">&#10003;</button>'
+      + '<button class="bc" onclick="cancelEdit()" title="Cancel">&#10005;</button>'
+      + '</div></div>';
+  }
+  h += '<div class="add-row"><button class="btn-add" onclick="addCmd(\''+listKey+'\')">+ Add Command</button></div>';
+  document.getElementById(containerId).innerHTML = h;
+  if ((_edIdx >= 0 || _isNew) && _edKey === listKey) {
+    var el = document.getElementById('sc-input');
+    if (el) el.focus();
+  }
+}
+
+function renderSafetyLists() {
+  renderList(_estop,  'estop',  'estop-list');
+  renderList(_resume, 'resume', 'resume-list');
+}
+
+function startEdit(key, i)  { _edKey=key; _edIdx=i; _isNew=false; renderSafetyLists(); }
+function cancelEdit()       { _edKey=null; _edIdx=-1; _isNew=false; renderSafetyLists(); }
+function addCmd(key)        { if (_isNew) return; _edKey=key; _edIdx=-1; _isNew=true; renderSafetyLists(); }
+
+function saveEdit(key, i) {
+  var s = (document.getElementById('sc-input').value||'').trim();
+  if (!s) { showToast('Command cannot be empty', true); return; }
+  var apiKey = key+'str_'+i;
+  fetch('/api/config', {
+    method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:'key='+encodeURIComponent(apiKey)+'&value='+encodeURIComponent(s)
+  }).then(function(r){
+    if (!r.ok) { showToast('Save failed', true); return; }
+    if (key === 'estop') _estop[i] = s; else _resume[i] = s;
+    _edKey=null; _edIdx=-1;
+    renderSafetyLists();
+    showToast('Saved');
+  }).catch(function(){ showToast('Network error', true); });
+}
+
+function saveNew(key) {
+  var s = (document.getElementById('sc-input').value||'').trim();
+  if (!s) { showToast('Command cannot be empty', true); return; }
+  fetch('/api/config', {
+    method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:'key='+encodeURIComponent(key+'str_add')+'&value='+encodeURIComponent(s)
+  }).then(function(r){
+    if (!r.ok) { showToast('Save failed', true); return; }
+    if (key === 'estop') _estop.push(s); else _resume.push(s);
+    _isNew=false; _edKey=null;
+    renderSafetyLists();
+    showToast('Added');
+  }).catch(function(){ showToast('Network error', true); });
+}
+
+function delCmd(key, i) {
+  var arr = (key === 'estop') ? _estop : _resume;
+  if (!confirm('Delete "'+arr[i]+'"?')) return;
+  fetch('/api/config', {
+    method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:'key='+encodeURIComponent(key+'str_del_'+i)
+  }).then(function(r){
+    if (!r.ok) { showToast('Delete failed', true); return; }
+    arr.splice(i, 1);
+    if (_edIdx >= i) _edIdx = -1;
+    renderSafetyLists();
+    showToast('Deleted');
+  }).catch(function(){ showToast('Network error', true); });
+}
+
+// ---- Page init -------------------------------------------------------------
+
 buildPage(SCHEMA, '/api/config', function() {
   var main = document.querySelector('main');
 
-  main.insertAdjacentHTML('afterbegin',
-    '<div class="info-banner">Settings that protect the droid and bystanders. '
-    + 'Changes take effect immediately on save.</div>');
-
+  // Add notes under schema rows
   var notes = {
     fst: 'Drive motors stop this many milliseconds after the last controller packet is received. '
        + 'Shorter values cut power faster when the remote disconnects or signal drops (1000–3000 ms).',
     domestall: 'If the dome motor runs but the encoder detects no movement for this long, '
              + 'the driver cuts power to protect against obstructions or mechanical jams (100–5000 ms).'
   };
-
   Object.keys(notes).forEach(function(k) {
     var row = main.querySelector('[data-key="' + k + '"]');
     if (row) {
@@ -8170,6 +8290,30 @@ buildPage(SCHEMA, '/api/config', function() {
       n.textContent = notes[k];
       row.after(n);
     }
+  });
+
+  // Inject safety broadcast sections after schema rows
+  main.insertAdjacentHTML('beforeend',
+    '<div class="sc-section">'
+    + '<div class="sc-heading">E-Stop Broadcast Commands</div>'
+    + '<div class="sc-desc">These serial commands are sent to the WCB when the emergency-stop button is pressed, '
+    + 'allowing every child device (servos, periscope, lights, etc.) to receive a stop signal. '
+    + 'Use the same serial string format as the Serial Commands page.</div>'
+    + '<div id="estop-list"></div>'
+    + '</div>'
+    + '<div class="sc-section">'
+    + '<div class="sc-heading">Resume Broadcast Commands</div>'
+    + '<div class="sc-desc">These serial commands are sent when the emergency-stop is lifted, '
+    + 'allowing child devices to reset and resume normal operation.</div>'
+    + '<div id="resume-list"></div>'
+    + '</div>'
+  );
+
+  // Load safety lists from config
+  fetch('/api/config').then(function(r){return r.json();}).then(function(d){
+    _estop  = d.estop_cmds  || [];
+    _resume = d.resume_cmds || [];
+    renderSafetyLists();
   });
 });
 </script>
@@ -8469,25 +8613,44 @@ footer a:hover { opacity: 1; }
 html,body{height:100%;display:flex;flex-direction:column;overflow:hidden;padding:0}
 .page-header{flex-shrink:0;padding:12px 22px 12px;max-width:none;margin:0}
 main{flex:1;display:flex;flex-direction:column;min-height:0;max-width:none;margin:0;padding:0;width:100%}
-.toolbar{display:flex;align-items:center;gap:.4rem;padding:.45rem 22px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.toolbar{display:flex;align-items:center;gap:.4rem;padding:.4rem 16px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;row-gap:.35rem}
 .dot{width:.55rem;height:.55rem;border-radius:50%;background:var(--border);flex-shrink:0;transition:background .4s}
 .dot.ok{background:#3a3;animation:pulse 2s ease infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .conn-lbl{font:500 11px/1 ui-monospace,'SF Mono',Menlo,monospace;color:var(--muted);letter-spacing:.1em;flex:1;min-width:4rem}
-.tbtn{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.22rem .7rem;font-family:inherit;font-size:.72rem;letter-spacing:.1em;cursor:pointer;flex-shrink:0;border-radius:4px;transition:border-color .15s,color .15s}
+/* 44px minimum touch target per Apple HIG / WCAG */
+.tbtn{background:var(--surface);border:1px solid var(--border);color:var(--text);
+      min-height:44px;padding:0 .9rem;font-family:inherit;font-size:.78rem;
+      letter-spacing:.1em;cursor:pointer;flex-shrink:0;border-radius:4px;
+      touch-action:manipulation;transition:border-color .15s,color .15s;
+      display:inline-flex;align-items:center;justify-content:center}
 .tbtn:hover{border-color:var(--accent);color:var(--accent)}
 .tbtn.on{border-color:var(--accent);background:rgba(143,45,59,.06)}
-.tsep{width:1px;height:1.1rem;background:var(--border);flex-shrink:0;margin:0 .15rem}
-.log{flex:1;overflow-y:auto;padding:.6rem 22px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.8rem;line-height:1.65;background:#1a1a1a;min-height:0}
+.tsep{width:1px;height:1.6rem;background:var(--border);flex-shrink:0;margin:0 .1rem;align-self:center}
+.log{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:.6rem 16px;
+     font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.8rem;
+     line-height:1.65;background:#1a1a1a;min-height:0}
 .ll{white-space:pre-wrap;word-break:break-all}
 .ll.tx{color:#c47a35}
 .ll.rx{color:#7cf}
 .ll.info{color:#666}
-.send-bar{display:flex;gap:.5rem;padding:.6rem 22px;border-top:1px solid var(--border);flex-shrink:0}
-#cmd{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.35rem .6rem;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.85rem;min-width:0;border-radius:4px}
+.send-bar{display:flex;gap:.5rem;padding:.5rem 16px;border-top:1px solid var(--border);flex-shrink:0;align-items:stretch}
+/* 16px prevents iOS from auto-zooming the viewport on focus */
+#cmd{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);
+     padding:.5rem .65rem;font-family:ui-monospace,'SF Mono',Menlo,monospace;
+     font-size:16px;min-width:0;border-radius:4px;min-height:44px;
+     -webkit-appearance:none}
 #cmd:focus{outline:none;border-color:var(--accent)}
-#sbtn{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.35rem 1rem;font-family:inherit;font-size:.78rem;letter-spacing:.1em;cursor:pointer;flex-shrink:0;border-radius:4px;transition:border-color .15s,color .15s}
+#sbtn{background:var(--surface);border:1px solid var(--border);color:var(--text);
+      min-height:44px;padding:0 1.1rem;font-family:inherit;font-size:.85rem;
+      letter-spacing:.1em;cursor:pointer;flex-shrink:0;border-radius:4px;
+      touch-action:manipulation;transition:border-color .15s,color .15s;
+      display:inline-flex;align-items:center}
 #sbtn:hover{border-color:var(--accent);color:var(--accent)}
+@media(max-width:400px){
+  .tbtn{min-height:40px;padding:0 .65rem;font-size:.72rem}
+  #sbtn{padding:0 .8rem}
+}
 </style>
 <script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
 </head>
@@ -8512,7 +8675,9 @@ main{flex:1;display:flex;flex-direction:column;min-height:0;max-width:none;margi
   </div>
   <div class="log" id="log"></div>
   <div class="send-bar">
-    <input id="cmd" type="text" placeholder="Serial command (e.g. :LD00  or  DM:LEIA)" autocomplete="off"
+    <input id="cmd" type="text" placeholder="Serial command (e.g. :LD00)" autocomplete="off"
+           autocorrect="off" autocapitalize="none" spellcheck="false"
+           inputmode="text" enterkeyhint="send"
            onkeydown="if(event.key==='Enter')sendCmd()">
     <button id="sbtn" onclick="sendCmd()">Send</button>
   </div>

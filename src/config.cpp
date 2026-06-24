@@ -610,6 +610,18 @@ bool AmidalaConfig::processConfig(const char *cmd) {
       a->str[sizeof(a->str) - 1] = '\0';
     }
     params.serialcount++;
+  } else if (startswith(cmd, "estopstr=")) {
+    if (params.estopCmdCount < MAX_SAFETY_CMDS && *cmd) {
+      strncpy(params.EstopCmds[params.estopCmdCount].str, cmd, sizeof(AmidalaParameters::SafetyCmd::str) - 1);
+      params.EstopCmds[params.estopCmdCount].str[sizeof(AmidalaParameters::SafetyCmd::str) - 1] = '\0';
+      params.estopCmdCount++;
+    }
+  } else if (startswith(cmd, "resumestr=")) {
+    if (params.resumeCmdCount < MAX_SAFETY_CMDS && *cmd) {
+      strncpy(params.ResumeCmds[params.resumeCmdCount].str, cmd, sizeof(AmidalaParameters::SafetyCmd::str) - 1);
+      params.ResumeCmds[params.resumeCmdCount].str[sizeof(AmidalaParameters::SafetyCmd::str) - 1] = '\0';
+      params.resumeCmdCount++;
+    }
   } else if (startswith(cmd, "g=")) {
     char gesture[MAX_GESTURE_LENGTH + 1];
     char *gesture_end = &gesture[sizeof(gesture) - 1];

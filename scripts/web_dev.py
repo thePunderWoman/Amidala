@@ -105,9 +105,11 @@ def parse_example_config(path):
         "altbtn":        0,
         "mutebutton":    0,
         "altdomestick":  0,
-        "sbs":      [],
-        "servos":   [],
-        "sstr":     [],
+        "sbs":         [],
+        "servos":      [],
+        "sstr":        [],
+        "estop_cmds":  [],
+        "resume_cmds": [],
         "buttons":  [_make_button() for _ in range(9)],
         "gestures": [],
         "gadgets_cfg": [{"type": 0, "sstr": []} for _ in range(7)],
@@ -193,6 +195,14 @@ def parse_example_config(path):
             else:
                 name, s = "", val
             cfg["sstr"].append({"n": name, "s": s})
+            continue
+
+        # Safety broadcast commands: estopstr=cmd  resumestr=cmd
+        if key == "estopstr" and val and len(cfg["estop_cmds"]) < 16:
+            cfg["estop_cmds"].append(val)
+            continue
+        if key == "resumestr" and val and len(cfg["resume_cmds"]) < 16:
+            cfg["resume_cmds"].append(val)
             continue
 
         # Button: b=N,Action[,Arg1[,Arg2]]
@@ -314,12 +324,16 @@ class _Handler(SimpleHTTPRequestHandler):
         if path == "/api/estop":
             print("  ESTOP!")
             _monitor["lines"].append({"t": "! EMERGENCY STOP", "c": "info"})
+            for cmd in _config.get("estop_cmds", []):
+                _monitor["lines"].append({"t": cmd, "c": "tx"})
             _monitor["seq"] += 1
             self._text("OK")
             return
         if path == "/api/resume":
             print("  RESUME")
             _monitor["lines"].append({"t": "RESUME", "c": "info"})
+            for cmd in _config.get("resume_cmds", []):
+                _monitor["lines"].append({"t": cmd, "c": "tx"})
             _monitor["seq"] += 1
             self._text("OK")
             return
@@ -503,6 +517,30 @@ class _Handler(SimpleHTTPRequestHandler):
                 _config["sstr"].append({"n": name, "s": s})
             elif 0 <= idx < len(_config["sstr"]):
                 _config["sstr"][idx] = {"n": name, "s": s}
+        # estopstr_del_N / estopstr_N / estopstr_add
+        elif key.startswith("estopstr_del_"):
+            idx = int(key[13:])
+            if 0 <= idx < len(_config["estop_cmds"]):
+                _config["estop_cmds"].pop(idx)
+        elif key == "estopstr_add":
+            if value and len(_config["estop_cmds"]) < 16:
+                _config["estop_cmds"].append(value)
+        elif key.startswith("estopstr_") and key[9:].isdigit():
+            idx = int(key[9:])
+            if 0 <= idx < len(_config["estop_cmds"]) and value:
+                _config["estop_cmds"][idx] = value
+        # resumestr_del_N / resumestr_N / resumestr_add
+        elif key.startswith("resumestr_del_"):
+            idx = int(key[14:])
+            if 0 <= idx < len(_config["resume_cmds"]):
+                _config["resume_cmds"].pop(idx)
+        elif key == "resumestr_add":
+            if value and len(_config["resume_cmds"]) < 16:
+                _config["resume_cmds"].append(value)
+        elif key.startswith("resumestr_") and key[10:].isdigit():
+            idx = int(key[10:])
+            if 0 <= idx < len(_config["resume_cmds"]) and value:
+                _config["resume_cmds"][idx] = value
         elif key in _config:
             try:
                 _config[key] = int(value)

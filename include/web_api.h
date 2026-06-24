@@ -227,6 +227,24 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     }
     json += "],";
 
+    // Safety broadcast commands
+    json += "\"estop_cmds\":[";
+    for (uint8_t i = 0; i < p.estopCmdCount; i++) {
+        if (i > 0) json += ",";
+        json += "\"";
+        json += String(p.EstopCmds[i].str);
+        json += "\"";
+    }
+    json += "],";
+    json += "\"resume_cmds\":[";
+    for (uint8_t i = 0; i < p.resumeCmdCount; i++) {
+        if (i > 0) json += ",";
+        json += "\"";
+        json += String(p.ResumeCmds[i].str);
+        json += "\"";
+    }
+    json += "],";
+
     // Gesture assignments
     json += "\"gestures\":[";
     char gseq[MAX_GESTURE_LENGTH + 1];

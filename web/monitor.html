@@ -12,25 +12,44 @@
 html,body{height:100%;display:flex;flex-direction:column;overflow:hidden;padding:0}
 .page-header{flex-shrink:0;padding:12px 22px 12px;max-width:none;margin:0}
 main{flex:1;display:flex;flex-direction:column;min-height:0;max-width:none;margin:0;padding:0;width:100%}
-.toolbar{display:flex;align-items:center;gap:.4rem;padding:.45rem 22px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.toolbar{display:flex;align-items:center;gap:.4rem;padding:.4rem 16px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;row-gap:.35rem}
 .dot{width:.55rem;height:.55rem;border-radius:50%;background:var(--border);flex-shrink:0;transition:background .4s}
 .dot.ok{background:#3a3;animation:pulse 2s ease infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .conn-lbl{font:500 11px/1 ui-monospace,'SF Mono',Menlo,monospace;color:var(--muted);letter-spacing:.1em;flex:1;min-width:4rem}
-.tbtn{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.22rem .7rem;font-family:inherit;font-size:.72rem;letter-spacing:.1em;cursor:pointer;flex-shrink:0;border-radius:4px;transition:border-color .15s,color .15s}
+/* 44px minimum touch target per Apple HIG / WCAG */
+.tbtn{background:var(--surface);border:1px solid var(--border);color:var(--text);
+      min-height:44px;padding:0 .9rem;font-family:inherit;font-size:.78rem;
+      letter-spacing:.1em;cursor:pointer;flex-shrink:0;border-radius:4px;
+      touch-action:manipulation;transition:border-color .15s,color .15s;
+      display:inline-flex;align-items:center;justify-content:center}
 .tbtn:hover{border-color:var(--accent);color:var(--accent)}
 .tbtn.on{border-color:var(--accent);background:rgba(143,45,59,.06)}
-.tsep{width:1px;height:1.1rem;background:var(--border);flex-shrink:0;margin:0 .15rem}
-.log{flex:1;overflow-y:auto;padding:.6rem 22px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.8rem;line-height:1.65;background:#1a1a1a;min-height:0}
+.tsep{width:1px;height:1.6rem;background:var(--border);flex-shrink:0;margin:0 .1rem;align-self:center}
+.log{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:.6rem 16px;
+     font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.8rem;
+     line-height:1.65;background:#1a1a1a;min-height:0}
 .ll{white-space:pre-wrap;word-break:break-all}
 .ll.tx{color:#c47a35}
 .ll.rx{color:#7cf}
 .ll.info{color:#666}
-.send-bar{display:flex;gap:.5rem;padding:.6rem 22px;border-top:1px solid var(--border);flex-shrink:0}
-#cmd{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.35rem .6rem;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.85rem;min-width:0;border-radius:4px}
+.send-bar{display:flex;gap:.5rem;padding:.5rem 16px;border-top:1px solid var(--border);flex-shrink:0;align-items:stretch}
+/* 16px prevents iOS from auto-zooming the viewport on focus */
+#cmd{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);
+     padding:.5rem .65rem;font-family:ui-monospace,'SF Mono',Menlo,monospace;
+     font-size:16px;min-width:0;border-radius:4px;min-height:44px;
+     -webkit-appearance:none}
 #cmd:focus{outline:none;border-color:var(--accent)}
-#sbtn{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.35rem 1rem;font-family:inherit;font-size:.78rem;letter-spacing:.1em;cursor:pointer;flex-shrink:0;border-radius:4px;transition:border-color .15s,color .15s}
+#sbtn{background:var(--surface);border:1px solid var(--border);color:var(--text);
+      min-height:44px;padding:0 1.1rem;font-family:inherit;font-size:.85rem;
+      letter-spacing:.1em;cursor:pointer;flex-shrink:0;border-radius:4px;
+      touch-action:manipulation;transition:border-color .15s,color .15s;
+      display:inline-flex;align-items:center}
 #sbtn:hover{border-color:var(--accent);color:var(--accent)}
+@media(max-width:400px){
+  .tbtn{min-height:40px;padding:0 .65rem;font-size:.72rem}
+  #sbtn{padding:0 .8rem}
+}
 </style>
 <script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
 </head>
@@ -55,7 +74,9 @@ main{flex:1;display:flex;flex-direction:column;min-height:0;max-width:none;margi
   </div>
   <div class="log" id="log"></div>
   <div class="send-bar">
-    <input id="cmd" type="text" placeholder="Serial command (e.g. :LD00  or  DM:LEIA)" autocomplete="off"
+    <input id="cmd" type="text" placeholder="Serial command (e.g. :LD00)" autocomplete="off"
+           autocorrect="off" autocapitalize="none" spellcheck="false"
+           inputmode="text" enterkeyhint="send"
            onkeydown="if(event.key==='Enter')sendCmd()">
     <button id="sbtn" onclick="sendCmd()">Send</button>
   </div>

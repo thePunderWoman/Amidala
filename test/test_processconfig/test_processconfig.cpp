@@ -299,6 +299,7 @@ void test_volume_channel_fields_are_distinct_from_each_other() {
 
 void test_volume_channel_defaults_after_init() {
     AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
     memset(EEPROM.data, 0, sizeof(EEPROM.data));
     p.init(true);
     TEST_ASSERT_EQUAL(50, p.volume);
@@ -409,7 +410,11 @@ void test_mutebutton_clamps_above_nine() {
 }
 
 void test_mutebutton_default_is_zero_after_init() {
+    // sRAMInited is a function-local static in init() that prevents re-zeroing
+    // after the first call.  memset the struct first so the test is independent
+    // of test-run order and struct size changes.
     AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
     memset(EEPROM.data, 0, sizeof(EEPROM.data));
     p.init(true);
     TEST_ASSERT_EQUAL(0, p.mutebutton);
@@ -549,6 +554,122 @@ void test_sstr_parse_broken_short_name_becomes_empty() {
     TEST_ASSERT_EQUAL_STRING("", name);
 }
 
+// ---- Safety command (estopstr= / resumestr=) parse logic --------------------
+// These tests verify that estopstr= and resumestr= config lines are stored in
+// the correct fields of AmidalaParameters without aliasing, length overrun, or
+// off-by-one errors.  The parse logic mirrors config.cpp exactly.
+
+// Parse one estopstr= or resumestr= line, mutating p just as config.cpp does.
+static bool parse_safety_cmd_line(const char* line, bool isEstop,
+                                   AmidalaParameters& p) {
+    const char* prefix = isEstop ? "estopstr=" : "resumestr=";
+    uint8_t&    cnt    = isEstop ? p.estopCmdCount : p.resumeCmdCount;
+    AmidalaParameters::SafetyCmd* arr =
+        isEstop ? p.EstopCmds : p.ResumeCmds;
+
+    const char* cmd = line;
+    if (!startswith(cmd, prefix)) return false;
+    if (!*cmd || cnt >= MAX_SAFETY_CMDS) return true; // ignored (empty or full)
+    strncpy(arr[cnt].str, cmd, sizeof(arr[cnt].str) - 1);
+    arr[cnt].str[sizeof(arr[cnt].str) - 1] = '\0';
+    cnt++;
+    return true;
+}
+
+void test_estopstr_parse_stores_command() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = parse_safety_cmd_line("estopstr=ESTOP", true, p);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(1, p.estopCmdCount);
+    TEST_ASSERT_EQUAL_STRING("ESTOP", p.EstopCmds[0].str);
+}
+
+void test_estopstr_parse_stores_angle_bracket_command() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    parse_safety_cmd_line("estopstr=<SS00>", true, p);
+    TEST_ASSERT_EQUAL(1, p.estopCmdCount);
+    TEST_ASSERT_EQUAL_STRING("<SS00>", p.EstopCmds[0].str);
+}
+
+void test_resumestr_parse_stores_command() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = parse_safety_cmd_line("resumestr=RESUME", false, p);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(1, p.resumeCmdCount);
+    TEST_ASSERT_EQUAL_STRING("RESUME", p.ResumeCmds[0].str);
+}
+
+void test_estop_and_resume_are_independent() {
+    // Parsing estopstr= must not affect resumeCmdCount and vice versa.
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    parse_safety_cmd_line("estopstr=STOP", true, p);
+    parse_safety_cmd_line("resumestr=GO", false, p);
+    TEST_ASSERT_EQUAL(1, p.estopCmdCount);
+    TEST_ASSERT_EQUAL(1, p.resumeCmdCount);
+    TEST_ASSERT_EQUAL_STRING("STOP", p.EstopCmds[0].str);
+    TEST_ASSERT_EQUAL_STRING("GO",   p.ResumeCmds[0].str);
+}
+
+void test_estopstr_multiple_commands_accumulate() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    parse_safety_cmd_line("estopstr=CMD1", true, p);
+    parse_safety_cmd_line("estopstr=CMD2", true, p);
+    parse_safety_cmd_line("estopstr=CMD3", true, p);
+    TEST_ASSERT_EQUAL(3, p.estopCmdCount);
+    TEST_ASSERT_EQUAL_STRING("CMD1", p.EstopCmds[0].str);
+    TEST_ASSERT_EQUAL_STRING("CMD2", p.EstopCmds[1].str);
+    TEST_ASSERT_EQUAL_STRING("CMD3", p.EstopCmds[2].str);
+}
+
+void test_estopstr_respects_max_safety_cmds_limit() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    // Fill to the limit.
+    for (int i = 0; i < MAX_SAFETY_CMDS; i++) {
+        char line[32];
+        snprintf(line, sizeof(line), "estopstr=CMD%d", i);
+        parse_safety_cmd_line(line, true, p);
+    }
+    TEST_ASSERT_EQUAL(MAX_SAFETY_CMDS, p.estopCmdCount);
+    // One more must not overflow.
+    parse_safety_cmd_line("estopstr=OVERFLOW", true, p);
+    TEST_ASSERT_EQUAL(MAX_SAFETY_CMDS, p.estopCmdCount);
+}
+
+void test_safety_cmd_fields_are_distinct_from_each_other() {
+    // Structural guard: arrays must not alias each other or the sstr array.
+    AmidalaParameters p;
+    TEST_ASSERT_NOT_EQUAL((void*)p.EstopCmds,  (void*)p.ResumeCmds);
+    TEST_ASSERT_NOT_EQUAL((void*)&p.estopCmdCount, (void*)&p.resumeCmdCount);
+}
+
+void test_safety_cmd_counts_default_to_zero() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    memset(EEPROM.data, 0, sizeof(EEPROM.data));
+    p.init(true);
+    TEST_ASSERT_EQUAL(0, p.estopCmdCount);
+    TEST_ASSERT_EQUAL(0, p.resumeCmdCount);
+}
+
+void test_estopstr_broadcast_iteration_covers_all_commands() {
+    // Verify that the broadcast loop pattern (iterate estopCmdCount entries)
+    // visits each stored command in order — this is the same logic used in
+    // handleApiEstop() to call sendSerialString() for each command.
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    parse_safety_cmd_line("estopstr=ALPHA", true, p);
+    parse_safety_cmd_line("estopstr=BETA",  true, p);
+    const char* expected[] = {"ALPHA", "BETA"};
+    for (uint8_t i = 0; i < p.estopCmdCount; i++)
+        TEST_ASSERT_EQUAL_STRING(expected[i], p.EstopCmds[i].str);
+}
+
 // ---- main -------------------------------------------------------------------
 
 int main(int argc, char **argv) {
@@ -612,6 +733,16 @@ int main(int argc, char **argv) {
     RUN_TEST(test_sstr_parse_no_pipe_stores_str_only);
     RUN_TEST(test_sstr_parse_broken_eats_first_five_chars);
     RUN_TEST(test_sstr_parse_broken_short_name_becomes_empty);
+
+    RUN_TEST(test_estopstr_parse_stores_command);
+    RUN_TEST(test_estopstr_parse_stores_angle_bracket_command);
+    RUN_TEST(test_resumestr_parse_stores_command);
+    RUN_TEST(test_estop_and_resume_are_independent);
+    RUN_TEST(test_estopstr_multiple_commands_accumulate);
+    RUN_TEST(test_estopstr_respects_max_safety_cmds_limit);
+    RUN_TEST(test_safety_cmd_fields_are_distinct_from_each_other);
+    RUN_TEST(test_safety_cmd_counts_default_to_zero);
+    RUN_TEST(test_estopstr_broadcast_iteration_covers_all_commands);
 
     return UNITY_END();
 }

@@ -183,6 +183,18 @@ struct AmidalaParameters {
   // auxserial3: enable UART2 at startup (default false).
   bool    auxserial3;
 
+  // ---- E-stop / Resume broadcast commands ----------------------------------
+  // Serial strings sent to the WCB whenever an emergency-stop or resume is
+  // triggered from the web UI.  Allows per-build customisation of which child
+  // devices receive stop/restart signals.
+  // Config keys: estopstr=<cmd>  resumestr=<cmd>  (one entry per line)
+#define MAX_SAFETY_CMDS 16
+  struct SafetyCmd { char str[48]; };
+  SafetyCmd EstopCmds[MAX_SAFETY_CMDS];
+  SafetyCmd ResumeCmds[MAX_SAFETY_CMDS];
+  uint8_t   estopCmdCount;
+  uint8_t   resumeCmdCount;
+
   // ---- WiFi access point -----------------------------------------------
   // wifion: enable the on-board WiFi soft-AP (default true).
   // wifiSSID: network name broadcast by the AP (max 32 chars).

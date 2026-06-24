@@ -223,6 +223,40 @@ static bool rewriteSerialStrings() {
     return true;
 }
 
+static bool rewriteSafetyCmds() {
+    String path = "/config.txt";
+    File f = SD.open(path, "r");
+    String out;
+    out.reserve(8192);
+    if (f) {
+        while (f.available()) {
+            String line = f.readStringUntil('\n');
+            if (line.endsWith("\r")) line.remove(line.length() - 1);
+            if (!line.startsWith("estopstr=") && !line.startsWith("resumestr="))
+                out += line + "\n";
+        }
+        f.close();
+    } else {
+        out = "#START\n#END\n";
+    }
+    String block;
+    for (uint8_t i = 0; i < sCtrl->params.estopCmdCount; i++)
+        block += "estopstr=" + String(sCtrl->params.EstopCmds[i].str) + "\n";
+    for (uint8_t i = 0; i < sCtrl->params.resumeCmdCount; i++)
+        block += "resumestr=" + String(sCtrl->params.ResumeCmds[i].str) + "\n";
+    int endIdx = out.lastIndexOf("#END");
+    if (endIdx >= 0)
+        out = out.substring(0, endIdx) + block + out.substring(endIdx);
+    else
+        out += block;
+    SD.remove(path);
+    File wf = SD.open(path, "w");
+    if (!wf) return false;
+    wf.print(out);
+    wf.close();
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // Servo config file helpers
 // ---------------------------------------------------------------------------
@@ -745,6 +779,60 @@ static void handleApiConfigPost() {
         }
     }
 
+    // estopstr_del_N / estopstr_N / estopstr_add
+    // resumestr_del_N / resumestr_N / resumestr_add
+    for (int pass = 0; pass < 2; pass++) {
+        const char* prefix   = (pass == 0) ? "estopstr" : "resumestr";
+        uint8_t&    cnt      = (pass == 0) ? sCtrl->params.estopCmdCount
+                                           : sCtrl->params.resumeCmdCount;
+        AmidalaParameters::SafetyCmd* arr =
+            (pass == 0) ? sCtrl->params.EstopCmds : sCtrl->params.ResumeCmds;
+
+        String delPfx = String(prefix) + "_del_";
+        String setPfx = String(prefix) + "_";
+
+        if (key.startsWith(delPfx)) {
+            int idx = key.substring(delPfx.length()).toInt();
+            if (idx >= 0 && idx < (int)cnt) {
+                memmove(&arr[idx], &arr[idx + 1],
+                        (cnt - idx - 1) * sizeof(AmidalaParameters::SafetyCmd));
+                cnt--;
+                rewriteSafetyCmds();
+                sServer.send(200, "text/plain", "OK");
+            } else {
+                sServer.send(400, "text/plain", "index out of range");
+            }
+            return;
+        }
+        if (key == String(prefix) + "_add") {
+            if (cnt < MAX_SAFETY_CMDS && value.length() > 0) {
+                strncpy(arr[cnt].str, value.c_str(), sizeof(arr[cnt].str) - 1);
+                arr[cnt].str[sizeof(arr[cnt].str) - 1] = '\0';
+                cnt++;
+                rewriteSafetyCmds();
+                sServer.send(200, "text/plain", "OK");
+            } else {
+                sServer.send(cnt >= MAX_SAFETY_CMDS ? 507 : 400,
+                             "text/plain",
+                             cnt >= MAX_SAFETY_CMDS ? "list full" : "empty string");
+            }
+            return;
+        }
+        if (key.startsWith(setPfx) && key.length() > setPfx.length() &&
+            isDigit(key.charAt(setPfx.length()))) {
+            int idx = key.substring(setPfx.length()).toInt();
+            if (idx >= 0 && idx < (int)cnt && value.length() > 0) {
+                strncpy(arr[idx].str, value.c_str(), sizeof(arr[idx].str) - 1);
+                arr[idx].str[sizeof(arr[idx].str) - 1] = '\0';
+                rewriteSafetyCmds();
+                sServer.send(200, "text/plain", "OK");
+            } else {
+                sServer.send(400, "text/plain", "index out of range or empty");
+            }
+            return;
+        }
+    }
+
     // Generic key=value — delegate to processConfig
     String cmd = key + "=" + value;
     if (!sCtrl->fConfig.processConfig(cmd.c_str())) {
@@ -763,7 +851,8 @@ static void handleApiEstop() {
     if (sCtrl) {
         sCtrl->emergencyStop();
         sCtrl->domeEmergencyStop();
-        sCtrl->sendSerialString("ESTOP");
+        for (uint8_t i = 0; i < sCtrl->params.estopCmdCount; i++)
+            sCtrl->sendSerialString(sCtrl->params.EstopCmds[i].str);
     }
     sServer.send(200, "text/plain", "OK");
 }
@@ -773,6 +862,8 @@ static void handleApiResume() {
     if (sCtrl) {
         sCtrl->enableController();
         sCtrl->enableDomeController();
+        for (uint8_t i = 0; i < sCtrl->params.resumeCmdCount; i++)
+            sCtrl->sendSerialString(sCtrl->params.ResumeCmds[i].str);
     }
     sServer.send(200, "text/plain", "OK");
 }
