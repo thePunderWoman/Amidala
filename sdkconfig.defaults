@@ -1,0 +1,5 @@
+# Disable OTA rollback — the bootloader will not revert to the previous slot
+# if the new firmware crashes before calling esp_ota_mark_app_valid_cancel_rollback().
+# Without this, hardware-init crashes (e.g. pin-conflict during SPI setup) can
+# trigger repeated rollbacks and eventually a permanent boot loop.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=n

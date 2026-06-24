@@ -6,7 +6,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
-#include "esp_partition.h"
+#include <Update.h>
 #include "SD.h"
 #include "web_api.h"
 #include "controller.h"
@@ -1053,106 +1053,38 @@ static void handleApiMonitorPost() {
 // Firmware update (OTA)
 // ---------------------------------------------------------------------------
 
-// Write directly to the factory partition using esp_partition_write(), bypassing
-// esp_ota which requires an otadata partition we deliberately don't have.
-// Sectors are erased on demand as data arrives.  Writes are kept 4-byte aligned
-// by buffering any trailing bytes across chunk boundaries.
-
-static constexpr uint32_t    kFwSectorSize = 4096;
-static const esp_partition_t* sFwPart      = nullptr;
-static uint32_t               sFwOffset    = 0;
-static uint32_t               sFwEraseEnd  = 0;
-static bool                   sFwOk        = false;
-static uint8_t                sFwTail[4];
-static uint8_t                sFwTailLen   = 0;
-
-static bool fwFlushBytes(const uint8_t* data, size_t len) {
-    uint32_t need = sFwOffset + (uint32_t)len;
-    while (sFwEraseEnd < need) {
-        if (esp_partition_erase_range(sFwPart, sFwEraseEnd, kFwSectorSize) != ESP_OK)
-            return false;
-        sFwEraseEnd += kFwSectorSize;
-    }
-    if (esp_partition_write(sFwPart, sFwOffset, data, len) != ESP_OK)
-        return false;
-    sFwOffset += (uint32_t)len;
-    return true;
-}
+// Uses the standard Arduino ESP32 Update class which writes to the inactive
+// OTA partition (ota_0 / ota_1) and switches the boot slot on completion.
+// This requires the OTA partition layout (ota_8MB.csv / ota_16MB.csv).
 
 static void handleUpdateUpload() {
     HTTPUpload& upload = sServer.upload();
     if (upload.status == UPLOAD_FILE_START) {
         monAppend("OTA: upload started", 'i');
-        sFwOk      = false;
-        sFwOffset  = 0;
-        sFwEraseEnd = 0;
-        sFwTailLen = 0;
-        sFwPart    = esp_partition_find_first(
-                         ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, "factory");
-        if (!sFwPart) monAppend("OTA: factory partition not found", 'i');
-
+        if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+            monAppend("OTA: begin failed", 'i');
+        }
     } else if (upload.status == UPLOAD_FILE_WRITE) {
-        if (!sFwPart) return;
-        const uint8_t* src = upload.buf;
-        size_t         rem = upload.currentSize;
-
-        // Drain the carry buffer first.
-        if (sFwTailLen > 0) {
-            uint8_t word[4];
-            memcpy(word, sFwTail, sFwTailLen);
-            size_t need = 4 - sFwTailLen;
-            if (rem < need) {
-                memcpy(sFwTail + sFwTailLen, src, rem);
-                sFwTailLen += (uint8_t)rem;
-                return;
-            }
-            memcpy(word + sFwTailLen, src, need);
-            if (!fwFlushBytes(word, 4)) {
-                monAppend("OTA: write error", 'i'); sFwPart = nullptr; return;
-            }
-            src += need; rem -= need; sFwTailLen = 0;
+        if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+            monAppend("OTA: write error", 'i');
         }
-
-        // Write the 4-byte-aligned bulk.
-        size_t aligned = rem & ~3u;
-        if (aligned > 0) {
-            if (!fwFlushBytes(src, aligned)) {
-                monAppend("OTA: write error", 'i'); sFwPart = nullptr; return;
-            }
-            src += aligned; rem -= aligned;
-        }
-
-        // Carry ≤3 trailing bytes into the next chunk.
-        if (rem > 0) {
-            memcpy(sFwTail, src, rem);
-            sFwTailLen = (uint8_t)rem;
-        }
-
     } else if (upload.status == UPLOAD_FILE_END) {
-        if (!sFwPart) return;
-        // Flush any remaining bytes padded with 0xFF (erased flash value).
-        if (sFwTailLen > 0) {
-            uint8_t padded[4] = {0xFF, 0xFF, 0xFF, 0xFF};
-            memcpy(padded, sFwTail, sFwTailLen);
-            if (!fwFlushBytes(padded, 4)) {
-                monAppend("OTA: write error", 'i'); sFwPart = nullptr; return;
-            }
+        if (Update.end(true)) {
+            monAppend("OTA: flash complete, restarting", 'i');
+        } else {
+            monAppend("OTA: end failed", 'i');
         }
-        monAppend("OTA: flash complete, restarting", 'i');
-        sFwOk   = true;
-        sFwPart = nullptr;
     }
 }
 
 static void handleUpdatePost() {
-    if (sFwOk) {
+    if (Update.hasError()) {
+        sServer.send(500, "text/plain", "UPDATE FAILED: see serial monitor");
+    } else {
+        sServer.sendHeader("Connection", "close");
         sServer.send(200, "text/plain", "OK");
         delay(200);
         ESP.restart();
-    } else {
-        String err = "UPDATE FAILED: FLASH FAILED: see serial monitor";
-        monAppend(err.c_str(), 'i');
-        sServer.send(500, "text/plain", err);
     }
 }
 

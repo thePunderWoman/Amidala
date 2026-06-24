@@ -5,10 +5,13 @@
 #include "debug.h"
 #include "drive_config.h"
 #include "controller.h"
+#include <esp_ota_ops.h>
 
 AmidalaController amidala;
 
 void setup() {
+  esp_ota_mark_app_valid_cancel_rollback();
+
   REELTWO_READY();
 
   randomSeed(analogRead(ANALOG1_PIN));

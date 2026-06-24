@@ -1,0 +1,15 @@
+# Amidala Firmware — 16 MB OTA partition table.
+#
+# Standard dual-OTA layout: the bootloader alternates between ota_0 and ota_1.
+# The Update class (Arduino ESP32) writes the new firmware to the inactive slot;
+# on restart the bootloader boots the newly flashed slot.
+#
+# Rollback is disabled via sdkconfig.defaults so the bootloader will not revert
+# to the previous slot if the app crashes before marking itself valid.
+#
+# Name,     Type,  SubType,  Offset,   Size
+nvs,        data,  nvs,      0x9000,   0x5000
+otadata,    data,  ota,      0xE000,   0x2000
+ota_0,      app,   ota_0,    0x10000,  0x780000
+ota_1,      app,   ota_1,    0x790000, 0x780000
+coredump,   data,  coredump, 0xFF0000, 0x10000
