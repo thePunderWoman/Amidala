@@ -1,6 +1,9 @@
 #include "controller.h"
 #include "dome_position_math.h"
 #include "xbee_spi.h"
+#ifdef USE_BT_CONTROLLER
+#include "bt_gamepad.h"
+#endif
 
 // Hardware globals defined in src/globals.cpp.
 // ServoDispatch& avoids including ServoDispatchDirect.h here, which would
@@ -83,6 +86,15 @@ void AmidalaController::setup() {
 
   if (params.wifion)
     fWiFiAP.begin(params.wifiSSID, params.wifiPassword, this);
+
+#ifdef USE_BT_CONTROLLER
+  gBTGamepad.setup();
+  gBTGamepad.setTargetAddr(params.btaddr);
+  // BT gamepad left stick drives when the primary XBee stick is absent.
+  fTankDrive.setGuestStick(gBTGamepad);
+  // BT gamepad right stick steers the dome when the XBee dome stick is absent.
+  fDomeDrive.setAltDomeStick(&gBTGamepad);
+#endif
 
   fConsole.println(F("Activating Servos"));
   fConsole.println(F("Activating Digital Outputs"));
@@ -210,6 +222,9 @@ void AmidalaController::setup() {
 void AmidalaController::animate() {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
   fDomeDrive.animate();
+#endif
+#ifdef USE_BT_CONTROLLER
+  gBTGamepad.animate();
 #endif
   if (params.wifion)
     fWiFiAP.handle();

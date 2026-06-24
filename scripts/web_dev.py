@@ -110,6 +110,7 @@ def parse_example_config(path):
         "sstr":        [],
         "estop_cmds":  [],
         "resume_cmds": [],
+        "btaddr":      "",
         "buttons":  [_make_button() for _ in range(9)],
         "gestures": [],
         "gadgets_cfg": [{"type": 0, "sstr": []} for _ in range(7)],
@@ -129,7 +130,7 @@ def parse_example_config(path):
                   "volumeChA", "volumeChB", "volumewheel", "altvolumewheel"}
     _str_keys  = {"startup", "rndon", "ackon", "goslow", "mix12", "auto",
                   "wifion", "wifissid", "wifipassword", "xbr", "xbl",
-                  "audiohw", "domeflip", "domeimu", "domech6"}
+                  "audiohw", "domeflip", "domeimu", "domech6", "btaddr"}
 
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
@@ -266,6 +267,11 @@ _info = {
     "free_heap":  290816,
 }
 
+_bt_state = {
+    "addr":     _config.get("btaddr", ""),
+    "scanning": False,
+    "results":  [],
+}
 
 _CSP = ("default-src 'self'; "
         "script-src 'self' 'unsafe-inline'; "
@@ -293,6 +299,17 @@ class _Handler(SimpleHTTPRequestHandler):
             return
         if path == "/api/monitor":
             self._json(_monitor)
+            return
+        if path == "/api/bt/status":
+            self._json({
+                "connected": bool(_bt_state["addr"]),
+                "addr": _bt_state["addr"],
+                "scanning": _bt_state["scanning"],
+                "local_addr": "AA:BB:CC:DD:EE:FF",
+            })
+            return
+        if path == "/api/bt/results":
+            self._json(_bt_state["results"])
             return
 
         # Map extension-less paths to .html (e.g. /config/general → general.html)
@@ -346,6 +363,34 @@ class _Handler(SimpleHTTPRequestHandler):
             if len(_monitor["lines"]) > 256:
                 _monitor["lines"] = _monitor["lines"][-256:]
             self._text("OK")
+            return
+        if path == "/api/bt/scan":
+            print("  BT      scan started")
+            _bt_state["scanning"] = True
+            _bt_state["results"] = [
+                {"addr": "AA:BB:CC:DD:EE:01", "name": "Xbox Wireless Controller", "rssi": -62},
+                {"addr": "AA:BB:CC:DD:EE:02", "name": "8BitDo Pro 2",             "rssi": -74},
+                {"addr": "AA:BB:CC:DD:EE:03", "name": "",                         "rssi": -81},
+            ]
+            _bt_state["scanning"] = False
+            self._json({"ok": True})
+            return
+        if path == "/api/bt/pair":
+            addr = params.get("addr", "")
+            print(f"  BT      pair {addr!r}")
+            _bt_state["addr"] = addr
+            _config["btaddr"] = addr
+            _monitor["lines"].append({"t": f"BT: pairing with {addr}", "c": "info"})
+            _monitor["seq"] += 1
+            self._json({"ok": True})
+            return
+        if path == "/api/bt/forget":
+            print("  BT      forget")
+            _bt_state["addr"] = ""
+            _config["btaddr"] = ""
+            _monitor["lines"].append({"t": "BT: cleared pairing", "c": "info"})
+            _monitor["seq"] += 1
+            self._json({"ok": True})
             return
         if path == "/api/dome":
             cmd = params.get("cmd", "")

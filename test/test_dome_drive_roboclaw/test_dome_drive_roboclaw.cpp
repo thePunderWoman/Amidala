@@ -740,6 +740,71 @@ void test_setEnable_false_blocks_joystick_drive() {
     sTestStick.state.analog.stick.rx = 0;
 }
 
+// ---- setAltDomeStick() — fallback when primary stick is disconnected ---------
+
+static JoystickController sAltStick;
+
+void test_alt_stick_used_when_primary_disconnected() {
+    // Primary stick disconnected, alt stick connected at full right deflection.
+    // Expected: driveFromJoystick() uses the alt stick and commands a non-zero speed.
+    auto drive = make_drive();
+    drive.setStateForTest(DomeDriveRoboClaw::kStateManual);
+    drive.setAltDomeStick(&sAltStick);
+
+    sTestStick.onDisconnect();
+    sAltStick.onConnect();
+    sAltStick.state.analog.stick.rx = 127;
+
+    drive.animate();
+
+    TEST_ASSERT_NOT_EQUAL(0.0f, drive.getLastCommandedSpeed());
+
+    // Cleanup
+    sAltStick.onDisconnect();
+    sAltStick.state.analog.stick.rx = 0;
+}
+
+void test_primary_stick_takes_priority_over_alt() {
+    // Both sticks connected — primary wins and the alt is ignored.
+    auto drive = make_drive();
+    drive.setStateForTest(DomeDriveRoboClaw::kStateManual);
+    drive.setAltDomeStick(&sAltStick);
+
+    sTestStick.onConnect();
+    sTestStick.state.analog.stick.rx = 0; // primary at centre
+    sAltStick.onConnect();
+    sAltStick.state.analog.stick.rx = 127; // alt at full deflection
+
+    drive.animate();
+
+    // Primary is centred → command should be zero (deadband).
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, drive.getLastCommandedSpeed());
+
+    // Cleanup
+    sTestStick.onDisconnect();
+    sTestStick.state.analog.stick.rx = 0;
+    sAltStick.onDisconnect();
+    sAltStick.state.analog.stick.rx = 0;
+}
+
+void test_alt_stick_idle_when_primary_disconnected_and_alt_centred() {
+    // Alt stick connected but at centre — should produce no motion.
+    auto drive = make_drive();
+    drive.setStateForTest(DomeDriveRoboClaw::kStateManual);
+    drive.setAltDomeStick(&sAltStick);
+
+    sTestStick.onDisconnect();
+    sAltStick.onConnect();
+    sAltStick.state.analog.stick.rx = 0; // centre
+
+    drive.animate();
+
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, drive.getLastCommandedSpeed());
+
+    // Cleanup
+    sAltStick.onDisconnect();
+}
+
 // ---- main -------------------------------------------------------------------
 
 int main(int argc, char **argv) {
@@ -863,6 +928,9 @@ int main(int argc, char **argv) {
     RUN_TEST(test_stop_preserves_kStateHomed);
     RUN_TEST(test_stop_zeros_motor_command);
     RUN_TEST(test_setEnable_false_blocks_joystick_drive);
+    RUN_TEST(test_alt_stick_used_when_primary_disconnected);
+    RUN_TEST(test_primary_stick_takes_priority_over_alt);
+    RUN_TEST(test_alt_stick_idle_when_primary_disconnected_and_alt_centred);
 
     return UNITY_END();
 }

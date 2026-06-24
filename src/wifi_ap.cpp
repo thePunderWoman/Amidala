@@ -11,6 +11,10 @@
 #include "web_api.h"
 #include "controller.h"
 #include "drive_config.h"
+#ifdef USE_BT_CONTROLLER
+#include "bt_gamepad.h"
+#include <BLEDevice.h>
+#endif
 
 static WebServer          sServer(80);
 static AmidalaController* sCtrl = nullptr;
@@ -174,6 +178,72 @@ static void injectBuiltinSerialCmds() {
     sGadgets[0].sstrCnt = added;
     for (uint8_t i = 0; i < added; i++)
         sGadgets[0].sstr[i] = base + 1 + i; // 1-based indices
+}
+
+// ---------------------------------------------------------------------------
+// Generic single-value config key helpers
+// ---------------------------------------------------------------------------
+
+// Replace (or insert) a "key=value\n" line in config.txt.
+// key must include the trailing '=' (e.g. "btaddr=").
+static bool updateConfigKey(const char* key, const char* value) {
+    String path = "/config.txt";
+    File f = SD.open(path, "r");
+    String out;
+    out.reserve(4096);
+    bool found = false;
+    if (f) {
+        while (f.available()) {
+            String line = f.readStringUntil('\n');
+            if (line.endsWith("\r")) line.remove(line.length() - 1);
+            if (line.startsWith(key)) {
+                out += String(key) + value + "\n";
+                found = true;
+            } else {
+                out += line + "\n";
+            }
+        }
+        f.close();
+    } else {
+        out = "#START\n#END\n";
+    }
+    if (!found) {
+        // Insert before #END.
+        int endIdx = out.lastIndexOf("#END");
+        String ins = String(key) + value + "\n";
+        if (endIdx >= 0)
+            out = out.substring(0, endIdx) + ins + out.substring(endIdx);
+        else
+            out += ins;
+    }
+    SD.remove(path);
+    File wf = SD.open(path, "w");
+    if (!wf) return false;
+    wf.print(out);
+    wf.close();
+    return true;
+}
+
+// Remove all lines starting with the given key prefix from config.txt.
+static bool removeConfigKey(const char* key) {
+    String path = "/config.txt";
+    File f = SD.open(path, "r");
+    if (!f) return false;
+    String out;
+    out.reserve(4096);
+    while (f.available()) {
+        String line = f.readStringUntil('\n');
+        if (line.endsWith("\r")) line.remove(line.length() - 1);
+        if (!line.startsWith(key))
+            out += line + "\n";
+    }
+    f.close();
+    SD.remove(path);
+    File wf = SD.open(path, "w");
+    if (!wf) return false;
+    wf.print(out);
+    wf.close();
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -1096,6 +1166,82 @@ static void handleConfigGadgets()       { sServer.send(200, "text/html", WEB_PAG
 static void handleSafety()             { sServer.send(200, "text/html", WEB_PAGE_SAFETY);           }
 static void handleComingSoon()          { sServer.send(200, "text/html", WEB_PAGE_COMING_SOON);     }
 static void handleDiagnostics()         { sServer.send(200, "text/html", WEB_PAGE_DIAGNOSTICS);      }
+#ifdef USE_BT_CONTROLLER
+static void handleConfigConnectivity()  { sServer.send(200, "text/html", WEB_PAGE_CONFIG_CONNECTIVITY); }
+#endif
+
+// ---------------------------------------------------------------------------
+// BT API endpoints
+// ---------------------------------------------------------------------------
+
+#ifdef USE_BT_CONTROLLER
+
+static void handleApiBtStatus() {
+    String json = "{";
+    json += "\"connected\":";
+    json += gBTGamepad.isConnected() ? "true" : "false";
+    json += ",\"addr\":\"";
+    json += String(gBTGamepad.connectedAddr());
+    json += "\",\"scanning\":";
+    json += gBTGamepad.isScanRunning() ? "true" : "false";
+    json += ",\"local_addr\":\"";
+    json += String(BLEDevice::getAddress().toString().c_str());
+    json += "\"}";
+    sServer.send(200, "application/json", json);
+}
+
+static void handleApiBtScan() {
+    gBTGamepad.startScan();
+    // Immediately return — results are polled via /api/bt/status
+    sServer.send(200, "application/json", "{\"ok\":true}");
+}
+
+static void handleApiBtResults() {
+    String json = "[";
+    for (int i = 0; i < gBTGamepad.getScanResultCount(); i++) {
+        if (i > 0) json += ",";
+        const BTScanResult& r = gBTGamepad.getScanResults()[i];
+        json += "{\"addr\":\"";
+        json += String(r.addr);
+        json += "\",\"name\":\"";
+        json += String(r.name);
+        json += "\",\"rssi\":";
+        json += String(r.rssi);
+        json += "}";
+    }
+    json += "]";
+    sServer.send(200, "application/json", json);
+}
+
+static void handleApiBtPair() {
+    String addr = sServer.arg("addr");
+    if (addr.length() == 0) {
+        sServer.send(400, "text/plain", "addr required");
+        return;
+    }
+    // Persist to config file.
+    if (sCtrl) {
+        strncpy(sCtrl->params.btaddr, addr.c_str(), sizeof(sCtrl->params.btaddr) - 1);
+        sCtrl->params.btaddr[sizeof(sCtrl->params.btaddr) - 1] = '\0';
+        // Write to SD.
+        updateConfigKey("btaddr=", addr.c_str());
+    }
+    gBTGamepad.pairWith(addr.c_str());
+    monAppend(("BT: pairing with " + addr).c_str(), 'i');
+    sServer.send(200, "application/json", "{\"ok\":true}");
+}
+
+static void handleApiBtForget() {
+    if (sCtrl) {
+        sCtrl->params.btaddr[0] = '\0';
+        removeConfigKey("btaddr=");
+    }
+    gBTGamepad.forget();
+    monAppend("BT: cleared pairing", 'i');
+    sServer.send(200, "application/json", "{\"ok\":true}");
+}
+
+#endif // USE_BT_CONTROLLER
 
 // ---------------------------------------------------------------------------
 // AmidalaWiFiAP
@@ -1160,6 +1306,14 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/api/config", HTTP_POST, handleApiConfigPost);
     sServer.on("/api/pins",   HTTP_GET,  handleApiPins);
     sServer.on("/diagnostics", HTTP_GET, handleDiagnostics);
+#ifdef USE_BT_CONTROLLER
+    sServer.on("/config/connectivity",   HTTP_GET,  handleConfigConnectivity);
+    sServer.on("/api/bt/status",         HTTP_GET,  handleApiBtStatus);
+    sServer.on("/api/bt/scan",           HTTP_POST, handleApiBtScan);
+    sServer.on("/api/bt/results",        HTTP_GET,  handleApiBtResults);
+    sServer.on("/api/bt/pair",           HTTP_POST, handleApiBtPair);
+    sServer.on("/api/bt/forget",         HTTP_POST, handleApiBtForget);
+#endif
 
     sServer.onNotFound([]() { sServer.send(404, "text/plain", "Not found"); });
 

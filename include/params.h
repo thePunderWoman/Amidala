@@ -195,6 +195,11 @@ struct AmidalaParameters {
   uint8_t   estopCmdCount;
   uint8_t   resumeCmdCount;
 
+  // ---- Bluetooth controller --------------------------------------------------
+  // btaddr: MAC address of a paired BLE HID gamepad (AA:BB:CC:DD:EE:FF format).
+  // Empty string means "connect to any BLE HID device found during scan."
+  char btaddr[18];
+
   // ---- WiFi access point -----------------------------------------------
   // wifion: enable the on-board WiFi soft-AP (default true).
   // wifiSSID: network name broadcast by the AP (max 32 chars).

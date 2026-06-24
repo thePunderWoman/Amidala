@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Connectivity — AMIDALA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/common.css">
+<script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; BACK</a>
+  <div class="page-title"><span class="dot"></span><span class="label">Connectivity</span><span class="dot"></span></div>
+</div>
+<main>
+  <div id="status">LOADING&#8230;</div>
+</main>
+<script src="/assets/edit.js"></script>
+<script>
+var SCHEMA = [
+  {section:'XBee Remotes'},
+  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address'},
+  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address'},
+  {section:'WiFi Access Point'},
+  {key:'wifion',       label:'Enable WiFi AP', type:'bool'},
+  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars'},
+  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars'}
+];
+
+buildPage(SCHEMA, '/api/config', function() {
+  // buildPage replaces main's innerHTML; inject the BT panel after it.
+  var panel = document.createElement('div');
+  panel.id = 'bt-panel';
+  document.querySelector('main').appendChild(panel);
+  refreshBTStatus();
+});
+
+// ---- Bluetooth panel -------------------------------------------------------
+
+var _scanning  = false;
+var _scanTimer = null;
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function refreshBTStatus() {
+  fetch('/api/bt/status').then(function(r) {
+    if (!r.ok) return;
+    return r.json();
+  }).then(function(d) {
+    if (!d) return;
+    var panel = document.getElementById('bt-panel');
+    if (!panel) return;
+
+    var connText = d.connected
+      ? (d.addr ? escHtml(d.addr) : 'Connected')
+      : 'Not connected';
+
+    var html = '<div class="section-label">Bluetooth Controller</div>';
+
+    // Status row
+    html += '<div class="row"><div class="row-label">Controller</div>';
+    html += '<div class="rv">' + connText + '</div>';
+    html += '<div class="ri">';
+    html += '<button class="be-action" onclick="startScan()" ' + (_scanning ? 'disabled' : '') + '>'
+          + (_scanning ? 'Scanning…' : 'Scan') + '</button>';
+    if (d.connected) {
+      html += '<button class="be-action" onclick="forgetDevice()">Forget</button>';
+    }
+    html += '</div></div>';
+
+    // Local ESP32 BT address row
+    if (d.local_addr) {
+      html += '<div class="row"><div class="row-label">ESP32 address</div>'
+            + '<div class="rv">' + escHtml(d.local_addr) + '</div></div>';
+    }
+
+    // Scan results
+    html += '<div id="bt-results-area"></div>';
+
+    panel.innerHTML = html;
+    if (_scanning) pollScanResults();
+  }).catch(function() {
+    // /api/bt/status not available — firmware built without USE_BT_CONTROLLER
+    var panel = document.getElementById('bt-panel');
+    if (panel) panel.innerHTML = '';
+  });
+}
+
+function startScan() {
+  if (_scanning) return;
+  _scanning = true;
+  fetch('/api/bt/scan', {method:'POST'}).then(function() {
+    refreshBTStatus();
+    if (_scanTimer) clearTimeout(_scanTimer);
+    _scanTimer = setTimeout(function() {
+      _scanning = false;
+      pollScanResults();
+    }, 6000);
+  });
+}
+
+function pollScanResults() {
+  fetch('/api/bt/results').then(function(r) { return r.json(); }).then(function(devs) {
+    renderScanResults(devs);
+    if (_scanning) setTimeout(pollScanResults, 1000);
+    else refreshBTStatus();
+  }).catch(function() {});
+}
+
+function renderScanResults(devs) {
+  var area = document.getElementById('bt-results-area');
+  if (!area) return;
+  if (!devs || devs.length === 0) {
+    area.innerHTML = '<div class="row"><div class="row-label" style="color:var(--muted)">'
+      + (_scanning ? 'Scanning…' : 'No BLE HID controllers found.') + '</div></div>';
+    return;
+  }
+  var html = '<div class="section-label">Found Controllers</div>';
+  for (var i = 0; i < devs.length; i++) {
+    var d = devs[i];
+    var name = d.name || 'Unknown Controller';
+    html += '<div class="row">';
+    html += '<div class="row-label">' + escHtml(name)
+          + '<br><span style="font:500 11px/1 ui-monospace,\'SF Mono\',Menlo,monospace;color:var(--muted)">'
+          + escHtml(d.addr) + ' &nbsp;&middot;&nbsp; ' + d.rssi + ' dBm</span></div>';
+    html += '<div class="ri"><button class="be-action" onclick="pairWith(' + JSON.stringify(d.addr) + ')">Pair</button></div>';
+    html += '</div>';
+  }
+  area.innerHTML = html;
+}
+
+function pairWith(addr) {
+  fetch('/api/bt/pair', {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:'addr=' + encodeURIComponent(addr)
+  }).then(function() {
+    _scanning = false;
+    refreshBTStatus();
+  });
+}
+
+function forgetDevice() {
+  if (!confirm('Forget the paired Bluetooth controller?')) return;
+  fetch('/api/bt/forget', {method:'POST'}).then(function() { refreshBTStatus(); });
+}
+</script>
+</body>
+</html>

@@ -647,7 +647,16 @@ void DomeDriveRoboClaw::driveFromJoystick() {
         return;
     }
 
-    if (!fDomeStick.isConnected()) {
+    // Primary stick has priority; fall back to alt stick (e.g. BT gamepad).
+    JoystickController* stick = nullptr;
+    bool useLeft = fUseLeftStick;
+    if (fDomeStick.isConnected()) {
+        stick = &fDomeStick;
+    } else if (fAltDomeStick && fAltDomeStick->isConnected()) {
+        stick = fAltDomeStick;
+        useLeft = false; // alt stick always reads right-axis (BT gamepad right stick)
+    }
+    if (!stick) {
         if (fJoyWasConnected) {
             stop();
             fJoyWasConnected = false;
@@ -657,8 +666,8 @@ void DomeDriveRoboClaw::driveFromJoystick() {
     fJoyWasConnected = true;
 
     // Map the configured stick axis from raw [-128, 127] to [-1.0, 1.0].
-    int8_t rawX = fUseLeftStick ? fDomeStick.state.analog.stick.lx
-                                : fDomeStick.state.analog.stick.rx;
+    int8_t rawX = useLeft ? stick->state.analog.stick.lx
+                          : stick->state.analog.stick.rx;
     float m = (float)(rawX + 128) / 127.5f - 1.0f;
 
     // Deadband: ignore small deflections near centre.
@@ -669,9 +678,9 @@ void DomeDriveRoboClaw::driveFromJoystick() {
     }
 
     // L2/R2 trigger boosts speed above the configured base maximum.
-    float triggerVal = fUseLeftStick
-                           ? (float)fDomeStick.state.analog.button.l2 / 255.0f
-                           : (float)fDomeStick.state.analog.button.r2 / 255.0f;
+    float triggerVal = useLeft
+                           ? (float)stick->state.analog.button.l2 / 255.0f
+                           : (float)stick->state.analog.button.r2 / 255.0f;
     float speed = fMaxSpeed + triggerVal * (1.0f - fMaxSpeed);
 
     // Negate to match hardware wiring (positive stick → motor drives dome CW as

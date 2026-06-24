@@ -170,9 +170,9 @@ footer a:hover{opacity:1;}
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="2.2"/><line x1="12" y1="13" x2="18" y2="8"/><path d="M11 5 A8 8 0 0 1 19.5 10.5"/></svg>
       <div><div class="name">Servos</div><div class="sub">Channels · limits</div></div>
     </a>
-    <a class="card" href="/config/xbee">
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><circle cx="12" cy="12" r="1.6" fill="var(--accent)" stroke="none"/><line x1="9" y1="6" x2="9" y2="3"/><line x1="15" y1="6" x2="15" y2="3"/><line x1="9" y1="18" x2="9" y2="21"/><line x1="15" y1="18" x2="15" y2="21"/></svg>
-      <div><div class="name">XBee</div><div class="sub">Remote addresses</div></div>
+    <a class="card" href="/config/connectivity">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 10.5 a10 10 0 0 1 14 0"/><path d="M8 13.5 a6 6 0 0 1 8 0"/><circle cx="12" cy="16.8" r="1.2" fill="var(--accent)" stroke="none"/><line x1="12" y1="16.8" x2="7" y2="5"/><line x1="12" y1="16.8" x2="17" y2="5"/></svg>
+      <div><div class="name">Connectivity</div><div class="sub">XBee · WiFi · Bluetooth</div></div>
     </a>
     <a class="card" href="/config/serial-strings">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10 l2.6 2 -2.6 2"/><line x1="12.5" y1="15" x2="16" y2="15"/></svg>
@@ -185,10 +185,6 @@ footer a:hover{opacity:1;}
     <a class="card" id="nav-rc" href="/config/rc-radio">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="11" rx="2"/><line x1="8" y1="8" x2="6" y2="4"/><circle cx="9" cy="13.5" r="1.7"/><circle cx="15" cy="13.5" r="1.7"/></svg>
       <div><div class="name">RC Radio</div><div class="sub">Channels · calibration</div></div>
-    </a>
-    <a class="card" href="/config/wifi">
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 10.5 a10 10 0 0 1 14 0"/><path d="M8 13.5 a6 6 0 0 1 8 0"/><circle cx="12" cy="16.8" r="1.2" fill="var(--accent)" stroke="none"/></svg>
-      <div><div class="name">WiFi</div><div class="sub">Access point</div></div>
     </a>
   </nav>
 
@@ -857,6 +853,735 @@ var SCHEMA = [
   {key:'myi2c',      label:"This Board's Address", type:'number', min:0, max:100}
 ];
 buildPage(SCHEMA, '/api/config');
+</script>
+</body>
+</html>
+)html";
+
+static const char WEB_PAGE_CONFIG_CONNECTIVITY[] = R"html(<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Connectivity — AMIDALA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Amidala web UI — shared styles.
+   Embed script inlines this into every page's <style> block.
+   In dev mode (scripts/web_dev.py) it's served as a real file from /assets/common.css. */
+
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+
+:root {
+  --accent:      #8f2d3b;
+  --bg:          #e9edf1;
+  --surface:     #ffffff;
+  --surface2:    #f4f7f9;
+  --border:      #dce3e9;
+  --text:        #2b333b;
+  --muted:       #707b85;
+  --danger:      #a8323a;
+  --danger-soft: rgba(168,50,58,.08);
+  --tex:         rgba(43,51,59,.07);
+  --glow:        rgba(143,45,59,.10);
+  /* legacy aliases — pages referencing --gold / --dim / --fg still work */
+  --gold: var(--accent);
+  --dim:  var(--muted);
+  --fg:   var(--text);
+}
+
+body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(120% 62% at 50% -12%, var(--glow), transparent 58%),
+    radial-gradient(var(--tex) .9px, transparent 1.2px),
+    radial-gradient(var(--tex) .9px, transparent 1.2px);
+  background-size: auto, 14px 14px, 23px 23px;
+  background-position: center top, 0 0, 7px 11px;
+  color: var(--text);
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100vh;
+  padding: 24px 22px 80px;
+}
+
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: inherit; }
+.hidden { display: none !important; }
+[hidden] { display: none !important; }
+
+/* ---- page shell ---- */
+
+.page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 4px 0 18px; border-bottom: 1px solid var(--border);
+  max-width: 820px; margin: 0 auto;
+}
+
+.back {
+  display: inline-flex; align-items: center; gap: 8px;
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .18em; color: var(--muted); transition: color .15s;
+  flex-shrink: 0; white-space: nowrap;
+}
+.back:hover { color: var(--accent); }
+
+.page-title {
+  display: flex; align-items: center; gap: 13px;
+}
+.page-title .dot {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+  display: inline-block; flex-shrink: 0;
+}
+.page-title .label {
+  font: 600 20px/1 'Cormorant Garamond', Georgia, serif;
+  letter-spacing: .16em; color: var(--text); text-transform: uppercase;
+}
+
+main {
+  max-width: 820px; margin: 0 auto; padding-top: 28px;
+}
+
+#status {
+  text-align: center; padding: 2rem; color: var(--muted);
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: .2em;
+}
+
+/* ---- section labels ---- */
+
+.section-label {
+  margin: 26px 0 4px; border-bottom: 1px solid var(--border); padding-bottom: 10px;
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .22em; text-transform: uppercase; color: var(--muted);
+}
+
+/* ---- settings rows ---- */
+
+.row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--border);
+}
+.row-label {
+  font: 400 15px/1.3 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: var(--text); flex: 1;
+}
+.rv {
+  font: 500 14px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  color: var(--accent);
+}
+.ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.ri input, .ri select {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); padding: .3rem .5rem; border-radius: 4px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: .82rem;
+  min-width: 80px;
+}
+.ri input:focus, .ri select:focus { outline: none; border-color: var(--accent); }
+
+/* edit / save / cancel */
+.be {
+  background: none; border: none; padding: 4px; color: var(--muted);
+  cursor: pointer; display: flex; align-items: center;
+  opacity: .7; transition: opacity .15s, color .15s; flex-shrink: 0;
+}
+.be:hover { opacity: 1; color: var(--accent); }
+.bs {
+  background: var(--accent); border: none; border-radius: 4px;
+  padding: 5px 12px; font: 600 10px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .1em; color: #fff; cursor: pointer;
+  flex-shrink: 0; transition: opacity .15s;
+}
+.bs:hover { opacity: .85; }
+.bc {
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  padding: 4px 10px; font: 500 10px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  color: var(--muted); cursor: pointer; flex-shrink: 0; transition: border-color .15s;
+}
+.bc:hover { border-color: var(--muted); }
+
+/* action-type row button */
+.be-action {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+  padding: 6px 16px; font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .1em; color: var(--text); cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.be-action:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- tabs (used on controllers + droid-control) ---- */
+
+.tabs {
+  display: flex; border-bottom: 1px solid var(--border);
+  max-width: 820px; margin: 0 auto;
+}
+.tab {
+  flex: 1; background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--muted); font-family: inherit; font-size: .72rem;
+  letter-spacing: .1em; text-transform: uppercase; padding: .85rem 1rem; cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ---- toast ---- */
+
+.toast {
+  position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); padding: .55rem 1.4rem;
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: .08em;
+  pointer-events: none; white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(30,45,55,.12);
+  animation: _tfi .15s ease, _tfo .3s 1.9s ease forwards; z-index: 9999;
+}
+.toast-err { border-color: var(--danger); color: var(--danger); }
+@keyframes _tfi {
+  from { opacity:0; transform:translateX(-50%) translateY(6px) }
+  to   { opacity:1; transform:translateX(-50%) translateY(0) }
+}
+@keyframes _tfo { from{opacity:1} to{opacity:0} }
+
+/* ---- E-Stop (injected into page-header by edit.js) ---- */
+
+#estop {
+  display: inline-flex; align-items: center; gap: 9px;
+  background: var(--danger-soft); border: 1px solid var(--danger); border-radius: 6px;
+  padding: 8px 14px; font: 600 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .2em; color: var(--danger); cursor: pointer;
+  transition: background .15s, color .15s; flex-shrink: 0;
+}
+#estop:hover { background: var(--danger); color: #fff; }
+#estop .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: inline-block; }
+
+/* ---- shared page utilities ---- */
+
+.info-banner {
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--muted); padding: .7rem 1rem; font-size: .75rem;
+  line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
+}
+
+/* sub-section heading used in droid-control + controllers */
+.sec-hdr {
+  font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--muted); padding: .55rem 0 .35rem;
+  border-bottom: 1px solid var(--border); margin: .6rem 0 0;
+}
+.sub-hdr {
+  font-size: .65rem; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); padding: .4rem 0 .25rem;
+  border-bottom: 1px solid var(--border); margin: .6rem 0 0;
+}
+
+/* touch-control buttons */
+.dc-btn, .angle-btn, .grid-btn {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); padding: .85rem .5rem; border-radius: 4px;
+  cursor: pointer; font-size: .88rem; text-align: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .12s, border-color .12s;
+}
+.dc-btn:hover, .dc-btn:active,
+.angle-btn:hover, .angle-btn:active,
+.grid-btn:hover, .grid-btn:active { background: var(--surface2); border-color: var(--accent); }
+.grid-btn { line-height: 1.3; min-height: 3.5rem; }
+.grid-btn.full { grid-column: 1/-1; }
+
+/* ---- footer (injected by edit.js on sub-pages) ---- */
+
+footer {
+  max-width: 820px; margin: 48px auto 0; padding-bottom: 32px;
+  text-align: center;
+  font: 500 10px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .24em; color: var(--muted); opacity: .7;
+}
+footer a {
+  color: inherit; text-decoration: none;
+  border-bottom: 1px solid currentColor; padding-bottom: 1px;
+  transition: opacity .15s;
+}
+footer a:hover { opacity: 1; }
+
+/* ---- dark mode (colors from design system renderVals()) ---- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --accent:      #cf6470;
+    --bg:          #0f1216;
+    --surface:     #161b21;
+    --surface2:    #1c232a;
+    --border:      #283139;
+    --text:        #e7ecf0;
+    --muted:       #828e98;
+    --danger:      #d05b63;
+    --danger-soft: rgba(208,91,99,.14);
+    --tex:         rgba(231,236,240,.06);
+    --glow:        rgba(207,100,112,.17);
+  }
+}
+:root[data-theme="dark"] {
+  --accent:      #cf6470;
+  --bg:          #0f1216;
+  --surface:     #161b21;
+  --surface2:    #1c232a;
+  --border:      #283139;
+  --text:        #e7ecf0;
+  --muted:       #828e98;
+  --danger:      #d05b63;
+  --danger-soft: rgba(208,91,99,.14);
+  --tex:         rgba(231,236,240,.06);
+  --glow:        rgba(207,100,112,.17);
+}
+
+/* ---- right header group (theme toggle + e-stop, injected by edit.js) ---- */
+.hdr-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* ---- theme toggle button ---- */
+#theme-toggle {
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  padding: 5px 9px; color: var(--muted); cursor: pointer; flex-shrink: 0;
+  font-size: .85rem; line-height: 1; transition: border-color .15s, color .15s;
+}
+#theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+<style>
+.bt-section{margin:1.5rem 0 0}
+.bt-heading{font:600 .7rem/1 ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin:0 0 .75rem}
+.bt-status{display:flex;align-items:center;gap:.6rem;margin:.5rem 0 1rem;font-size:.85rem}
+.bt-dot{width:.55rem;height:.55rem;border-radius:50%;background:var(--border);flex-shrink:0}
+.bt-dot.ok{background:#3a3}
+.bt-addr{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.8rem;color:var(--muted)}
+.bt-actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem}
+.bta{background:var(--surface);border:1px solid var(--border);color:var(--text);
+     padding:.4rem .9rem;font-family:inherit;font-size:.78rem;letter-spacing:.1em;
+     cursor:pointer;border-radius:4px;touch-action:manipulation;
+     transition:border-color .15s,color .15s}
+.bta:hover{border-color:var(--accent);color:var(--accent)}
+.bta.danger:hover{border-color:#c44;color:#c44}
+.bt-results{margin-top:.75rem}
+.bt-results-title{font:600 .65rem/1 ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-bottom:.4rem}
+.bt-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:.35rem}
+.bt-item{display:flex;align-items:center;gap:.65rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.5rem .75rem}
+.bt-item-info{flex:1;min-width:0}
+.bt-item-name{font-size:.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt-item-addr{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.75rem;color:var(--muted)}
+.bt-item-rssi{font-size:.75rem;color:var(--muted);flex-shrink:0}
+.bt-pair-btn{background:transparent;border:1px solid var(--border);color:var(--text);
+             padding:.25rem .65rem;font-size:.75rem;letter-spacing:.1em;cursor:pointer;
+             border-radius:4px;touch-action:manipulation;white-space:nowrap;
+             transition:border-color .15s,color .15s;flex-shrink:0}
+.bt-pair-btn:hover{border-color:var(--accent);color:var(--accent)}
+.bt-empty{font-size:.82rem;color:var(--muted);padding:.5rem 0}
+.local-addr{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.78rem;color:var(--muted);margin-top:.35rem}
+</style>
+<script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; BACK</a>
+  <div class="page-title"><span class="dot"></span><span class="label">Connectivity</span><span class="dot"></span></div>
+</div>
+<main>
+  <div id="status">LOADING&#8230;</div>
+  <div id="bt-panel" style="display:none"></div>
+</main>
+<script>
+/* Amidala web UI — edit-in-place widget + shared config page helpers.
+   Embed script inlines this into every config sub-page.
+   In dev mode (scripts/web_dev.py) it's served as /assets/edit.js. */
+
+// ----------------------------------------------------------------- theme ----
+
+function _toggleTheme() {
+  var t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem('amidala-theme', t);
+  var btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = t === 'dark' ? '☀' : '☾';
+}
+
+// ------------------------------------------------------------------ toast ---
+
+function showToast(msg, isErr) {
+  var t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' toast-err' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
+}
+
+// -------------------------------------------------------- edit-in-place -----
+
+function startEdit(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
+  row.querySelector('.rv').hidden = true;
+  row.querySelector('.ri').hidden = false;
+  btn.hidden = true;
+  row.querySelector('.bs').hidden = false;
+  row.querySelector('.bc').hidden = false;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  row.querySelector('.rv').hidden = false;
+  row.querySelector('.ri').hidden = true;
+  row.querySelector('.be').hidden = false;
+  row.querySelector('.bs').hidden = true;
+  btn.hidden = true;
+}
+
+async function doSave(btn) {
+  var row = btn.closest('.row');
+  var key = row.dataset.key;
+  var inp = row.querySelector('input,select');
+  var val = inp.value;
+  var prev = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
+  try {
+    var r = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'key=' + encodeURIComponent(key) + '&value=' + encodeURIComponent(val)
+    });
+    if (r.ok) {
+      var dv = row.querySelector('.rv');
+      var rt = row.dataset.type;
+      if (rt === 'bool' || rt === 'select') {
+        var sel = row.querySelector('select');
+        dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'password') {
+        dv.textContent = '••••••••';
+      } else {
+        dv.textContent = val;
+      }
+      doCancel(row.querySelector('.bc'));
+      showToast('Saved');
+    } else {
+      showToast('Save failed: ' + await r.text(), true);
+    }
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+// ------------------------------------------------ schema-driven row builder --
+
+function dispValue(s, val) {
+  if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
+  if (s.type === 'select') {
+    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    return found ? found.l : val;
+  }
+  if (s.type === 'password') return '••••••••';
+  return String(val);
+}
+
+function buildInput(s, val) {
+  if (s.type === 'bool') {
+    return '<select>'
+      + '<option value="y"' + (val === 'y' ? ' selected' : '') + '>On</option>'
+      + '<option value="n"' + (val === 'n' ? ' selected' : '') + '>Off</option>'
+      + '</select>';
+  }
+  if (s.type === 'select') {
+    var opts = (s.options || []).map(function(op) {
+      return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
+    }).join('');
+    return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'number') {
+    return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
+  }
+  if (s.type === 'password') {
+    return '<input type="password" value="' + val + '" maxlength="' + (s.maxlength || 64) + '">';
+  }
+  return '<input type="text" value="' + val + '"' + (s.maxlength ? ' maxlength="' + s.maxlength + '"' : '') + '>';
+}
+
+async function doAction(btn) {
+  var cmd      = btn.dataset.cmd;
+  var endpoint = btn.dataset.endpoint || '/api/monitor';
+  var prev = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
+  try {
+    var r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'cmd=' + encodeURIComponent(cmd)
+    });
+    showToast(r.ok ? 'Sent' : 'Failed', !r.ok);
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
+
+function buildRow(s, val) {
+  if (s.type === 'action') {
+    return '<div class="row">'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
+      + (s.btnLabel || 'Send') + '</button>'
+      + '</div>';
+  }
+  var disp = dispValue(s, val);
+  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  if (s.readOnly) {
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<div class="rv">' + disp + '</div>'
+      + '</div>';
+  }
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    + '<div class="row-label">' + s.label + '</div>'
+    + '<div class="rv">' + disp + '</div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
+    + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + '</div>';
+}
+
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var hdr = document.querySelector('.page-header');
+
+  // right-side group keeps the header at 3 flex children: [BACK] [TITLE] [GROUP]
+  var rg = document.createElement('div');
+  rg.className = 'hdr-right';
+
+  // theme toggle
+  var tt = document.createElement('button');
+  tt.id = 'theme-toggle';
+  tt.title = 'Toggle dark / light mode';
+  tt.textContent = document.documentElement.dataset.theme === 'dark' ? '☀' : '☾';
+  tt.onclick = _toggleTheme;
+  rg.appendChild(tt);
+
+  // e-stop
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.innerHTML = '<span class="dot"></span>E-STOP';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  rg.appendChild(b);
+
+  if (hdr) hdr.appendChild(rg);
+  else document.body.appendChild(rg);
+})();
+
+// --------------------------------------------------------------- footer -------
+
+(function() {
+  if (location.pathname.indexOf('monitor') !== -1) return;
+  var f = document.createElement('footer');
+  f.innerHTML = '<a href="https://github.com/thePunderWoman/Amidala/wiki" target="_blank" rel="noopener">DOCUMENTATION</a>';
+  document.body.appendChild(f);
+})();
+
+// ------------------------------------------------- hash-based tab nav --------
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
+
+function buildPage(SCHEMA, endpoint, callback) {
+  fetch(endpoint)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var html = '';
+      var skip = false;
+      SCHEMA.forEach(function(s) {
+        if (s.section) {
+          skip = s.when ? !s.when(d) : false;
+          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          return;
+        }
+        if (skip) return;
+        if (s.when && !s.when(d)) return;
+        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
+        html += buildRow(s, val);
+      });
+      document.querySelector('main').innerHTML = html;
+      if (callback) callback(d);
+    })
+    .catch(function() {
+      var el = document.getElementById('status');
+      if (el) el.textContent = 'Failed to load settings.';
+    });
+}
+</script>
+<script>
+var SCHEMA = [
+  {section:'XBee Remotes'},
+  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address'},
+  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address'},
+  {section:'WiFi Access Point'},
+  {key:'wifion',       label:'Enable WiFi AP', type:'bool'},
+  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars'},
+  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars'}
+];
+
+buildPage(SCHEMA, '/api/config', function() {
+  renderBTPanel();
+});
+
+// ---- Bluetooth panel -------------------------------------------------------
+
+var _btLocalAddr = '';
+var _scanning    = false;
+var _scanTimer   = null;
+
+function renderBTPanel() {
+  var panel = document.getElementById('bt-panel');
+  panel.style.display = '';
+  refreshBTStatus();
+}
+
+function refreshBTStatus() {
+  fetch('/api/bt/status').then(function(r) {
+    if (!r.ok) return;
+    return r.json();
+  }).then(function(d) {
+    if (!d) return;
+    _btLocalAddr = d.local_addr || '';
+    var panel = document.getElementById('bt-panel');
+    var html = '<div class="bt-section">';
+    html += '<div class="bt-heading">Bluetooth Controller</div>';
+    html += '<div class="bt-status">';
+    html += '<div class="bt-dot' + (d.connected ? ' ok' : '') + '"></div>';
+    html += '<span>' + (d.connected ? 'Connected' : 'Not connected') + '</span>';
+    if (d.connected && d.addr) {
+      html += '<span class="bt-addr">' + escHtml(d.addr) + '</span>';
+    }
+    html += '</div>';
+    if (_btLocalAddr) {
+      html += '<div class="local-addr">ESP32 BT address: ' + escHtml(_btLocalAddr) + '</div>';
+    }
+    html += '<div class="bt-actions" style="margin-top:.75rem">';
+    html += '<button class="bta" onclick="startScan()" ' + (_scanning ? 'disabled' : '') + '>' + (_scanning ? 'Scanning…' : 'Scan for Controllers') + '</button>';
+    if (d.connected) {
+      html += '<button class="bta danger" onclick="forgetDevice()">Forget</button>';
+    }
+    html += '</div>';
+    html += '<div id="bt-results-area"></div>';
+    html += '</div>';
+    panel.innerHTML = html;
+    if (_scanning) {
+      pollScanResults();
+    }
+  }).catch(function() {
+    // /api/bt/status not available (firmware built without USE_BT_CONTROLLER)
+    document.getElementById('bt-panel').style.display = 'none';
+  });
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function startScan() {
+  if (_scanning) return;
+  _scanning = true;
+  fetch('/api/bt/scan', {method:'POST'}).then(function() {
+    refreshBTStatus();
+    if (_scanTimer) clearTimeout(_scanTimer);
+    _scanTimer = setTimeout(function() {
+      _scanning = false;
+      pollScanResults();
+    }, 6000);
+  });
+}
+
+function pollScanResults() {
+  fetch('/api/bt/results').then(function(r) { return r.json(); }).then(function(devs) {
+    renderScanResults(devs);
+    if (_scanning) {
+      setTimeout(pollScanResults, 1000);
+    } else {
+      refreshBTStatus();
+    }
+  }).catch(function() {});
+}
+
+function renderScanResults(devs) {
+  var area = document.getElementById('bt-results-area');
+  if (!area) return;
+  if (!devs || devs.length === 0) {
+    area.innerHTML = _scanning
+      ? '<div class="bt-empty">Scanning…</div>'
+      : '<div class="bt-empty">No BLE HID controllers found.</div>';
+    return;
+  }
+  var html = '<div class="bt-results">';
+  html += '<div class="bt-results-title">Found Controllers</div>';
+  html += '<ul class="bt-list">';
+  for (var i = 0; i < devs.length; i++) {
+    var d = devs[i];
+    var name = d.name || 'Unknown Controller';
+    html += '<li class="bt-item">';
+    html += '<div class="bt-item-info">';
+    html += '<div class="bt-item-name">' + escHtml(name) + '</div>';
+    html += '<div class="bt-item-addr">' + escHtml(d.addr) + '</div>';
+    html += '</div>';
+    html += '<span class="bt-item-rssi">' + d.rssi + ' dBm</span>';
+    html += '<button class="bt-pair-btn" onclick="pairWith(' + JSON.stringify(d.addr) + ')">Pair</button>';
+    html += '</li>';
+  }
+  html += '</ul></div>';
+  area.innerHTML = html;
+}
+
+function pairWith(addr) {
+  fetch('/api/bt/pair', {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:'addr=' + encodeURIComponent(addr)
+  }).then(function() {
+    _scanning = false;
+    refreshBTStatus();
+  });
+}
+
+function forgetDevice() {
+  if (!confirm('Forget the paired Bluetooth controller?')) return;
+  fetch('/api/bt/forget', {method:'POST'}).then(function() {
+    refreshBTStatus();
+  });
+}
 </script>
 </body>
 </html>

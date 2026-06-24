@@ -39,11 +39,10 @@ void test_home_page_has_all_config_nav_links() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/dome"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/controllers"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/servos"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/xbee"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/connectivity"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/serial-strings"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/gadgets"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/rc-radio"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/config/wifi"));
 }
 
 void test_home_page_has_tools_nav_links() {
@@ -85,6 +84,20 @@ void test_wifi_page_uses_config_endpoint() {
 void test_xbee_page_uses_config_endpoint() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_XBEE, "/api/config"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_XBEE, "href=\"/\""));
+}
+
+void test_connectivity_page_has_all_sections() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/config"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "href=\"/\""));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'xbr'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'xbl'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wifion'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wifissid'"));
+    // BT section uses standard section-label class (no custom bt-* styles needed)
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "Bluetooth Controller"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/bt/status"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/bt/scan"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/bt/pair"));
 }
 
 void test_audio_page_uses_config_endpoint() {
@@ -284,6 +297,19 @@ void test_full_config_json_xbee_hex_format() {
     String json = buildFullConfigJson(p);
     TEST_ASSERT_TRUE(contains(json.c_str(), "\"xbr\":\"0A1B2C3D\""));
     TEST_ASSERT_TRUE(contains(json.c_str(), "\"xbl\":\"00000000\""));
+}
+
+void test_full_config_json_btaddr_empty_by_default() {
+    AmidalaParameters p = makeParams();
+    String json = buildFullConfigJson(p);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"btaddr\":\"\""));
+}
+
+void test_full_config_json_btaddr_stored_correctly() {
+    AmidalaParameters p = makeParams();
+    strncpy(p.btaddr, "AA:BB:CC:DD:EE:FF", sizeof(p.btaddr));
+    String json = buildFullConfigJson(p);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"btaddr\":\"AA:BB:CC:DD:EE:FF\""));
 }
 
 void test_full_config_json_audio_keys() {
@@ -567,6 +593,7 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_general_page_has_viewport_meta);
     RUN_TEST(test_wifi_page_uses_config_endpoint);
     RUN_TEST(test_xbee_page_uses_config_endpoint);
+    RUN_TEST(test_connectivity_page_has_all_sections);
     RUN_TEST(test_audio_page_uses_config_endpoint);
     RUN_TEST(test_rc_radio_page_uses_config_endpoint);
     RUN_TEST(test_dome_page_uses_config_endpoint);
@@ -612,6 +639,8 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_full_config_json_general_keys);
     RUN_TEST(test_full_config_json_wifi_keys);
     RUN_TEST(test_full_config_json_xbee_hex_format);
+    RUN_TEST(test_full_config_json_btaddr_empty_by_default);
+    RUN_TEST(test_full_config_json_btaddr_stored_correctly);
     RUN_TEST(test_full_config_json_audio_keys);
     RUN_TEST(test_full_config_json_rc_radio_keys);
     RUN_TEST(test_full_config_json_dome_keys);

@@ -670,6 +670,40 @@ void test_estopstr_broadcast_iteration_covers_all_commands() {
         TEST_ASSERT_EQUAL_STRING(expected[i], p.EstopCmds[i].str);
 }
 
+// ---- btaddr= parse tests ----------------------------------------------------
+
+// Mirror of the btaddr= parsing logic in config.cpp.
+static bool parse_btaddr_line(const char* line, AmidalaParameters& p) {
+    const char* cmd = line;
+    if (!startswith(cmd, "btaddr=")) return false;
+    strncpy(p.btaddr, cmd, sizeof(p.btaddr) - 1);
+    p.btaddr[sizeof(p.btaddr) - 1] = '\0';
+    return true;
+}
+
+void test_btaddr_parse_stores_address() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = parse_btaddr_line("btaddr=AA:BB:CC:DD:EE:FF", p);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_STRING("AA:BB:CC:DD:EE:FF", p.btaddr);
+}
+
+void test_btaddr_parse_empty_stays_empty() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = parse_btaddr_line("btaddr=", p);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_STRING("", p.btaddr);
+}
+
+void test_btaddr_defaults_to_empty_string() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    p.init(true);
+    TEST_ASSERT_EQUAL_STRING("", p.btaddr);
+}
+
 // ---- main -------------------------------------------------------------------
 
 int main(int argc, char **argv) {
@@ -743,6 +777,9 @@ int main(int argc, char **argv) {
     RUN_TEST(test_safety_cmd_fields_are_distinct_from_each_other);
     RUN_TEST(test_safety_cmd_counts_default_to_zero);
     RUN_TEST(test_estopstr_broadcast_iteration_covers_all_commands);
+    RUN_TEST(test_btaddr_parse_stores_address);
+    RUN_TEST(test_btaddr_parse_empty_stays_empty);
+    RUN_TEST(test_btaddr_defaults_to_empty_string);
 
     return UNITY_END();
 }

@@ -846,6 +846,10 @@ bool AmidalaConfig::processConfig(const char *cmd) {
     return true;
   } else if (boolparam(cmd, "auxserial3=", params.auxserial3)) {
     return true;
+  } else if (startswith(cmd, "btaddr=")) {
+    strncpy(params.btaddr, cmd, sizeof(params.btaddr) - 1);
+    params.btaddr[sizeof(params.btaddr) - 1] = '\0';
+    return true;
   } else if (boolparam(cmd, "wifion=", params.wifion)) {
     return true;
   } else if (startswith(cmd, "wifissid=")) {

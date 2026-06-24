@@ -104,6 +104,10 @@ public:
     void stop();
     void setEnable(bool enable)    { fEnabled = enable; }
     bool getEnable()         const { return fEnabled; }
+    // Set an alternative dome stick (e.g. BT gamepad right stick).  When the
+    // primary dome stick is not connected this stick is used instead.  The alt
+    // stick always reads from the right analog axis regardless of fUseLeftStick.
+    void setAltDomeStick(JoystickController* stick) { fAltDomeStick = stick; }
     void setInverted(bool invert)  { fInverted = invert; }
     void setMaxSpeed(float m)      { fMaxSpeed = max(0.0f, min(m, 1.0f)); }
     float getMaxSpeed()      const { return fMaxSpeed; }
@@ -293,6 +297,7 @@ private:
     // ---- Joystick state -----------------------------------------------------
 
     JoystickController& fDomeStick;
+    JoystickController* fAltDomeStick = nullptr; ///< Optional BT gamepad right stick
     float    fMaxSpeed        = 1.0f;
     bool     fUseLeftStick    = false;
     bool     fInverted        = false;
