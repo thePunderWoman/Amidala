@@ -579,7 +579,21 @@ static void handleApiInfo() {
                       sCtrl->params.wifiSSID,
                       WiFi.softAPIP().toString().c_str(),
                       sCtrl->params.serialcount,
-                      ESP.getFreeHeap()));
+                      ESP.getFreeHeap(),
+                      sCtrl->fDriveStick.isConnected(),
+                      sCtrl->fDomeStick.isConnected(),
+#ifdef USE_BT_CONTROLLER
+                      gBTGamepad.isConnected(),
+#else
+                      false,
+#endif
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+                      sCtrl->fDomeDrive.isHomed(),
+                      sCtrl->fDomeDrive.getCurrentDegrees()
+#else
+                      false, 0
+#endif
+                      ));
 }
 
 static void handleApiConfigGet() {

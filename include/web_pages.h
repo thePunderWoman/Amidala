@@ -638,6 +638,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -650,10 +653,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -669,6 +675,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -676,6 +692,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -691,6 +709,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -734,12 +757,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -841,16 +864,20 @@ function buildPage(SCHEMA, endpoint, callback) {
 <script>
 var SCHEMA = [
   {section:'Drive'},
-  {key:'goslow',     label:'Start in Slow Mode', type:'bool'},
-  {key:'mix12',      label:'Channel Mixing',     type:'bool'},
-  {key:'auto',       label:'Autocorrect Gestures', type:'bool'},
+  {key:'goslow',     label:'Start in Slow Mode',             type:'bool'},
+  {key:'mix12',      label:'Channel Mixing',                 type:'bool'},
+  {key:'auto',       label:'Autocorrect Gestures',           type:'bool'},
   {section:'Serial'},
-  {key:'serialbaud', label:'Baud Rate',          type:'number', min:300, max:115200},
-  {key:'serialdelim',label:'Delimiter (ASCII)',  type:'number', min:0,   max:255},
-  {key:'serialeol',  label:'EOL (ASCII)',         type:'number', min:0,   max:255},
+  {key:'serialbaud', label:'Baud Rate',                      type:'number', min:300, max:115200},
+  {key:'serialdelim',label:'Delimiter',                      type:'ascii-char'},
+  {key:'serialeol',  label:'End of Line',                    type:'select', options:[
+    {v:'10', l:'LF (\\n)'},
+    {v:'13', l:'CR (\\r)'},
+    {v:'0',  l:'CRLF (\\r\\n)'}
+  ]},
   {key:'auxserial3', label:'Aux Serial 3 (Software Serial)', type:'bool'},
   {section:'I²C'},
-  {key:'myi2c',      label:"This Board's Address", type:'number', min:0, max:100}
+  {key:'myi2c',      label:"This Board's Address",           type:'number', min:0, max:100}
 ];
 buildPage(SCHEMA, '/api/config');
 </script>
@@ -1146,36 +1173,6 @@ footer a:hover { opacity: 1; }
 }
 #theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
 </style>
-<style>
-.bt-section{margin:1.5rem 0 0}
-.bt-heading{font:600 .7rem/1 ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin:0 0 .75rem}
-.bt-status{display:flex;align-items:center;gap:.6rem;margin:.5rem 0 1rem;font-size:.85rem}
-.bt-dot{width:.55rem;height:.55rem;border-radius:50%;background:var(--border);flex-shrink:0}
-.bt-dot.ok{background:#3a3}
-.bt-addr{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.8rem;color:var(--muted)}
-.bt-actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem}
-.bta{background:var(--surface);border:1px solid var(--border);color:var(--text);
-     padding:.4rem .9rem;font-family:inherit;font-size:.78rem;letter-spacing:.1em;
-     cursor:pointer;border-radius:4px;touch-action:manipulation;
-     transition:border-color .15s,color .15s}
-.bta:hover{border-color:var(--accent);color:var(--accent)}
-.bta.danger:hover{border-color:#c44;color:#c44}
-.bt-results{margin-top:.75rem}
-.bt-results-title{font:600 .65rem/1 ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-bottom:.4rem}
-.bt-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:.35rem}
-.bt-item{display:flex;align-items:center;gap:.65rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.5rem .75rem}
-.bt-item-info{flex:1;min-width:0}
-.bt-item-name{font-size:.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bt-item-addr{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.75rem;color:var(--muted)}
-.bt-item-rssi{font-size:.75rem;color:var(--muted);flex-shrink:0}
-.bt-pair-btn{background:transparent;border:1px solid var(--border);color:var(--text);
-             padding:.25rem .65rem;font-size:.75rem;letter-spacing:.1em;cursor:pointer;
-             border-radius:4px;touch-action:manipulation;white-space:nowrap;
-             transition:border-color .15s,color .15s;flex-shrink:0}
-.bt-pair-btn:hover{border-color:var(--accent);color:var(--accent)}
-.bt-empty{font-size:.82rem;color:var(--muted);padding:.5rem 0}
-.local-addr{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.78rem;color:var(--muted);margin-top:.35rem}
-</style>
 <script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
 </head>
 <body>
@@ -1185,7 +1182,6 @@ footer a:hover { opacity: 1; }
 </div>
 <main>
   <div id="status">LOADING&#8230;</div>
-  <div id="bt-panel" style="display:none"></div>
 </main>
 <script>
 /* Amidala web UI — edit-in-place widget + shared config page helpers.
@@ -1244,6 +1240,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -1256,10 +1255,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -1275,6 +1277,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -1282,6 +1294,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -1297,6 +1311,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -1340,12 +1359,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -1456,19 +1475,20 @@ var SCHEMA = [
 ];
 
 buildPage(SCHEMA, '/api/config', function() {
-  renderBTPanel();
+  // buildPage replaces main's innerHTML; inject the BT panel after it.
+  var panel = document.createElement('div');
+  panel.id = 'bt-panel';
+  document.querySelector('main').appendChild(panel);
+  refreshBTStatus();
 });
 
 // ---- Bluetooth panel -------------------------------------------------------
 
-var _btLocalAddr = '';
-var _scanning    = false;
-var _scanTimer   = null;
+var _scanning  = false;
+var _scanTimer = null;
 
-function renderBTPanel() {
-  var panel = document.getElementById('bt-panel');
-  panel.style.display = '';
-  refreshBTStatus();
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function refreshBTStatus() {
@@ -1477,40 +1497,42 @@ function refreshBTStatus() {
     return r.json();
   }).then(function(d) {
     if (!d) return;
-    _btLocalAddr = d.local_addr || '';
     var panel = document.getElementById('bt-panel');
-    var html = '<div class="bt-section">';
-    html += '<div class="bt-heading">Bluetooth Controller</div>';
-    html += '<div class="bt-status">';
-    html += '<div class="bt-dot' + (d.connected ? ' ok' : '') + '"></div>';
-    html += '<span>' + (d.connected ? 'Connected' : 'Not connected') + '</span>';
-    if (d.connected && d.addr) {
-      html += '<span class="bt-addr">' + escHtml(d.addr) + '</span>';
-    }
-    html += '</div>';
-    if (_btLocalAddr) {
-      html += '<div class="local-addr">ESP32 BT address: ' + escHtml(_btLocalAddr) + '</div>';
-    }
-    html += '<div class="bt-actions" style="margin-top:.75rem">';
-    html += '<button class="bta" onclick="startScan()" ' + (_scanning ? 'disabled' : '') + '>' + (_scanning ? 'Scanning…' : 'Scan for Controllers') + '</button>';
-    if (d.connected) {
-      html += '<button class="bta danger" onclick="forgetDevice()">Forget</button>';
-    }
-    html += '</div>';
-    html += '<div id="bt-results-area"></div>';
-    html += '</div>';
-    panel.innerHTML = html;
-    if (_scanning) {
-      pollScanResults();
-    }
-  }).catch(function() {
-    // /api/bt/status not available (firmware built without USE_BT_CONTROLLER)
-    document.getElementById('bt-panel').style.display = 'none';
-  });
-}
+    if (!panel) return;
 
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    var connText = d.connected
+      ? (d.addr ? escHtml(d.addr) : 'Connected')
+      : 'Not connected';
+
+    var html = '<div class="section-label">Bluetooth Controller</div>';
+
+    // Status row
+    html += '<div class="row"><div class="row-label">Controller</div>';
+    html += '<div class="rv">' + connText + '</div>';
+    html += '<div class="ri">';
+    html += '<button class="be-action" onclick="startScan()" ' + (_scanning ? 'disabled' : '') + '>'
+          + (_scanning ? 'Scanning…' : 'Scan') + '</button>';
+    if (d.connected) {
+      html += '<button class="be-action" onclick="forgetDevice()">Forget</button>';
+    }
+    html += '</div></div>';
+
+    // Local ESP32 BT address row
+    if (d.local_addr) {
+      html += '<div class="row"><div class="row-label">ESP32 address</div>'
+            + '<div class="rv">' + escHtml(d.local_addr) + '</div></div>';
+    }
+
+    // Scan results
+    html += '<div id="bt-results-area"></div>';
+
+    panel.innerHTML = html;
+    if (_scanning) pollScanResults();
+  }).catch(function() {
+    // /api/bt/status not available — firmware built without USE_BT_CONTROLLER
+    var panel = document.getElementById('bt-panel');
+    if (panel) panel.innerHTML = '';
+  });
 }
 
 function startScan() {
@@ -1529,11 +1551,8 @@ function startScan() {
 function pollScanResults() {
   fetch('/api/bt/results').then(function(r) { return r.json(); }).then(function(devs) {
     renderScanResults(devs);
-    if (_scanning) {
-      setTimeout(pollScanResults, 1000);
-    } else {
-      refreshBTStatus();
-    }
+    if (_scanning) setTimeout(pollScanResults, 1000);
+    else refreshBTStatus();
   }).catch(function() {});
 }
 
@@ -1541,27 +1560,21 @@ function renderScanResults(devs) {
   var area = document.getElementById('bt-results-area');
   if (!area) return;
   if (!devs || devs.length === 0) {
-    area.innerHTML = _scanning
-      ? '<div class="bt-empty">Scanning…</div>'
-      : '<div class="bt-empty">No BLE HID controllers found.</div>';
+    area.innerHTML = '<div class="row"><div class="row-label" style="color:var(--muted)">'
+      + (_scanning ? 'Scanning…' : 'No BLE HID controllers found.') + '</div></div>';
     return;
   }
-  var html = '<div class="bt-results">';
-  html += '<div class="bt-results-title">Found Controllers</div>';
-  html += '<ul class="bt-list">';
+  var html = '<div class="section-label">Found Controllers</div>';
   for (var i = 0; i < devs.length; i++) {
     var d = devs[i];
     var name = d.name || 'Unknown Controller';
-    html += '<li class="bt-item">';
-    html += '<div class="bt-item-info">';
-    html += '<div class="bt-item-name">' + escHtml(name) + '</div>';
-    html += '<div class="bt-item-addr">' + escHtml(d.addr) + '</div>';
+    html += '<div class="row">';
+    html += '<div class="row-label">' + escHtml(name)
+          + '<br><span style="font:500 11px/1 ui-monospace,\'SF Mono\',Menlo,monospace;color:var(--muted)">'
+          + escHtml(d.addr) + ' &nbsp;&middot;&nbsp; ' + d.rssi + ' dBm</span></div>';
+    html += '<div class="ri"><button class="be-action" onclick="pairWith(' + JSON.stringify(d.addr) + ')">Pair</button></div>';
     html += '</div>';
-    html += '<span class="bt-item-rssi">' + d.rssi + ' dBm</span>';
-    html += '<button class="bt-pair-btn" onclick="pairWith(' + JSON.stringify(d.addr) + ')">Pair</button>';
-    html += '</li>';
   }
-  html += '</ul></div>';
   area.innerHTML = html;
 }
 
@@ -1578,9 +1591,7 @@ function pairWith(addr) {
 
 function forgetDevice() {
   if (!confirm('Forget the paired Bluetooth controller?')) return;
-  fetch('/api/bt/forget', {method:'POST'}).then(function() {
-    refreshBTStatus();
-  });
+  fetch('/api/bt/forget', {method:'POST'}).then(function() { refreshBTStatus(); });
 }
 </script>
 </body>
@@ -1942,6 +1953,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -1954,10 +1968,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -1973,6 +1990,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -1980,6 +2007,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -1995,6 +2024,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -2038,12 +2072,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -2510,6 +2544,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -2522,10 +2559,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -2541,6 +2581,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -2548,6 +2598,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -2563,6 +2615,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -2606,12 +2663,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -3089,6 +3146,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -3101,10 +3161,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -3120,6 +3183,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -3127,6 +3200,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -3142,6 +3217,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -3185,12 +3265,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -3763,6 +3843,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -3775,10 +3858,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -3794,6 +3880,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -3801,6 +3897,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -3816,6 +3914,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -3859,12 +3962,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -4351,6 +4454,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -4363,10 +4469,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -4382,6 +4491,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -4389,6 +4508,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -4404,6 +4525,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -4447,12 +4573,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -4963,6 +5089,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -4975,10 +5104,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -4994,6 +5126,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -5001,6 +5143,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -5016,6 +5160,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -5059,12 +5208,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -5668,6 +5817,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -5680,10 +5832,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -5699,6 +5854,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -5706,6 +5871,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -5721,6 +5888,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -5764,12 +5936,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -6417,6 +6589,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -6429,10 +6604,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -6448,6 +6626,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -6455,6 +6643,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -6470,6 +6660,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -6513,12 +6708,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -7093,6 +7288,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -7105,10 +7303,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -7124,6 +7325,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -7131,6 +7342,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -7146,6 +7359,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -7189,12 +7407,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -7925,6 +8143,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -7937,10 +8158,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -7956,6 +8180,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -7963,6 +8197,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -7978,6 +8214,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -8021,12 +8262,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -8680,6 +8921,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -8692,10 +8936,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -8711,6 +8958,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -8718,6 +8975,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -8733,6 +8992,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -8776,12 +9040,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -9464,6 +9728,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -9476,10 +9743,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -9495,6 +9765,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -9502,6 +9782,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -9517,6 +9799,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -9560,12 +9847,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -10177,6 +10464,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -10189,10 +10479,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -10208,6 +10501,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -10215,6 +10518,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -10230,6 +10535,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -10273,12 +10583,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -11144,6 +11454,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -11156,10 +11469,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -11175,6 +11491,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -11182,6 +11508,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -11197,6 +11525,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -11240,12 +11573,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -11356,8 +11689,28 @@ var AIN = [
   {id:'ain1', label:'Analog 2', gpio:'GPIO2'}
 ];
 
+function connLed(ok) {
+  return '<div class="pin-led ' + (ok ? 'high' : 'low') + '">&#9679;</div>'
+       + '<div class="pin-state ' + (ok ? 'high' : 'low') + '">' + (ok ? 'CONNECTED' : 'OFFLINE') + '</div>';
+}
+
 function buildUI() {
-  var html = '<div class="section-label">Digital Outputs</div>';
+  var html = '<div class="section-label">Connectivity</div>';
+  html += '<div class="row"><div class="row-label">XBee Drive</div>'
+        + '<div class="pin-led low" id="conn-xd-led">&#9679;</div>'
+        + '<div class="pin-state low" id="conn-xd-st">OFFLINE</div></div>';
+  html += '<div class="row"><div class="row-label">XBee Dome</div>'
+        + '<div class="pin-led low" id="conn-xo-led">&#9679;</div>'
+        + '<div class="pin-state low" id="conn-xo-st">OFFLINE</div></div>';
+  html += '<div class="row"><div class="row-label">Bluetooth</div>'
+        + '<div class="pin-led low" id="conn-bt-led">&#9679;</div>'
+        + '<div class="pin-state low" id="conn-bt-st">OFFLINE</div></div>';
+
+  html += '<div class="section-label">Dome</div>';
+  html += '<div class="row"><div class="row-label">Position</div>'
+        + '<div class="ain-val" id="dome-pos">&#8212;</div></div>';
+
+  html += '<div class="section-label">Digital Outputs</div>';
   DOUT.forEach(function(d) {
     var note = d.note ? '<span class="row-note">(' + d.note + ')</span>' : '';
     html += '<div class="row">'
@@ -11377,6 +11730,16 @@ function buildUI() {
   });
   html += '<div id="ts">&#8212;</div>';
   document.getElementById('main').innerHTML = html;
+}
+
+function setConn(idBase, ok) {
+  var led = document.getElementById(idBase + '-led');
+  var st  = document.getElementById(idBase + '-st');
+  if (!led || !st) return;
+  var cls = ok ? 'high' : 'low';
+  led.className = 'pin-led ' + cls;
+  st.className  = 'pin-state ' + cls;
+  st.textContent = ok ? 'CONNECTED' : 'OFFLINE';
 }
 
 function refresh() {
@@ -11403,6 +11766,17 @@ function refresh() {
       var ts = document.getElementById('ts');
       if(ts) ts.textContent = 'Connection error';
     });
+
+  fetch('/api/info')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      setConn('conn-xd', d.xbee_drive);
+      setConn('conn-xo', d.xbee_dome);
+      setConn('conn-bt', d.bt_connected);
+      var dp = document.getElementById('dome-pos');
+      if (dp) dp.textContent = d.dome_homed ? d.dome_degrees + '°' : 'Not homed';
+    })
+    .catch(function(){});
 }
 
 buildUI();
