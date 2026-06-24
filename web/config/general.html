@@ -22,16 +22,20 @@
 <script>
 var SCHEMA = [
   {section:'Drive'},
-  {key:'goslow',     label:'Start in Slow Mode', type:'bool'},
-  {key:'mix12',      label:'Channel Mixing',     type:'bool'},
-  {key:'auto',       label:'Autocorrect Gestures', type:'bool'},
+  {key:'goslow',     label:'Start in Slow Mode',             type:'bool'},
+  {key:'mix12',      label:'Channel Mixing',                 type:'bool'},
+  {key:'auto',       label:'Autocorrect Gestures',           type:'bool'},
   {section:'Serial'},
-  {key:'serialbaud', label:'Baud Rate',          type:'number', min:300, max:115200},
-  {key:'serialdelim',label:'Delimiter (ASCII)',  type:'number', min:0,   max:255},
-  {key:'serialeol',  label:'EOL (ASCII)',         type:'number', min:0,   max:255},
+  {key:'serialbaud', label:'Baud Rate',                      type:'number', min:300, max:115200},
+  {key:'serialdelim',label:'Delimiter',                      type:'ascii-char'},
+  {key:'serialeol',  label:'End of Line',                    type:'select', options:[
+    {v:'10', l:'LF (\\n)'},
+    {v:'13', l:'CR (\\r)'},
+    {v:'0',  l:'CRLF (\\r\\n)'}
+  ]},
   {key:'auxserial3', label:'Aux Serial 3 (Software Serial)', type:'bool'},
   {section:'I²C'},
-  {key:'myi2c',      label:"This Board's Address", type:'number', min:0, max:100}
+  {key:'myi2c',      label:"This Board's Address",           type:'number', min:0, max:100}
 ];
 buildPage(SCHEMA, '/api/config');
 </script>

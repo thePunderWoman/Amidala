@@ -133,6 +133,20 @@ void test_general_page_schema_keys() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'myi2c'"));
 }
 
+void test_general_page_eol_has_lf_cr_crlf_options() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'serialeol'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "LF"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "CR"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "CRLF"));
+    // Sentinel value 0 must be present for CRLF
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'0'"));
+}
+
+void test_general_page_delimiter_uses_ascii_char_type() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'serialdelim'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "ascii-char"));
+}
+
 void test_estop_present_on_config_pages() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "/api/estop"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO,   "/api/estop"));
@@ -574,6 +588,53 @@ void test_info_json_wraps_in_braces() {
     TEST_ASSERT_EQUAL('}', s[strlen(s) - 1]);
 }
 
+void test_info_json_has_xbee_and_bt_fields_default_false() {
+    String json = buildInfoJson("pwm", "pwm", "hcr", "amidala", "192.168.4.1");
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"xbee_drive\":false"));
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"xbee_dome\":false"));
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"bt_connected\":false"));
+}
+
+void test_info_json_xbee_drive_true() {
+    String json = buildInfoJson("pwm", "pwm", "hcr", "amidala", "192.168.4.1",
+                                0, 0, /*xbeeDrive=*/true);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"xbee_drive\":true"));
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"xbee_dome\":false"));
+}
+
+void test_info_json_bt_connected_true() {
+    String json = buildInfoJson("pwm", "pwm", "hcr", "amidala", "192.168.4.1",
+                                0, 0, false, false, /*btConnected=*/true);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"bt_connected\":true"));
+}
+
+void test_info_json_dome_homed_and_degrees() {
+    String json = buildInfoJson("pwm", "pwm", "hcr", "amidala", "192.168.4.1",
+                                0, 0, false, false, false,
+                                /*domeHomed=*/true, /*domeDegrees=*/127);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"dome_homed\":true"));
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"dome_degrees\":127"));
+}
+
+void test_info_json_dome_not_homed_default() {
+    String json = buildInfoJson("pwm", "pwm", "hcr", "amidala", "192.168.4.1");
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"dome_homed\":false"));
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"dome_degrees\":0"));
+}
+
+void test_diagnostics_page_has_connectivity_rows() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DIAGNOSTICS, "conn-xd"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DIAGNOSTICS, "conn-xo"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DIAGNOSTICS, "conn-bt"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DIAGNOSTICS, "dome-pos"));
+}
+
+void test_diagnostics_page_polls_api_info() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DIAGNOSTICS, "/api/info"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DIAGNOSTICS, "xbee_drive"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DIAGNOSTICS, "dome_homed"));
+}
+
 // ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
@@ -600,6 +661,8 @@ int main(int /*argc*/, char** /*argv*/) {
 
     // Config pages — SCHEMA keys
     RUN_TEST(test_general_page_schema_keys);
+    RUN_TEST(test_general_page_eol_has_lf_cr_crlf_options);
+    RUN_TEST(test_general_page_delimiter_uses_ascii_char_type);
     RUN_TEST(test_estop_present_on_config_pages);
     RUN_TEST(test_wifi_page_schema_keys);
     RUN_TEST(test_xbee_page_schema_keys);
@@ -665,6 +728,13 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_info_json_ssid_appears);
     RUN_TEST(test_info_json_wraps_in_braces);
     RUN_TEST(test_info_json_has_free_heap);
+    RUN_TEST(test_info_json_has_xbee_and_bt_fields_default_false);
+    RUN_TEST(test_info_json_xbee_drive_true);
+    RUN_TEST(test_info_json_bt_connected_true);
+    RUN_TEST(test_info_json_dome_homed_and_degrees);
+    RUN_TEST(test_info_json_dome_not_homed_default);
+    RUN_TEST(test_diagnostics_page_has_connectivity_rows);
+    RUN_TEST(test_diagnostics_page_polls_api_info);
 
     return UNITY_END();
 }

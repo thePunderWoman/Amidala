@@ -330,16 +330,25 @@ public:
 
   void (*fSerialTxLog)(const char*) = nullptr;
 
+  void writeEol() {
+    if (params.serialeol == 0) {
+      SERIAL.write('\r');
+      SERIAL.write('\n');
+    } else {
+      SERIAL.write(params.serialeol);
+    }
+  }
+
   void sendSerialString(const char *str) {
     if (fSerialTxLog) fSerialTxLog(str);
     char ch;
     while ((ch = *str++) != '\0') {
       if (ch == params.serialdelim)
-        ch = params.serialeol;
-      SERIAL.write(ch);
+        writeEol();
+      else
+        SERIAL.write(ch);
     }
-    ch = params.serialeol;
-    SERIAL.write(ch);
+    writeEol();
   }
 
   // Defined in src/controller.cpp — references servoDispatch, panservo,

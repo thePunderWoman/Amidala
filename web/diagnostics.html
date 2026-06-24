@@ -43,8 +43,28 @@ var AIN = [
   {id:'ain1', label:'Analog 2', gpio:'GPIO2'}
 ];
 
+function connLed(ok) {
+  return '<div class="pin-led ' + (ok ? 'high' : 'low') + '">&#9679;</div>'
+       + '<div class="pin-state ' + (ok ? 'high' : 'low') + '">' + (ok ? 'CONNECTED' : 'OFFLINE') + '</div>';
+}
+
 function buildUI() {
-  var html = '<div class="section-label">Digital Outputs</div>';
+  var html = '<div class="section-label">Connectivity</div>';
+  html += '<div class="row"><div class="row-label">XBee Drive</div>'
+        + '<div class="pin-led low" id="conn-xd-led">&#9679;</div>'
+        + '<div class="pin-state low" id="conn-xd-st">OFFLINE</div></div>';
+  html += '<div class="row"><div class="row-label">XBee Dome</div>'
+        + '<div class="pin-led low" id="conn-xo-led">&#9679;</div>'
+        + '<div class="pin-state low" id="conn-xo-st">OFFLINE</div></div>';
+  html += '<div class="row"><div class="row-label">Bluetooth</div>'
+        + '<div class="pin-led low" id="conn-bt-led">&#9679;</div>'
+        + '<div class="pin-state low" id="conn-bt-st">OFFLINE</div></div>';
+
+  html += '<div class="section-label">Dome</div>';
+  html += '<div class="row"><div class="row-label">Position</div>'
+        + '<div class="ain-val" id="dome-pos">&#8212;</div></div>';
+
+  html += '<div class="section-label">Digital Outputs</div>';
   DOUT.forEach(function(d) {
     var note = d.note ? '<span class="row-note">(' + d.note + ')</span>' : '';
     html += '<div class="row">'
@@ -64,6 +84,16 @@ function buildUI() {
   });
   html += '<div id="ts">&#8212;</div>';
   document.getElementById('main').innerHTML = html;
+}
+
+function setConn(idBase, ok) {
+  var led = document.getElementById(idBase + '-led');
+  var st  = document.getElementById(idBase + '-st');
+  if (!led || !st) return;
+  var cls = ok ? 'high' : 'low';
+  led.className = 'pin-led ' + cls;
+  st.className  = 'pin-state ' + cls;
+  st.textContent = ok ? 'CONNECTED' : 'OFFLINE';
 }
 
 function refresh() {
@@ -90,6 +120,17 @@ function refresh() {
       var ts = document.getElementById('ts');
       if(ts) ts.textContent = 'Connection error';
     });
+
+  fetch('/api/info')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      setConn('conn-xd', d.xbee_drive);
+      setConn('conn-xo', d.xbee_dome);
+      setConn('conn-bt', d.bt_connected);
+      var dp = document.getElementById('dome-pos');
+      if (dp) dp.textContent = d.dome_homed ? d.dome_degrees + '°' : 'Not homed';
+    })
+    .catch(function(){});
 }
 
 buildUI();

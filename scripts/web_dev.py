@@ -261,10 +261,15 @@ _info = {
     "drive":    "roboteq-pwm",
     "dome":     "roboclaw",
     "audio":    _config.get("audiohw", "hcr"),
-    "wifi_ssid":  _config.get("wifissid", "amidala"),
-    "wifi_ip":    "192.168.4.1",
-    "sstr_used":  len(_config["sstr"]),
-    "free_heap":  290816,
+    "wifi_ssid":    _config.get("wifissid", "amidala"),
+    "wifi_ip":      "192.168.4.1",
+    "sstr_used":    len(_config["sstr"]),
+    "free_heap":    290816,
+    "xbee_drive":   True,
+    "xbee_dome":    False,
+    "bt_connected": True,
+    "dome_homed":   True,
+    "dome_degrees": 127,
 }
 
 _bt_state = {

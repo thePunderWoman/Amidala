@@ -54,6 +54,9 @@ async function doSave(btn) {
   var prev = btn.textContent;
   btn.textContent = '…';
   btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
   try {
     var r = await fetch('/api/config', {
       method: 'POST',
@@ -66,10 +69,13 @@ async function doSave(btn) {
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
       } else if (rt === 'password') {
         dv.textContent = '••••••••';
       } else {
-        dv.textContent = val;
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
       doCancel(row.querySelector('.bc'));
       showToast('Saved');
@@ -85,6 +91,16 @@ async function doSave(btn) {
 
 // ------------------------------------------------ schema-driven row builder --
 
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
@@ -92,6 +108,8 @@ function dispValue(s, val) {
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
   return String(val);
 }
 
@@ -107,6 +125,11 @@ function buildInput(s, val) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
   }
   if (s.type === 'number') {
     return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
@@ -150,12 +173,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '">'
+  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
