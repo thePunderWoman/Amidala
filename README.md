@@ -14,8 +14,6 @@
 **Amidala** is an ESP32-S3 firmware for controlling your droids. It runs on the [Amidala PCB](PCB/) — a PCB designed to make wiring a full-featured droid build straightforward — and is compatible with both the N8R2 (8 MB flash) and N16R8 (16 MB flash) module variants.
 
 > **Config Wizard coming soon** — a step-by-step browser wizard for generating your `config.txt` without editing a text file.
->
-> **Documentation wiki coming soon** — full wiring diagrams, setup walkthrough, and advanced configuration reference.
 
 ---
 
