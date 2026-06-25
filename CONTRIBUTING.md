@@ -4,7 +4,7 @@ Thanks for your interest in contributing! Here's how to get started.
 
 ## Reporting bugs and requesting features
 
-Please open an issue in the [issue tracker](https://github.com/thePunderWoman/AmidalaFirmware/issues). Include:
+Please open an issue in the [issue tracker](https://github.com/thePunderWoman/Amidala/issues). Include:
 
 - A clear description of the problem or request
 - Your hardware setup (PCB revision, module variant, drive system, dome drive)
@@ -14,7 +14,7 @@ Please open an issue in the [issue tracker](https://github.com/thePunderWoman/Am
 
 1. **Fork** the repo and create a feature branch from `main`.
 2. Make your changes. See the guidelines below.
-3. **Open a pull request** targeting `main` on `thePunderWoman/AmidalaFirmware`.
+3. **Open a pull request** targeting `main` on `thePunderWoman/Amidala`.
 
 All changes go through PRs — direct pushes to `main` are not accepted.
 

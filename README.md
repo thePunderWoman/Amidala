@@ -3,11 +3,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/thePunderWoman/AmidalaFirmware/actions/workflows/ci.yml">
-    <img src="https://github.com/thePunderWoman/AmidalaFirmware/actions/workflows/ci.yml/badge.svg" alt="CI">
+  <a href="https://github.com/thePunderWoman/Amidala/actions/workflows/ci.yml">
+    <img src="https://github.com/thePunderWoman/Amidala/actions/workflows/ci.yml/badge.svg" alt="CI">
   </a>
-  <a href="https://github.com/thePunderWoman/AmidalaFirmware/releases/latest">
-    <img src="https://img.shields.io/github/v/release/thePunderWoman/AmidalaFirmware" alt="Latest Release">
+  <a href="https://github.com/thePunderWoman/Amidala/releases/latest">
+    <img src="https://img.shields.io/github/v/release/thePunderWoman/Amidala" alt="Latest Release">
   </a>
 </p>
 
@@ -44,7 +44,7 @@ The Amidala web interface allows you total control over your droid's configurati
 
 ## Get Started
 
-> **[Documentation Wiki →](https://github.com/thePunderWoman/AmidalaFirmware/wiki)**
+> **[Documentation Wiki →](https://github.com/thePunderWoman/Amidala/wiki)**
 
 The wiki covers everything from first flash through full configuration. For a quick look at every available config key, see [example_config.txt](example_config.txt) — it's a complete annotated reference used on a real build. Although once you get set up initially, you won't need to look at this file again, as you can update every config option through the web UI.
 
@@ -81,6 +81,6 @@ This project is released under the [GNU General Public License v2](LICENSE). You
 
 ## Contributing
 
-Bug reports and feature requests are welcome — please use the [issue tracker](https://github.com/thePunderWoman/AmidalaFirmware/issues).
+Bug reports and feature requests are welcome — please use the [issue tracker](https://github.com/thePunderWoman/Amidala/issues).
 
 If you'd like to contribute code, see [CONTRIBUTING.md](CONTRIBUTING.md).
