@@ -29,6 +29,17 @@ This firmware is intended to run on many different R2 builds with varying hardwa
    gh pr create --repo thePunderWoman/AmidalaFirmware ...
    ```
 
+## Web UI development
+
+**Never edit `include/web_pages.h` directly** — it is generated from the source files in `web/`. Edits to the header will be overwritten the next time the script runs.
+
+The correct workflow for any UI change:
+1. Edit the source files in `web/` (HTML, CSS, JS).
+2. Regenerate the header: `python3 scripts/embed_web.py`
+3. Preview in a browser: `python3 scripts/web_dev.py` → http://localhost:8080
+
+`web_dev.py` serves `web/` directly and mocks the firmware REST API, so no hardware is needed to iterate on the UI.
+
 ## Build verification
 
 CI only runs the native unit tests (`pio test -e native`).

@@ -17,6 +17,11 @@
 typedef bool    boolean;
 typedef uint8_t byte;
 
+// ---- Arduino character-class macros ----
+#ifndef isDigit
+#  define isDigit(c) isdigit((unsigned char)(c))
+#endif
+
 // ---- LOW / HIGH ----
 #define LOW  0
 #define HIGH 1
@@ -274,6 +279,8 @@ public:
   String substring(size_t from, size_t to=(size_t)-1) const {
     return String(_s.substr(from, to==(size_t)-1 ? std::string::npos : to-from).c_str());
   }
+  long   toInt()             const { return atol(_s.c_str()); }
+  char   charAt(size_t i)   const { return i < _s.size() ? _s[i] : '\0'; }
   void remove(size_t idx, size_t cnt=1)  { _s.erase(idx, cnt); }
   void reserve(size_t n)                 { _s.reserve(n); }
   void trim() {

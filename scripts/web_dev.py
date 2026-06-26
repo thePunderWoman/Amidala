@@ -439,6 +439,15 @@ class _Handler(SimpleHTTPRequestHandler):
             _monitor["seq"] += 1
             self._text("OK")
             return
+        if path == "/api/volume":
+            vol = int(params.get("vol", 50))
+            ch  = int(params.get("ch",  0))
+            ch_names = {0: "global", 1: "voice", 2: "ch-A", 3: "ch-B", 4: "ch-A+B"}
+            print(f"  VOLUME  {ch_names.get(ch, ch)}={vol}")
+            _monitor["lines"].append({"t": f"vol: {ch_names.get(ch, ch)}={vol}", "c": "info"})
+            _monitor["seq"] += 1
+            self._text("OK")
+            return
         if path != "/api/config":
             self._text("Not Found", 404)
             return

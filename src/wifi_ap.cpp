@@ -667,9 +667,11 @@ static void handleApiConfigPost() {
         return;
     }
 
-    // sstr_N — update serial string at index N (or append when N == sUserSerialCount)
-    if (key.startsWith("sstr_")) {
-        int idx = key.substring(5).toInt();
+    // sstr_add — append a new serial string; sstr_N — update string at index N.
+    // sstr_add must be checked explicitly: "add".toInt() == 0, so without this
+    // guard it would silently overwrite Str[0] whenever entries already exist.
+    if (key == "sstr_add" || (key.startsWith("sstr_") && key.length() > 5 && isDigit(key.charAt(5)))) {
+        int idx = (key == "sstr_add") ? (int)sUserSerialCount : key.substring(5).toInt();
         bool isAppend = (idx == (int)sUserSerialCount);
         bool isEdit   = (idx >= 0 && idx < (int)sUserSerialCount);
         if (!isEdit && !isAppend) {
@@ -997,6 +999,16 @@ static void handleApiHCR() {
     sServer.send(200, "text/plain", "OK");
 }
 
+static void handleApiVolume() {
+    if (!sCtrl) { sServer.send(500, "text/plain", "no controller"); return; }
+    int vol = sServer.arg("vol").toInt();
+    int ch  = sServer.arg("ch").toInt();
+    if (vol < 0 || vol > 100) { sServer.send(400, "text/plain", "vol out of range"); return; }
+    if (ch  < 0 || ch  > 4)  { sServer.send(400, "text/plain", "ch out of range");  return; }
+    sCtrl->fAudio.setChannelVolume((uint8_t)ch, (uint8_t)vol);
+    sServer.send(200, "text/plain", "OK");
+}
+
 static void handleApiPins() {
     String json = "{\"dout\":[";
     json += String(digitalRead(DOUT1_PIN)); json += ",";
@@ -1248,6 +1260,7 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/api/gadget-cmd", HTTP_POST, handleApiGadgetCmd);
     sServer.on("/api/serial",     HTTP_POST, handleApiSerial);
     sServer.on("/api/hcr",        HTTP_POST, handleApiHCR);
+    sServer.on("/api/volume",     HTTP_POST, handleApiVolume);
     sServer.on("/api/config", HTTP_GET,  handleApiConfigGet);
     sServer.on("/api/config", HTTP_POST, handleApiConfigPost);
     sServer.on("/api/pins",   HTTP_GET,  handleApiPins);

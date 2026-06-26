@@ -26,6 +26,18 @@
 .cs-title{font-size:.85rem;letter-spacing:.2em;text-transform:uppercase;margin-bottom:.8rem}
 .cs-text{font-size:.8rem;line-height:1.65;max-width:380px;margin:0 auto}
 .cs-text a{color:var(--text)}
+/* ---- volume bar ---- */
+#vol-bar{max-width:820px;margin:.9rem auto 0;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:.55rem .8rem}
+.vol-bar-inner{display:flex;align-items:center;gap:.7rem}
+.vol-bar-inner label{font:500 11px/1 ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.18em;color:var(--muted);white-space:nowrap}
+#vol-ch{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.28rem .45rem;border-radius:4px;font-family:inherit;font-size:.78rem;flex-shrink:0}
+#vol-slider{flex:1;accent-color:var(--accent);min-width:0}
+#vol-val{font:500 13px/1 ui-monospace,'SF Mono',Menlo,monospace;color:var(--accent);min-width:2.4rem;text-align:right;flex-shrink:0}
+/* ---- dome compass ---- */
+.dome-pos-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:center;margin-bottom:.6rem;padding-top:.5rem}
+.dome-pos-left{display:flex;flex-direction:column;gap:.5rem}
+.dome-pos-right{display:flex;flex-direction:column;align-items:center;gap:.35rem}
+.dome-deg-display{font:500 13px/1 ui-monospace,'SF Mono',Menlo,monospace;color:var(--accent);letter-spacing:.08em}
 </style>
 <script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
 </head>
@@ -33,6 +45,19 @@
 <div class="page-header">
   <a class="back" href="/">&#9664; BACK</a>
   <div class="page-title"><span class="dot"></span><span class="label">Droid Control</span><span class="dot"></span></div>
+</div>
+<div id="vol-bar" hidden>
+  <div class="vol-bar-inner">
+    <label>VOLUME</label>
+    <select id="vol-ch" onchange="onVolChChange()">
+      <option value="0">Global</option>
+      <option value="1">Voice</option>
+      <option value="2">Ch A</option>
+      <option value="3">Ch B</option>
+    </select>
+    <input type="range" id="vol-slider" min="0" max="100" value="50" oninput="onVolSlide(this.value)">
+    <span id="vol-val">50</span>
+  </div>
 </div>
 <div class="tabs">
   <button class="tab" data-tab="dome"      onclick="showHashTab('dome')">Dome</button>
@@ -60,12 +85,14 @@ function load() {
     .then(function(r) { return r.json(); })
     .then(function(d) {
       _cfg = d;
+      initVolBar(d);
       initHashTabs('dome', function(t) { _tab = t; render(); });
     })
     .catch(function() { document.getElementById('status').textContent = 'Failed to load.'; });
 }
 
 function render() {
+  if (_tab !== 'dome') stopDomePoll();
   if (_tab === 'dome')           renderDome();
   else if (_tab === 'sequences') renderSequences();
   else                           renderGadgets();
@@ -107,14 +134,105 @@ function domeMoveTo() {
   domePost(String(n));
 }
 
+var _domePoller = null;
+function startDomePoll() {
+  if (_domePoller) return;
+  updateDomePos();
+  _domePoller = setInterval(updateDomePos, 500);
+}
+function stopDomePoll() {
+  if (_domePoller) { clearInterval(_domePoller); _domePoller = null; }
+}
+function updateDomePos() {
+  fetch('/api/info')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var needle = document.getElementById('dome-needle');
+      var degEl  = document.getElementById('dome-deg');
+      if (!needle || !degEl) { stopDomePoll(); return; }
+      var deg = d.dome_degrees || 0;
+      needle.setAttribute('transform', 'rotate(' + deg + ')');
+      degEl.textContent = d.dome_homed ? (deg + '°') : '—';
+    })
+    .catch(function() { stopDomePoll(); });
+}
+
+var _volCh = 0;
+var _volDebounce = null;
+var _volByChannel = [50, 50, 50, 50];
+function initVolBar(cfg) {
+  var isHCR = (cfg.audiohw === 'hcr');
+  var bar = document.getElementById('vol-bar');
+  if (!bar) return;
+  bar.hidden = false;
+  var chSel = document.getElementById('vol-ch');
+  if (chSel) chSel.hidden = !isHCR;
+  var v = cfg.volume !== undefined ? cfg.volume : 50;
+  _volByChannel = [v, v,
+    cfg.volumeChA !== undefined ? cfg.volumeChA : v,
+    cfg.volumeChB !== undefined ? cfg.volumeChB : v,
+    v];
+  setVolSlider(0);
+}
+function setVolSlider(ch) {
+  _volCh = ch;
+  var vol = _volByChannel[ch] !== undefined ? _volByChannel[ch] : 50;
+  var sl = document.getElementById('vol-slider');
+  var vd = document.getElementById('vol-val');
+  if (sl) sl.value = vol;
+  if (vd) vd.textContent = vol;
+}
+function onVolChChange() {
+  var sel = document.getElementById('vol-ch');
+  if (sel) setVolSlider(parseInt(sel.value, 10));
+}
+function onVolSlide(val) {
+  var v = parseInt(val, 10);
+  if (isNaN(v)) return;
+  _volByChannel[_volCh] = v;
+  var vd = document.getElementById('vol-val');
+  if (vd) vd.textContent = v;
+  clearTimeout(_volDebounce);
+  _volDebounce = setTimeout(function() {
+    fetch('/api/volume', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: 'ch=' + _volCh + '&vol=' + v
+    });
+  }, 60);
+}
+
 function renderDome() {
   var h = '<div class="ctrl-section">';
   h += '<button class="dome-stop" onclick="domePost(\'stop\')">&#9632;&nbsp; STOP</button>';
 
   h += '<div class="sec-hdr" style="margin-top:.2rem">Position</div>';
-  h += '<div class="btn-group" style="grid-template-columns:1fr 1fr">';
+  h += '<div class="dome-pos-grid">';
+  h += '<div class="dome-pos-left">';
   h += '<button class="dc-btn" onclick="domePost(\'front\')">Face Front</button>';
-  h += '<button class="dc-btn" onclick="domePost(\'home\')">Run Homing</button>';
+  h += '<div class="custom-row" style="margin-top:.6rem;justify-content:center">';
+  h += '<span>Custom:</span>';
+  h += '<input id="dome-angle" name="dome-angle" type="number" min="0" max="359" placeholder="0–359">';
+  h += '<button class="dc-btn" onclick="domeMoveTo()">Go</button>';
+  h += '</div>';
+  h += '</div>';
+  h += '<div class="dome-pos-right">';
+  h += '<svg id="dome-svg" viewBox="-60 -60 120 120" width="140" height="140" style="display:block">';
+  h += '<circle r="55" fill="none" stroke="var(--border)" stroke-width="1.5"/>';
+  var ticks = [0,45,90,135,180,225,270,315];
+  for (var ti = 0; ti < ticks.length; ti++) {
+    var major = (ticks[ti] % 90 === 0);
+    h += '<line y1="' + (major ? -52 : -50) + '" y2="-55" stroke="var(--' + (major ? 'text' : 'border') + ')" stroke-width="' + (major ? 1.5 : 1) + '" transform="rotate(' + ticks[ti] + ')"/>';
+  }
+  h += '<text y="-38" text-anchor="middle" font-size="7" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">0</text>';
+  h += '<text x="38" y="3" text-anchor="middle" font-size="7" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">90</text>';
+  h += '<text y="44" text-anchor="middle" font-size="7" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">180</text>';
+  h += '<text x="-38" y="3" text-anchor="middle" font-size="7" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">270</text>';
+  h += '<line id="dome-needle" x1="0" y1="6" x2="0" y2="-44" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>';
+  h += '<circle r="4" fill="var(--accent)"/>';
+  h += '</svg>';
+  h += '<div class="dome-deg-display" id="dome-deg">&#8212;</div>';
+  h += '</div>';
   h += '</div>';
 
   h += '<div class="sec-hdr">Go to Angle</div>';
@@ -122,11 +240,6 @@ function renderDome() {
   ANGLES.forEach(function(a) {
     h += '<button class="angle-btn" onclick="domePost(\'' + a + '\')">' + a + '&#176;</button>';
   });
-  h += '</div>';
-  h += '<div class="custom-row">';
-  h += '<span>Custom:</span>';
-  h += '<input id="dome-angle" name="dome-angle" type="number" min="0" max="359" placeholder="0–359">';
-  h += '<button class="dc-btn" onclick="domeMoveTo()">Go</button>';
   h += '</div>';
 
   h += '<div class="sec-hdr">Relative Move</div>';
@@ -145,6 +258,7 @@ function renderDome() {
 
   h += '</div>';
   document.getElementById('main').innerHTML = h;
+  startDomePoll();
 }
 
 function renderSequences() {

@@ -150,6 +150,23 @@ void AmidalaAudio::setAltVolumeNoResponse(uint8_t volume) {
 #endif
 }
 
+void AmidalaAudio::setChannelVolume(uint8_t ch, uint8_t volume) {
+  AmidalaParameters &params = fController->params;
+#ifndef VMUSIC_SERIAL
+  if (params.audiohw == AUDIO_HW_HCR) {
+    if (fMuted) restoreVolumes();
+    uint32_t now = millis();
+    if (now - fLastVolumeUpdate < VOLUME_THROTTLE_MS) return;
+    fLastVolumeUpdate = now;
+    applyHCRVolume(ch, volume);
+  }
+#else
+  if (params.audiohw == AUDIO_HW_VMUSIC) {
+    fController->fVMusic.setVolumeNoResponse(volume);
+  }
+#endif
+}
+
 void AmidalaAudio::toggleMute() {
 #ifndef VMUSIC_SERIAL
   AmidalaParameters &params = fController->params;

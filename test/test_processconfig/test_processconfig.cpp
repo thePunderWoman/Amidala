@@ -554,6 +554,61 @@ void test_sstr_parse_broken_short_name_becomes_empty() {
     TEST_ASSERT_EQUAL_STRING("", name);
 }
 
+// ---- sstr_add API key disambiguation ----------------------------------------
+// Bug: the web UI sends key="sstr_add" to append a new serial string, but the
+// server handler used key.startsWith("sstr_") with no digit guard.
+// "add".toInt() == 0, so any add when entries already existed silently
+// overwrote Str[0] instead of appending, corrupting the first entry.
+//
+// Fix: check key == "sstr_add" explicitly and force idx = sUserSerialCount.
+// Guard the sstr_N path with isDigit(key.charAt(5)) to reject non-numeric keys.
+
+// Mirror the fixed idx-derivation logic from handleApiConfigPost.
+static int derive_sstr_idx(const String& key, int sUserSerialCount) {
+    return (key == "sstr_add") ? sUserSerialCount : (int)key.substring(5).toInt();
+}
+
+void test_sstr_add_key_toInt_is_zero() {
+    // Root cause: "sstr_add".substring(5) == "add", and "add".toInt() == 0.
+    // Without the explicit key == "sstr_add" check, this silently resolved to
+    // idx=0 and overwrote Str[0] whenever any entries already existed.
+    String key("sstr_add");
+    TEST_ASSERT_EQUAL_INT(0, (int)key.substring(5).toInt());
+}
+
+void test_sstr_add_forces_append_index_when_entries_exist() {
+    // With the fix, key=="sstr_add" always yields idx==sUserSerialCount,
+    // regardless of how many entries exist — guaranteeing an append.
+    TEST_ASSERT_EQUAL_INT(5, derive_sstr_idx("sstr_add", 5));
+    TEST_ASSERT_EQUAL_INT(1, derive_sstr_idx("sstr_add", 1));
+}
+
+void test_sstr_add_forces_append_index_when_no_entries() {
+    // First-ever add: sUserSerialCount==0, idx==0, which isAppend branch handles.
+    TEST_ASSERT_EQUAL_INT(0, derive_sstr_idx("sstr_add", 0));
+}
+
+void test_sstr_N_key_derives_numeric_index() {
+    // Numeric keys must still route to the correct index.
+    TEST_ASSERT_EQUAL_INT(0, derive_sstr_idx("sstr_0", 5));
+    TEST_ASSERT_EQUAL_INT(3, derive_sstr_idx("sstr_3", 5));
+}
+
+void test_sstr_add_key_is_not_numeric_digit_guard() {
+    // The digit guard isDigit(key.charAt(5)) must reject "sstr_add" so the
+    // startsWith("sstr_") branch never fires for it.
+    String key("sstr_add");
+    TEST_ASSERT_FALSE(isDigit(key.charAt(5)));  // 'a' is not a digit
+}
+
+void test_sstr_N_key_passes_digit_guard() {
+    // Numeric sstr_N keys must pass the digit guard.
+    String key0("sstr_0");
+    String key3("sstr_3");
+    TEST_ASSERT_TRUE(isDigit(key0.charAt(5)));
+    TEST_ASSERT_TRUE(isDigit(key3.charAt(5)));
+}
+
 // ---- Safety command (estopstr= / resumestr=) parse logic --------------------
 // These tests verify that estopstr= and resumestr= config lines are stored in
 // the correct fields of AmidalaParameters without aliasing, length overrun, or
@@ -767,6 +822,13 @@ int main(int argc, char **argv) {
     RUN_TEST(test_sstr_parse_no_pipe_stores_str_only);
     RUN_TEST(test_sstr_parse_broken_eats_first_five_chars);
     RUN_TEST(test_sstr_parse_broken_short_name_becomes_empty);
+
+    RUN_TEST(test_sstr_add_key_toInt_is_zero);
+    RUN_TEST(test_sstr_add_forces_append_index_when_entries_exist);
+    RUN_TEST(test_sstr_add_forces_append_index_when_no_entries);
+    RUN_TEST(test_sstr_N_key_derives_numeric_index);
+    RUN_TEST(test_sstr_add_key_is_not_numeric_digit_guard);
+    RUN_TEST(test_sstr_N_key_passes_digit_guard);
 
     RUN_TEST(test_estopstr_parse_stores_command);
     RUN_TEST(test_estopstr_parse_stores_angle_bracket_command);

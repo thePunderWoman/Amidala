@@ -34,6 +34,11 @@ public:
   // Falls through to setVolumeNoResponse when altvolumewheel == 0.
   void setAltVolumeNoResponse(uint8_t volume);
 
+  // Set volume for a specific channel directly (0–100), bypassing the
+  // volumewheel routing config.  ch uses the same enum as volumewheel:
+  //   0=global, 1=voice, 2=chA, 3=chB, 4=chA+chB.
+  void setChannelVolume(uint8_t ch, uint8_t volume);
+
   // Play a sound from the given sound bank (1-based).
   // If snd == 0, selects the next/random file based on the bank's mode.
   void playSound(int sndbank, int snd = 0);
