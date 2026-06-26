@@ -1,4 +1,4 @@
 (sym_lib_table
   (version 7)
-  (lib (name "xbee3")(type "KiCad")(uri "/Users/jessica/repos/AmidalaBoard/libraries/LIB_XB3-24Z8UT-J/XB3-24Z8UT-J/KiCad/XB3-24Z8UT-J.kicad_sym")(options "")(descr ""))
+  (lib (name "xbee3")(type "KiCad")(uri "/Users/jessica/repos/Amidala/PCB/libraries/LIB_XB3-24Z8UT-J/XB3-24Z8UT-J/KiCad/XB3-24Z8UT-J.kicad_sym")(options "")(descr ""))
 )
