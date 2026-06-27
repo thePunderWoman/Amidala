@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amidala Config Converter</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 780px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    header h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #63b3ed;
+      letter-spacing: -0.5px;
+    }
+
+    header p {
+      margin-top: 0.5rem;
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+
+    /* --- Step indicator --- */
+    .step-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      margin-bottom: 2.5rem;
+    }
+
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: #4a5568;
+    }
+
+    .step-item.active { color: #63b3ed; }
+    .step-item.done   { color: #68d391; }
+
+    .step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid currentColor;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .step-item.done .step-num {
+      background: #68d391;
+      border-color: #68d391;
+      color: #1a202c;
+    }
+
+    .step-item.active .step-num {
+      background: #63b3ed;
+      border-color: #63b3ed;
+      color: #1a202c;
+    }
+
+    .step-label {
+      font-size: 0.85rem;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .step-connector {
+      width: 48px;
+      height: 2px;
+      background: #2d3748;
+      margin: 0 0.5rem;
+      flex-shrink: 0;
+    }
+
+    /* --- Cards / panels --- */
+    .card {
+      background: #1a202c;
+      border: 1px solid #2d3748;
+      border-radius: 10px;
+      padding: 1.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .card h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #e2e8f0;
+      margin-bottom: 0.6rem;
+    }
+
+    .card p, .card li {
+      color: #94a3b8;
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    /* --- Drop zone --- */
+    .drop-zone {
+      border: 2px dashed #2d3748;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      margin-bottom: 1rem;
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #63b3ed;
+      background: rgba(99, 179, 237, 0.05);
+    }
+
+    .drop-zone p {
+      color: #718096;
+      margin-bottom: 0.75rem;
+    }
+
+    /* --- Textarea --- */
+    textarea {
+      width: 100%;
+      background: #0f1117;
+      border: 1px solid #2d3748;
+      border-radius: 6px;
+      color: #e2e8f0;
+      font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      padding: 0.75rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    textarea:focus { border-color: #63b3ed; }
+    textarea[readonly] { color: #a0aec0; cursor: default; }
+
+    /* --- Buttons --- */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 1.1rem;
+      border-radius: 6px;
+      border: 1px solid #2d3748;
+      background: #2d3748;
+      color: #e2e8f0;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .btn:hover { background: #3a4a5c; border-color: #4a5568; }
+
+    .btn-primary {
+      background: #3182ce;
+      border-color: #3182ce;
+      color: #fff;
+    }
+    .btn-primary:hover { background: #2c72b8; border-color: #2c72b8; }
+
+    .btn-success {
+      background: #276749;
+      border-color: #276749;
+      color: #fff;
+    }
+    .btn-success:hover { background: #22543d; border-color: #22543d; }
+
+    .btn-sm {
+      padding: 0.3rem 0.75rem;
+      font-size: 0.8rem;
+    }
+
+    /* --- Button row --- */
+    .btn-row {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .btn-row .spacer { flex: 1; }
+
+    /* --- String entry --- */
+    .sstr-entry {
+      background: #0f1117;
+      border: 1px solid #2d3748;
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .sstr-entry .sstr-index {
+      font-size: 0.75rem;
+      color: #4a5568;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.35rem;
+    }
+
+    .sstr-entry .sstr-value {
+      font-family: 'Menlo', 'Monaco', monospace;
+      font-size: 0.8rem;
+      color: #68d391;
+      margin-bottom: 0.5rem;
+      word-break: break-all;
+    }
+
+    .sstr-entry label {
+      display: block;
+      font-size: 0.8rem;
+      color: #94a3b8;
+      margin-bottom: 0.3rem;
+    }
+
+    .sstr-entry input {
+      width: 100%;
+      background: #1a202c;
+      border: 1px solid #2d3748;
+      border-radius: 4px;
+      color: #e2e8f0;
+      font-size: 0.875rem;
+      padding: 0.4rem 0.6rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .sstr-entry input:focus { border-color: #63b3ed; }
+
+    /* --- Change/warning items --- */
+    .changes-list {
+      list-style: none;
+      margin-top: 0.5rem;
+    }
+
+    .changes-list li {
+      padding: 0.3rem 0;
+      font-size: 0.85rem;
+      color: #68d391;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .changes-list li::before { content: '✓'; flex-shrink: 0; }
+
+    .warnings-list li {
+      color: #f6ad55;
+    }
+
+    .warnings-list li::before { content: '⚠'; flex-shrink: 0; }
+
+    .info-list li {
+      color: #63b3ed;
+    }
+
+    .info-list li::before { content: 'ℹ'; flex-shrink: 0; }
+
+    /* --- Section headers in result --- */
+    .result-section {
+      margin-bottom: 1.25rem;
+    }
+
+    .result-section h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #718096;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.5rem;
+    }
+
+    /* --- Error --- */
+    .error-box {
+      background: rgba(229, 62, 62, 0.1);
+      border: 1px solid #e53e3e;
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      color: #fc8181;
+      font-size: 0.875rem;
+      margin-top: 0.75rem;
+      display: none;
+    }
+
+    /* --- Detection badge --- */
+    .detect-badge {
+      display: inline-block;
+      background: rgba(99, 179, 237, 0.15);
+      border: 1px solid rgba(99, 179, 237, 0.4);
+      border-radius: 20px;
+      padding: 0.25rem 0.75rem;
+      font-size: 0.8rem;
+      color: #63b3ed;
+      margin-bottom: 0.75rem;
+    }
+
+    /* --- Stats row --- */
+    .stats-row {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: 0.75rem;
+    }
+
+    .stat {
+      background: #0f1117;
+      border: 1px solid #2d3748;
+      border-radius: 6px;
+      padding: 0.5rem 0.9rem;
+      text-align: center;
+      min-width: 80px;
+    }
+
+    .stat .stat-num {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #63b3ed;
+      line-height: 1;
+    }
+
+    .stat .stat-label {
+      font-size: 0.7rem;
+      color: #4a5568;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 0.2rem;
+    }
+
+    /* --- Hidden / visible --- */
+    .hidden { display: none !important; }
+    .step-content { display: none; }
+    .step-content.active { display: block; }
+
+    /* --- Copy feedback --- */
+    #copy-feedback {
+      font-size: 0.8rem;
+      color: #68d391;
+      transition: opacity 0.3s;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>Amidala Config Converter</h1>
+    <p>Convert a Stealth RC or OG Amidala config to the current Amidala firmware format</p>
+  </header>
+
+  <!-- Step bar -->
+  <div class="step-bar" id="step-bar">
+    <div class="step-item active" id="ind-1">
+      <div class="step-num">1</div>
+      <div class="step-label">Upload</div>
+    </div>
+    <div class="step-connector"></div>
+    <div class="step-item" id="ind-2">
+      <div class="step-num">2</div>
+      <div class="step-label">Name Strings</div>
+    </div>
+    <div class="step-connector"></div>
+    <div class="step-item" id="ind-3">
+      <div class="step-num">3</div>
+      <div class="step-label">Result</div>
+    </div>
+  </div>
+
+  <!-- ===== STEP 1: Upload ===== -->
+  <div id="step-1" class="step-content active">
+    <div class="card">
+      <h2>Upload or paste your old config</h2>
+      <p>Supports Stealth RC (any version) and OG Amidala configs. The file should contain <code>#START</code> and <code>#END</code> markers.</p>
+    </div>
+
+    <div class="drop-zone" id="drop-zone">
+      <p>Drag &amp; drop your config file here</p>
+      <button class="btn" onclick="document.getElementById('file-input').click()">Choose File…</button>
+      <input type="file" id="file-input" accept=".txt,.cfg" style="display:none">
+    </div>
+
+    <textarea id="config-input" rows="14" placeholder="…or paste your config text here"></textarea>
+
+    <div id="parse-error" class="error-box"></div>
+
+    <div class="btn-row">
+      <div class="spacer"></div>
+      <button class="btn btn-primary" onclick="processUpload()">Analyze Config →</button>
+    </div>
+  </div>
+
+  <!-- ===== STEP 2: Name serial strings ===== -->
+  <div id="step-2" class="step-content">
+    <div class="card">
+      <h2>Name your serial strings</h2>
+      <p>Your old config has auxiliary strings that need a name in the new format. Names appear in the web UI and controller display. Suggestions have been pre-filled where recognized — edit any you'd like to change.</p>
+    </div>
+
+    <div id="sstr-list"></div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="showStep(1)">← Back</button>
+      <div class="spacer"></div>
+      <button class="btn btn-primary" onclick="generateResult()">Generate Config →</button>
+    </div>
+  </div>
+
+  <!-- ===== STEP 3: Result ===== -->
+  <div id="step-3" class="step-content">
+    <div class="card" id="summary-card">
+      <div id="detect-line"></div>
+      <div class="stats-row" id="stats-row"></div>
+    </div>
+
+    <div class="card" id="changes-card">
+      <div id="changes-content"></div>
+    </div>
+
+    <div class="card">
+      <h2>Converted config.txt</h2>
+      <div class="btn-row" style="margin-top:0; margin-bottom:0.75rem;">
+        <button class="btn" onclick="copyConfig()">Copy to Clipboard</button>
+        <button class="btn btn-primary" onclick="downloadConfig()">Download config.txt</button>
+        <span id="copy-feedback" class="hidden"></span>
+      </div>
+      <textarea id="result-output" readonly rows="20"></textarea>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="showStep(1); resetAll();">← Start Over</button>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+'use strict';
+
+// ============================================================
+//  Lookup tables
+// ============================================================
+
+// Only HCR emotion strings are standardized across all builders.
+// Body/dome controller command strings (BD:, DM:, etc.) vary per build — no suggestions.
+const STRING_SUGGESTIONS = {
+  '<SS0>': 'Sad Moderate',   '<SS1>': 'Sad Strong',
+  '<SC0>': 'Scared Moderate','<SC1>': 'Scared Strong',
+  '<SM0>': 'Mad Moderate',   '<SM1>': 'Mad Strong',
+  '<SH0>': 'Happy Moderate', '<SH1>': 'Happy Strong',
+  '<SE>':  'Overload',
+};
+
+// Parameters that were renamed between old formats and current Amidala
+const PARAM_RENAMES = {
+  'ack':          'ackgest',
+  'auxbaud':      'serialbaud',
+  'auxdelim':     'serialdelim',
+  'auxeol':       'serialeol',
+  'auxinit':      'serialinit',
+  // Dome seek delay params (old Stealth used different names)
+  'domehomemin':  'domeseekmin',
+  'domehomemax':  'domeseekmax',
+  'domemindelay': 'domeseekmin',
+  'domemaxdelay': 'domeseekmax',
+  // Old Stealth min/max speed params
+  'domespmin':    'domespeedmin',
+};
+
+// All parameters known to be valid in the current Amidala format
+const KNOWN_PARAMS = new Set([
+  'xbr','xbl',
+  'rvrmin','rvrmax','rvlmin','rvlmax','j1adjv','j1adjh',
+  'rcchn','rcd','rcj','fst','minpulse','maxpulse',
+  'audiohw','startupem','startuplvl','ackem','acklvl',
+  'volume','volumecha','volumechb','volumewheel','altvolumewheel',
+  'startup','rndon','ackon','acktype','goslow','mix12','auto',
+  'mindelay','maxdelay',
+  'myi2c','serialbaud','serialdelim','serialeol','serialinit',
+  'domemode','domespeed','domehome','domeflip','domefudge',
+  'domespeedhome','domespeedseek','domespeedmin',
+  'domeseekmin','domeseekmax','domeseekl','domeseekr','domech6',
+  'domercaddr','domercchan','domercqpps','domefront','domestall',
+  'rnd','ackgest','slowgest','domegest',
+  'altbtn','altdomestick','mutebutton',
+  'wifion','wifissid','wifipassword','btaddr',
+  'estopstr','resumestr',
+]);
+
+// Preferred output order for general params
+const PARAM_ORDER = [
+  'xbr','xbl',
+  'rvrmin','rvrmax','rvlmin','rvlmax','j1adjv','j1adjh',
+  'rcchn','rcd','rcj','fst','minpulse','maxpulse',
+  'audiohw','startupem','startuplvl','ackem','acklvl',
+  'volume','startup','rndon','ackon','acktype',
+  'goslow','mix12','auto',
+  'mindelay','maxdelay',
+  'myi2c','serialbaud','serialdelim','serialeol','serialinit',
+  'domemode','domespeed','domehome','domeflip','domefudge',
+  'domespeedhome','domespeedseek','domespeedmin',
+  'domeseekmin','domeseekmax','domeseekl','domeseekr','domech6',
+  'domercaddr','domercchan','domercqpps','domefront','domestall',
+  'rnd','ackgest','slowgest','domegest',
+  'altbtn','altdomestick','mutebutton',
+  'wifion','wifissid','wifipassword','btaddr',
+  'estopstr','resumestr',
+];
+
+// ============================================================
+//  State
+// ============================================================
+
+let parsed = null;    // result of parseOldConfig()
+let converted = null; // result of convertParams()
+
+// ============================================================
+//  Step navigation
+// ============================================================
+
+function showStep(n) {
+  document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
+  document.getElementById('step-' + n).classList.add('active');
+
+  ['ind-1','ind-2','ind-3'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.classList.remove('active','done');
+    if (i + 1 < n) el.classList.add('done');
+    else if (i + 1 === n) el.classList.add('active');
+  });
+}
+
+function resetAll() {
+  document.getElementById('config-input').value = '';
+  parsed = null;
+  converted = null;
+}
+
+// ============================================================
+//  File / drop handling
+// ============================================================
+
+const dropZone = document.getElementById('drop-zone');
+
+dropZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropZone.classList.add('dragover');
+});
+
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) readFile(file);
+});
+
+document.getElementById('file-input').addEventListener('change', e => {
+  if (e.target.files[0]) readFile(e.target.files[0]);
+});
+
+function readFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById('config-input').value = ev.target.result;
+  };
+  reader.readAsText(file);
+}
+
+// ============================================================
+//  Parse old config
+// ============================================================
+
+function parseOldConfig(text) {
+  const rawLines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+
+  const startIdx = rawLines.findIndex(l => l.trim() === '#START');
+  const endIdx   = rawLines.findIndex(l => l.trim() === '#END');
+
+  let body;
+  if (startIdx !== -1 && endIdx !== -1) {
+    body = rawLines.slice(startIdx + 1, endIdx);
+  } else if (startIdx !== -1) {
+    body = rawLines.slice(startIdx + 1);
+  } else {
+    body = rawLines; // best-effort: no markers
+  }
+
+  const result = {
+    auxStrings:  [],
+    servos:      [],
+    soundBanks:  [],
+    buttons:     [],
+    longButtons: [],
+    altButtons:  [],
+    gestures:    [],
+    params:      {},   // key → value (string)
+    unknown:     [],
+    hasStartEnd: startIdx !== -1 && endIdx !== -1,
+  };
+
+  for (const rawLine of body) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+
+    // Strip trailing inline comment (space + #)
+    const commentMatch = line.match(/^(.*?)\s+#.*$/);
+    const effective = commentMatch ? commentMatch[1].trim() : line;
+    if (!effective) continue;
+
+    const eqIdx = effective.indexOf('=');
+    if (eqIdx === -1) { result.unknown.push(effective); continue; }
+
+    const key = effective.substring(0, eqIdx).toLowerCase().trim();
+    const val = effective.substring(eqIdx + 1).trim();
+
+    switch (key) {
+      case 'a':  result.auxStrings.push(val);  break;
+      case 's':  result.servos.push(val);       break;
+      case 'sb': result.soundBanks.push(val);  break;
+      case 'b':  result.buttons.push(val);      break;
+      case 'lb': result.longButtons.push(val); break;
+      case 'ab': result.altButtons.push(val);  break;
+      case 'g':  result.gestures.push(val);    break;
+      default:
+        // Keep last value if duplicated (shouldn't happen in valid configs)
+        result.params[key] = val;
+    }
+  }
+
+  return result;
+}
+
+// ============================================================
+//  Convert params
+// ============================================================
+
+function convertParams(params) {
+  const newParams = {};
+  const changes   = [];
+  const warnings  = [];
+
+  for (const [key, val] of Object.entries(params)) {
+    if (key === 'rvr') {
+      // Old format: single max value → split into min + max
+      newParams['rvrmin'] = '0';
+      newParams['rvrmax'] = val;
+      changes.push(`rvr=${val} → rvrmin=0 + rvrmax=${val} (joystick calibration split)`);
+    } else if (key === 'rvl') {
+      newParams['rvlmin'] = '0';
+      newParams['rvlmax'] = val;
+      changes.push(`rvl=${val} → rvlmin=0 + rvlmax=${val} (joystick calibration split)`);
+    } else if (PARAM_RENAMES[key]) {
+      const newKey = PARAM_RENAMES[key];
+      newParams[newKey] = val;
+      changes.push(`${key} → ${newKey}`);
+    } else {
+      newParams[key] = val;
+      if (!KNOWN_PARAMS.has(key)) {
+        warnings.push(`Unrecognized parameter: ${key}=${val} — kept as-is, but verify it's valid in the current firmware.`);
+      }
+    }
+  }
+
+  return { newParams, changes, warnings };
+}
+
+// ============================================================
+//  Generate output config
+// ============================================================
+
+function generateConfig(parsedData, sstrNames, conv) {
+  const lines = ['#START'];
+  const { newParams } = conv;
+
+  // General params in canonical order
+  const emitted = new Set();
+  for (const key of PARAM_ORDER) {
+    if (newParams[key] !== undefined) {
+      lines.push(`${key}=${newParams[key]}`);
+      emitted.add(key);
+    }
+  }
+  // Any leftover params not in our ordering
+  for (const [key, val] of Object.entries(newParams)) {
+    if (!emitted.has(key)) {
+      lines.push(`${key}=${val}`);
+    }
+  }
+
+  // Servo channels
+  if (parsedData.servos.length > 0) {
+    lines.push('');
+    for (const sv of parsedData.servos) lines.push(`s=${sv}`);
+  }
+
+  // Sound banks
+  if (parsedData.soundBanks.length > 0) {
+    lines.push('');
+    for (const sb of parsedData.soundBanks) lines.push(`sb=${sb}`);
+  }
+
+  // Serial strings (converted from aux strings)
+  if (parsedData.auxStrings.length > 0) {
+    lines.push('');
+    for (let i = 0; i < parsedData.auxStrings.length; i++) {
+      const name = (sstrNames[i] || '').trim() || `String ${i + 1}`;
+      // Sanitize: strip | from name to avoid breaking format
+      const safeName = name.replace(/\|/g, '-');
+      lines.push(`sstr=${safeName}|${parsedData.auxStrings[i]}`);
+    }
+  }
+
+  // Buttons
+  if (parsedData.buttons.length > 0) {
+    lines.push('');
+    for (const b of parsedData.buttons) lines.push(`b=${b}`);
+  }
+  if (parsedData.longButtons.length > 0) {
+    for (const b of parsedData.longButtons) lines.push(`lb=${b}`);
+  }
+  if (parsedData.altButtons.length > 0) {
+    for (const b of parsedData.altButtons) lines.push(`ab=${b}`);
+  }
+
+  // Gestures
+  if (parsedData.gestures.length > 0) {
+    lines.push('');
+    for (const g of parsedData.gestures) lines.push(`g=${g}`);
+  }
+
+  lines.push('');
+  lines.push('#END');
+  return lines.join('\n');
+}
+
+// ============================================================
+//  UI: Step 1 — process upload
+// ============================================================
+
+function processUpload() {
+  const text = document.getElementById('config-input').value.trim();
+  const errEl = document.getElementById('parse-error');
+  errEl.style.display = 'none';
+
+  if (!text) {
+    errEl.textContent = 'Please paste or upload a config file first.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  parsed = parseOldConfig(text);
+  converted = convertParams(parsed.params);
+
+  if (parsed.auxStrings.length > 0) {
+    buildSstrStep(parsed.auxStrings);
+    showStep(2);
+  } else {
+    generateResult();
+  }
+}
+
+// ============================================================
+//  UI: Step 2 — build serial string naming form
+// ============================================================
+
+function buildSstrStep(auxStrings) {
+  const container = document.getElementById('sstr-list');
+  container.innerHTML = '';
+
+  auxStrings.forEach((str, i) => {
+    const suggestion = STRING_SUGGESTIONS[str] || '';
+    const div = document.createElement('div');
+    div.className = 'sstr-entry';
+    div.innerHTML = `
+      <div class="sstr-index">Serial string #${i + 1}</div>
+      <div class="sstr-value">${escHtml(str)}</div>
+      <label for="sstr-name-${i}">Name / description</label>
+      <input type="text" id="sstr-name-${i}" maxlength="30"
+             value="${escHtml(suggestion)}"
+             placeholder="e.g. Leia Sequence">
+    `;
+    container.appendChild(div);
+  });
+}
+
+// ============================================================
+//  UI: Step 3 — generate and display result
+// ============================================================
+
+function generateResult() {
+  const sstrNames = [];
+  if (parsed.auxStrings.length > 0) {
+    parsed.auxStrings.forEach((_, i) => {
+      const inp = document.getElementById('sstr-name-' + i);
+      sstrNames.push(inp ? inp.value : '');
+    });
+  }
+
+  const configText = generateConfig(parsed, sstrNames, converted);
+  document.getElementById('result-output').value = configText;
+
+  buildSummary();
+  buildChanges(converted.changes, converted.warnings, sstrNames);
+
+  showStep(3);
+}
+
+function buildSummary() {
+  // Detection badge
+  const detectLine = document.getElementById('detect-line');
+  const hasRvr = !!parsed.params['rvr'] || !!parsed.params['rvl'];
+  const format = hasRvr ? 'Stealth RC / OG Amidala (pre-1.0.12)' :
+                 parsed.hasStartEnd ? 'Amidala / Stealth RC' : 'Unknown format';
+  detectLine.innerHTML = `<div class="detect-badge">Detected: ${escHtml(format)}</div>`;
+
+  // Stats
+  const statsRow = document.getElementById('stats-row');
+  const stats = [
+    { n: parsed.buttons.length + parsed.longButtons.length + parsed.altButtons.length, label: 'Buttons' },
+    { n: parsed.gestures.length,   label: 'Gestures' },
+    { n: parsed.soundBanks.length, label: 'Sound Banks' },
+    { n: parsed.servos.length,     label: 'Servos' },
+    { n: parsed.auxStrings.length, label: 'Serial Strings' },
+  ];
+  statsRow.innerHTML = stats.map(s =>
+    `<div class="stat"><div class="stat-num">${s.n}</div><div class="stat-label">${s.label}</div></div>`
+  ).join('');
+}
+
+function buildChanges(changes, warnings, sstrNames) {
+  const el = document.getElementById('changes-content');
+  let html = '';
+
+  if (changes.length > 0) {
+    html += `<div class="result-section">
+      <h3>Automatic conversions</h3>
+      <ul class="changes-list">
+        ${changes.map(c => `<li>${escHtml(c)}</li>`).join('')}
+      </ul>
+    </div>`;
+  }
+
+  if (parsed.auxStrings.length > 0) {
+    html += `<div class="result-section">
+      <h3>Serial strings converted</h3>
+      <ul class="changes-list">
+        ${parsed.auxStrings.map((s, i) => {
+          const name = (sstrNames[i] || '').trim() || `String ${i+1}`;
+          return `<li>a=${escHtml(s)} → sstr=${escHtml(name)}|${escHtml(s)}</li>`;
+        }).join('')}
+      </ul>
+    </div>`;
+  }
+
+  if (warnings.length > 0) {
+    html += `<div class="result-section">
+      <h3>Review these settings</h3>
+      <ul class="changes-list warnings-list">
+        ${warnings.map(w => `<li>${escHtml(w)}</li>`).join('')}
+      </ul>
+    </div>`;
+  }
+
+  // Serial strings notice — shown when the old config had no aux strings at all
+  if (parsed.auxStrings.length === 0) {
+    const allActions = [
+      ...parsed.buttons, ...parsed.longButtons,
+      ...parsed.altButtons, ...parsed.gestures,
+    ];
+    // Check for action type 4 (I2C command) in any button/gesture line
+    const hasI2C = allActions.some(line => /^\d[^,]*,4,/.test(line));
+    const i2cNote = hasI2C
+      ? ' We did find I2C commands (action type 4) in your mappings — those are still fully supported and will continue to work.'
+      : '';
+    html += `<div class="result-section">
+      <h3>No serial strings detected</h3>
+      <ul class="changes-list info-list">
+        <li><span>Amidala's primary accessory interface is serial.${i2cNote} Your old config had no auxiliary strings — if your accessories accept serial commands, add <code>sstr=Name|command</code> entries and configure serial string actions via the web UI after flashing.</span></li>
+      </ul>
+    </div>`;
+  }
+
+  // Always remind about new-only settings
+  html += `<div class="result-section">
+    <h3>New settings not in your old config</h3>
+    <ul class="changes-list info-list">
+      <li><span>WiFi/Bluetooth, audio hardware (audiohw), HCR emote defaults, alt-button, dome mode and more — configure these in the web UI after flashing, or add them manually to the output above.</span></li>
+    </ul>
+  </div>`;
+
+  el.innerHTML = html;
+}
+
+// ============================================================
+//  Copy / Download
+// ============================================================
+
+function copyConfig() {
+  const text = document.getElementById('result-output').value;
+  navigator.clipboard.writeText(text).then(() => {
+    const fb = document.getElementById('copy-feedback');
+    fb.textContent = 'Copied!';
+    fb.classList.remove('hidden');
+    setTimeout(() => fb.classList.add('hidden'), 2000);
+  });
+}
+
+function downloadConfig() {
+  const text = document.getElementById('result-output').value;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'config.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ============================================================
+//  Utilities
+// ============================================================
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>
