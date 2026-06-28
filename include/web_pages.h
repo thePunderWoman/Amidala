@@ -5029,6 +5029,14 @@ footer a:hover { opacity: 1; }
 .btn-add{background:none;border:1px solid var(--border);color:var(--text);padding:.4rem 1.2rem;font-family:inherit;font-size:.8rem;letter-spacing:.12em;cursor:pointer;border-radius:4px;transition:border-color .15s,color .15s}
 .btn-add:hover{border-color:var(--accent);color:var(--accent)}
 #empty{color:var(--muted);font-size:.8rem;padding:1rem 0;letter-spacing:.1em}
+.cat-mgr{margin-top:1.4rem;padding-top:1rem;border-top:1px solid var(--border)}
+.cat-mgr-hdr{font:600 .68rem/1 ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem}
+.cat-row{display:flex;align-items:center;gap:.6rem;padding:.35rem 0;border-bottom:1px solid var(--border)}
+.cat-row:last-child{border-bottom:none}
+.cat-row-name{font-size:.82rem;color:var(--text);flex:1}
+.cat-row-count{font-size:.72rem;color:var(--muted)}
+.cat-del{background:none;border:none;color:var(--muted);font-size:.95rem;padding:.1rem .3rem;cursor:pointer;opacity:.6;line-height:1}
+.cat-del:hover{opacity:1;color:var(--danger,#c0392b)}
 </style>
 <script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
 </head>
@@ -5420,6 +5428,7 @@ function render() {
   }
   if (_isNew) h += editRow(-1,'','','',false,false);
   h += '<div class="add-row"><button class="btn-add" onclick="addStr()">+ Add Command</button></div>';
+  h += renderCategories();
   document.getElementById('main').innerHTML = h;
   if (_ed >= 0 || _isNew) { var el=document.getElementById('ed-name'); if(el) el.focus(); }
 }
@@ -5554,6 +5563,33 @@ function delStr(i) {
   }).then(function(){
     render(); showToast('Deleted');
   }).catch(function(){showToast('Delete failed',true);});
+}
+
+function renderCategories() {
+  if (_cats.length === 0) return '';
+  var h = '<div class="cat-mgr">';
+  h += '<div class="cat-mgr-hdr">Categories</div>';
+  _cats.forEach(function(cat, i) {
+    var n = cat.idx.length;
+    var label = n === 1 ? '1 command' : n + ' commands';
+    h += '<div class="cat-row">'
+      +'<span class="cat-row-name">'+esc(cat.name)+'</span>'
+      +'<span class="cat-row-count">'+label+'</span>'
+      +'<button class="cat-del" onclick="deleteCategory('+i+')" title="Remove category">&#10005;</button>'
+      +'</div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+function deleteCategory(i) {
+  var cat = _cats[i];
+  if (!confirm('Remove category "'+cat.name+'"?\n\nIts commands will become uncategorized.')) return;
+  _cats.splice(i, 1);
+  saveMeta().then(function() {
+    render();
+    showToast('Category removed');
+  }).catch(function() { showToast('Save failed', true); });
 }
 
 load();
