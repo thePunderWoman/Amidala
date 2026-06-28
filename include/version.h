@@ -9,7 +9,7 @@
 #pragma once
 
 // Plain C string literals — usable in web_api.h and anywhere F() can't be used
-#define FIRMWARE_VERSION   "1.0.0"
+#define FIRMWARE_VERSION   "1.0.1"
 #define BOARD_REV          "1.1"
 #define MCU_VARIANT        "ESP32-S3 N16R8"
 
