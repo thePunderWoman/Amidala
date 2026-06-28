@@ -27,6 +27,28 @@
 .sstr-empty{font-size:.75rem;color:var(--muted);margin-bottom:.4rem}
 .no-sstr{font-size:.75rem;color:var(--muted)}
 .no-sstr a,.info-note a{color:var(--text)}
+/* Periscope command reference */
+.cmd-ref-table{width:100%;border-collapse:collapse;margin:.35rem 0 .1rem}
+.cmd-ref-table td{padding:.2rem .4rem;font-size:.73rem;vertical-align:top}
+.cmd-ref-table td:first-child{font-family:ui-monospace,'SF Mono',Menlo,monospace;color:var(--accent);white-space:nowrap;padding-right:.7rem}
+.cmd-ref-table tr.auto-included td:first-child{color:var(--text)}
+.cmd-ref-table tr.auto-included td:first-child::after{content:' ✓';font-size:.65rem;color:var(--accent);opacity:.7}
+.cmd-ref-table td:last-child{color:var(--muted)}
+.ref-group-hdr{font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:.6rem 0 .2rem;border-top:1px solid var(--border);padding-top:.5rem}
+.ref-group-hdr:first-of-type{border-top:none;padding-top:0}
+/* Periscope sequence management */
+.pseq-row{display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid var(--border)}
+.pseq-slot{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.72rem;color:var(--accent);min-width:2rem;flex-shrink:0}
+.pseq-name{flex:1;font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pseq-seq{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.7rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:14rem}
+.pseq-acts{display:flex;gap:.2rem;flex-shrink:0}
+.pseq-del{background:none;border:none;color:var(--muted);font-size:.85rem;padding:.1rem .3rem;cursor:pointer;opacity:.7}
+.pseq-del:hover{opacity:1;color:var(--danger)}
+.pseq-new{margin-top:.5rem}
+.pseq-inputs{display:grid;grid-template-columns:3rem 1fr 1fr;gap:.4rem;margin-bottom:.4rem}
+.pseq-inputs input{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.3rem .5rem;font-family:inherit;font-size:.78rem;border-radius:4px;width:100%;box-sizing:border-box}
+.pseq-inputs input:focus{outline:none;border-color:var(--accent)}
+.pseq-inputs input.mono{font-family:ui-monospace,'SF Mono',Menlo,monospace}
 </style>
 <script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
 </head>
@@ -39,27 +61,66 @@
 <script src="/assets/edit.js"></script>
 <script>
 var _cfg = null;
+var _periscope_seqs = {};  // slot_str -> {name, seq}
 
-var UPPITY_OPS = [
-  {name:'Home',           str:':PH'},
-  {name:'Raise Full',     str:':PP100'},
-  {name:'Raise Half',     str:':PP50'},
-  {name:'Random Gentle',  str:':PMG'},
-  {name:'Random Medium',  str:':PMM'},
-  {name:'Random Strong',  str:':PMA'},
-  {name:'Stop',           str:':PX'},
-  {name:'Face Forward',   str:':PA0'},
-  {name:'Spin CCW',       str:':PR30'},
-  {name:'Spin CW',        str:':PR-30'},
-  {name:'Stop Spin',      str:':PR0'},
+// Commands automatically included for the Uppity Spinner periscope.
+// These appear in droid control and as button assignment options.
+var UPPITY_AUTO = [
+  {name:'Home',          str:':PH',   desc:'Raise, rotate to 0°, lower'},
+  {name:'Raise Full',    str:':PP100',desc:'Lift to 100%'},
+  {name:'Raise Half',    str:':PP50', desc:'Lift to 50%'},
+  {name:'Random Gentle', str:':PMG',  desc:'One-shot gentle random animation'},
+  {name:'Random Medium', str:':PMM',  desc:'One-shot medium random animation'},
+  {name:'Random Strong', str:':PMA',  desc:'One-shot aggressive random animation'},
+  {name:'Stop',          str:':PX',   desc:'Emergency stop — aborts mid-flight motion'},
+  {name:'Face Forward',  str:':PA0',  desc:'Rotate to 0°'},
+  {name:'Spin CCW',      str:':PR30', desc:'Continuous spin counter-clockwise'},
+  {name:'Spin CW',       str:':PR-30',desc:'Continuous spin clockwise'},
+  {name:'Stop Spin',     str:':PR0',  desc:'Stop continuous spin'},
 ];
-var UPPITY_CFG = [
-  {name:'Calibrate',          str:'#PSC'},
-  {name:'Show Config',        str:'#PCONFIG'},
-  {name:'Default: Gentle',    str:'#PAGGRESSION0'},
-  {name:'Default: Medium',    str:'#PAGGRESSION1'},
-  {name:'Default: Aggressive',str:'#PAGGRESSION2'},
-  {name:'Restart',            str:'#PRESTART'},
+var UPPITY_AUTO_STRS = UPPITY_AUTO.map(function(c){return c.str;});
+
+// Full command reference grouped by category
+var UPPITY_CMD_REF = {
+  'Lifter / Rotary': [
+    {str:':PP&lt;0-100&gt;[,speed]',   raw:':PP',   desc:'Move lifter to position % (0=down, 100=up)'},
+    {str:':PPR[,speed]',               raw:':PPR',  desc:'Random position'},
+    {str:':PH[speed]',                 raw:':PH',   desc:'Home — raise, rotate to 0°, lower'},
+    {str:':PA&lt;deg&gt;[,speed]',     raw:':PA',   desc:'Rotate to absolute degrees'},
+    {str:':PAR[,speed]',               raw:':PAR',  desc:'Random absolute rotation'},
+    {str:':PD&lt;deg&gt;[,speed]',     raw:':PD',   desc:'Rotate relative degrees (+ CCW, − CW)'},
+    {str:':PDR[,speed]',               raw:':PDR',  desc:'Random relative rotation'},
+    {str:':PR&lt;speed&gt;',           raw:':PR',   desc:'Continuous spin (+ CCW, − CW; 0 = stop)'},
+    {str:':PM[,liftSpd,rotSpd,…]',    raw:':PM',   desc:'Safe random animation mode'},
+    {str:':PMG / :PMM / :PMA',         raw:':PMG',  desc:'One-shot Gentle / Medium / Aggressive animation'},
+    {str:':PX',                        raw:':PX',   desc:'Emergency stop — aborts any in-progress motion'},
+    {str:':PW[R]&lt;seconds&gt;',      raw:':PW',   desc:'Wait (R = randomize 1..N seconds)'},
+    {str:':PL&lt;0-7&gt;',             raw:':PL',   desc:'Light kit mode'},
+    {str:':PS&lt;0-100&gt;',           raw:':PS',   desc:'Play stored sequence'},
+  ],
+  'Configuration': [
+    {str:'#PSC',                        raw:'#PSC',         desc:'Run calibration'},
+    {str:'#PCONFIG',                    raw:'#PCONFIG',     desc:'Display full configuration'},
+    {str:'#PSTATUS',                    raw:'#PSTATUS',     desc:'Show WiFi / remote status'},
+    {str:'#PMOTOR&lt;n&gt;',           raw:'#PMOTOR',      desc:'Set lifter motor profile (0=6.3:1, 1=19:1, 2=IA-Parts)'},
+    {str:'#PAGGRESSION[&lt;0-2&gt;]',  raw:'#PAGGRESSION', desc:'Default random aggressiveness (0=Gentle … 2=Aggressive)'},
+    {str:'#PFACTORY',                   raw:'#PFACTORY',    desc:'Factory reset — clears all preferences and sequences'},
+    {str:'#PS&lt;n&gt;:&lt;seq&gt;',   raw:'#PS',          desc:'Store sequence (e.g. #PS1:PP100:PH)'},
+    {str:'#PL',                         raw:'#PL',          desc:'List stored sequences'},
+    {str:'#PD&lt;n&gt;',               raw:'#PD',          desc:'Delete sequence n'},
+    {str:'#PDEBUG[0|1]',               raw:'#PDEBUG',      desc:'Enable/disable verbose debug output'},
+    {str:'#PRESTART',                   raw:'#PRESTART',    desc:'Reboot'},
+  ],
+};
+
+var UPPITY_CFG_BTNS = [
+  {name:'Calibrate',    str:'#PSC'},
+  {name:'Show Config',  str:'#PCONFIG'},
+  {name:'Status',       str:'#PSTATUS'},
+  {name:'Gentle',       str:'#PAGGRESSION0'},
+  {name:'Medium',       str:'#PAGGRESSION1'},
+  {name:'Aggressive',   str:'#PAGGRESSION2'},
+  {name:'Restart',      str:'#PRESTART'},
 ];
 
 var GADGETS = [
@@ -82,10 +143,13 @@ function gadgetCmdPost(cmd) {
 }
 
 function load() {
-  fetch('/api/config')
-    .then(function(r) { return r.json(); })
-    .then(function(d) { _cfg = d; render(); })
-    .catch(function() { document.getElementById('status').textContent = 'Failed to load.'; });
+  var p1 = fetch('/api/config').then(function(r) { return r.json(); });
+  var p2 = fetch('/api/periscope/seqs').then(function(r) { return r.json(); }).catch(function() { return {}; });
+  Promise.all([p1, p2]).then(function(results) {
+    _cfg = results[0];
+    _periscope_seqs = results[1] || {};
+    render();
+  }).catch(function() { document.getElementById('status').textContent = 'Failed to load.'; });
 }
 
 function render() {
@@ -93,7 +157,7 @@ function render() {
   var sstr = _cfg.sstr || [];
   var h = '';
 
-  h += '<div class="info-banner">Commands assigned to a gadget appear in <a href="/droid-control#gadgets">Droid Control &rsaquo; Gadgets</a> and are excluded from the Sequences tab.</div>';
+  h += '<div class="info-banner">Commands assigned to a gadget appear in <a href="/droid-control#gadgets">Droid Control &rsaquo; Gadgets</a>. You can also set a command\'s category to a gadget name in <a href="/config/serial-strings">Serial Commands</a>.</div>';
 
   GADGETS.forEach(function(g) {
     var cfg      = gCfg[g.id] || {type: 0, sstr: []};
@@ -110,24 +174,69 @@ function render() {
     h += '</div>';
 
     if (g.id === 0 && cfg.type === 2) {
+      // ---- Periscope (Uppity Spinner) ----
+
+      // Command reference
       h += '<div class="sstr-section">';
-      h += '<div class="sstr-label">Operational Commands</div>';
-      h += '<div style="font-size:.7rem;color:var(--muted);margin-bottom:.4rem">Auto-available in <a href="/droid-control#gadgets">Droid Control &rarr; Gadgets</a> and as button assignments.</div>';
-      h += '<div style="display:flex;flex-direction:column;gap:.15rem">';
-      UPPITY_OPS.forEach(function(c) {
-        h += '<div class="sstr-empty" style="margin:0"><span style="color:var(--accent);min-width:7rem;display:inline-block">' + c.name + '</span><span style="opacity:.5;font-size:.7rem">' + c.str + '</span></div>';
+      h += '<div class="sstr-label">Command Reference</div>';
+      h += '<div style="font-size:.7rem;color:var(--muted);margin-bottom:.4rem">Commands marked &#10003; are available automatically in <a href="/droid-control#gadgets">Droid Control</a> and as button assignments.</div>';
+      Object.keys(UPPITY_CMD_REF).forEach(function(group) {
+        h += '<div class="ref-group-hdr">' + group + '</div>';
+        h += '<table class="cmd-ref-table">';
+        UPPITY_CMD_REF[group].forEach(function(c) {
+          var isAuto = UPPITY_AUTO_STRS.some(function(s) { return c.raw && (s === c.raw || s.startsWith(c.raw)); });
+          h += '<tr' + (isAuto ? ' class="auto-included"' : '') + '>';
+          h += '<td>' + c.str + '</td><td>' + c.desc + '</td></tr>';
+        });
+        h += '</table>';
       });
       h += '</div>';
+
+      // Custom sequences
+      h += '<div class="sstr-section">';
+      h += '<div class="sstr-label">Custom Sequences</div>';
+      h += '<div style="font-size:.7rem;color:var(--muted);margin-bottom:.5rem">Sequences stored on the periscope (slots 0–100). Trigger with <span style="font-family:ui-monospace,monospace">:PS&lt;n&gt;</span>.</div>';
+
+      var seqSlots = Object.keys(_periscope_seqs).sort(function(a,b){ return parseInt(a)-parseInt(b); });
+      if (seqSlots.length > 0) {
+        seqSlots.forEach(function(slot) {
+          var seq = _periscope_seqs[slot];
+          h += '<div class="pseq-row">';
+          h += '<span class="pseq-slot">#' + slot + '</span>';
+          h += '<span class="pseq-name">' + esc(seq.name || seq.seq) + '</span>';
+          h += '<span class="pseq-seq">' + esc(seq.seq) + '</span>';
+          h += '<div class="pseq-acts">';
+          h += '<button class="sstr-add-btn" onclick="triggerPseq(' + slot + ')" title="Run">&#9654;</button>';
+          h += '<button class="pseq-del" onclick="deletePseq(' + slot + ')" title="Delete">&#10005;</button>';
+          h += '</div>';
+          h += '</div>';
+        });
+      } else {
+        h += '<div class="sstr-empty">No custom sequences stored yet.</div>';
+      }
+
+      h += '<div class="pseq-new">';
+      h += '<div class="sstr-label" style="margin-top:.5rem">Store New Sequence</div>';
+      h += '<div class="pseq-inputs">';
+      h += '<input type="number" id="pseq-slot" min="0" max="100" placeholder="Slot" style="text-align:center">';
+      h += '<input type="text"   id="pseq-name" placeholder="Label (optional)">';
+      h += '<input type="text"   id="pseq-seq"  placeholder="Sequence, e.g. PP100:PH" class="mono">';
+      h += '</div>';
+      h += '<button class="sstr-add-btn" onclick="storePseq()">&#43; Store Sequence</button>';
       h += '</div>';
 
+      h += '</div>';
+
+      // Calibration / setup buttons
       h += '<div class="sstr-section">';
       h += '<div class="sstr-label">Calibration &amp; Setup</div>';
       h += '<div class="sstr-tags" style="gap:.4rem">';
-      UPPITY_CFG.forEach(function(c) {
+      UPPITY_CFG_BTNS.forEach(function(c) {
         h += '<button class="sstr-add-btn" onclick="gadgetCmdPost(' + JSON.stringify(c.str) + ')">' + c.name + '</button>';
       });
       h += '</div>';
       h += '</div>';
+
     } else if (g.serial && cfg.type > 0) {
       h += '<div class="sstr-section">';
       h += '<div class="sstr-label">Serial Commands</div>';
@@ -170,6 +279,51 @@ function render() {
   });
 
   document.getElementById('main').innerHTML = h;
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function triggerPseq(slot) {
+  gadgetCmdPost(':PS' + slot);
+}
+
+function storePseq() {
+  var slotEl = document.getElementById('pseq-slot');
+  var nameEl = document.getElementById('pseq-name');
+  var seqEl  = document.getElementById('pseq-seq');
+  if (!slotEl || !seqEl) return;
+  var slot = slotEl.value.trim();
+  var name = (nameEl ? nameEl.value.trim() : '');
+  var seq  = seqEl.value.trim();
+  if (!slot || !seq) { showToast('Slot and sequence required', true); return; }
+  var n = parseInt(slot, 10);
+  if (isNaN(n) || n < 0 || n > 100) { showToast('Slot must be 0–100', true); return; }
+  fetch('/api/periscope/seq', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'slot=' + n + '&name=' + encodeURIComponent(name) + '&seq=' + encodeURIComponent(seq)
+  }).then(function(r) {
+    if (!r.ok) { showToast('Failed to store', true); return; }
+    _periscope_seqs[String(n)] = {name: name, seq: seq};
+    render();
+    showToast('Sequence stored');
+  }).catch(function() { showToast('Network error', true); });
+}
+
+function deletePseq(slot) {
+  if (!confirm('Delete sequence #' + slot + '?')) return;
+  fetch('/api/periscope/seq/delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'slot=' + slot
+  }).then(function(r) {
+    if (!r.ok) { showToast('Delete failed', true); return; }
+    delete _periscope_seqs[String(slot)];
+    render();
+    showToast('Deleted');
+  }).catch(function() { showToast('Network error', true); });
 }
 
 function apiPost(key, value, cb) {

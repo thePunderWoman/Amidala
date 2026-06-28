@@ -38,6 +38,9 @@
 .dome-pos-left{display:flex;flex-direction:column;gap:.5rem}
 .dome-pos-right{display:flex;flex-direction:column;align-items:center;gap:.35rem}
 .dome-deg-display{font:500 13px/1 ui-monospace,'SF Mono',Menlo,monospace;color:var(--accent);letter-spacing:.08em}
+/* ---- category groups ---- */
+.cat-hdr{font:600 .7rem/1 ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);padding:.8rem 0 .35rem;border-top:1px solid var(--border);margin-top:.4rem}
+.cat-hdr:first-child{border-top:none;margin-top:0;padding-top:.2rem}
 </style>
 <script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
 </head>
@@ -60,24 +63,48 @@
   </div>
 </div>
 <div class="tabs">
-  <button class="tab" data-tab="dome"      onclick="showHashTab('dome')">Dome</button>
-  <button class="tab" data-tab="sequences" onclick="showHashTab('sequences')">Sequences</button>
-  <button class="tab" data-tab="gadgets"   onclick="showHashTab('gadgets')">Gadgets</button>
+  <button class="tab" data-tab="favorites"  onclick="showHashTab('favorites')">Favorites</button>
+  <button class="tab" data-tab="dome"       onclick="showHashTab('dome')">Dome</button>
+  <button class="tab" data-tab="sequences"  onclick="showHashTab('sequences')">Sequences</button>
+  <button class="tab" data-tab="gadgets"    onclick="showHashTab('gadgets')">Gadgets</button>
+  <button class="tab" data-tab="hcr"        onclick="showHashTab('hcr')" id="hcr-tab" hidden>HCR</button>
 </div>
 <div id="main"><div id="status">LOADING&#8230;</div></div>
 <script src="/assets/edit.js"></script>
 <script>
 var _cfg = null;
-var _tab = 'dome';
+var _tab = 'favorites';
 
 var ANGLES    = [0,45,90,135,180,225,270,315];
-var HCR_EMOS  = ['Happy','Sad','Mad','Scared'];
 var GADGET_NAMES = ['Periscope','Lifeform Scanner','Lightsaber Launcher','Bubble Gun','Zapper Arm','Gripper','Data Probe'];
+var HCR_EMOS  = ['Happy','Sad','Mad','Scared'];
 
 function isGadgetSstr(oneBasedIdx) {
   return (_cfg.gadgets_cfg || []).some(function(g) {
     return g && g.type > 0 && (g.sstr || []).indexOf(oneBasedIdx) >= 0;
   });
+}
+
+function sstrCatFor(oneIdx) {
+  var cats = _cfg.sstr_cats || [];
+  for (var i = 0; i < cats.length; i++) {
+    if ((cats[i].idx || []).indexOf(oneIdx) >= 0) return cats[i].name;
+  }
+  return '';
+}
+
+function sstrIsHidden(oneIdx) {
+  return (_cfg.sstr_hidden || []).indexOf(oneIdx) >= 0;
+}
+
+// True when catName exactly matches an enabled gadget name (used to route commands to Gadgets tab)
+function isGadgetCat(catName) {
+  if (!catName) return false;
+  var gCfg = _cfg.gadgets_cfg || [];
+  for (var i = 0; i < GADGET_NAMES.length; i++) {
+    if (GADGET_NAMES[i] === catName && gCfg[i] && gCfg[i].type > 0) return true;
+  }
+  return false;
 }
 
 function load() {
@@ -86,16 +113,20 @@ function load() {
     .then(function(d) {
       _cfg = d;
       initVolBar(d);
-      initHashTabs('dome', function(t) { _tab = t; render(); });
+      var hcrTab = document.getElementById('hcr-tab');
+      if (hcrTab) hcrTab.hidden = (d.audiohw !== 'hcr');
+      initHashTabs('favorites', function(t) { _tab = t; render(); });
     })
     .catch(function() { document.getElementById('status').textContent = 'Failed to load.'; });
 }
 
 function render() {
   if (_tab !== 'dome') stopDomePoll();
-  if (_tab === 'dome')           renderDome();
+  if      (_tab === 'dome')      renderDome();
+  else if (_tab === 'favorites') renderFavorites();
   else if (_tab === 'sequences') renderSequences();
-  else                           renderGadgets();
+  else if (_tab === 'gadgets')   renderGadgets();
+  else if (_tab === 'hcr')       renderHCR();
 }
 
 function domePost(cmd) {
@@ -202,6 +233,27 @@ function onVolSlide(val) {
   }, 60);
 }
 
+function renderFavorites() {
+  var sstr = _cfg.sstr || [];
+  var favs = [];
+  (_cfg.sstr_favs || []).forEach(function(oneIdx) {
+    if (oneIdx >= 1 && oneIdx <= sstr.length) favs.push({s: sstr[oneIdx - 1], idx: oneIdx});
+  });
+
+  var h = '<div class="ctrl-section">';
+  if (favs.length === 0) {
+    h += '<div class="empty-note">No favorites yet. Star commands in <a href="/config/serial-strings">Serial Commands</a>.</div>';
+  } else {
+    h += '<div class="cmd-grid">';
+    favs.forEach(function(item) {
+      h += '<button class="grid-btn" onclick="serialPost(' + item.idx + ')">' + esc(item.s.n) + '</button>';
+    });
+    h += '</div>';
+  }
+  h += '</div>';
+  document.getElementById('main').innerHTML = h;
+}
+
 function renderDome() {
   var h = '<div class="ctrl-section">';
   h += '<button class="dome-stop" onclick="domePost(\'stop\')">&#9632;&nbsp; STOP</button>';
@@ -261,36 +313,73 @@ function renderDome() {
   startDomePoll();
 }
 
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function renderSequences() {
   var sstr = _cfg.sstr || [];
   var h = '<div class="ctrl-section">';
 
-  h += '<div class="sec-hdr" style="margin-top:0">Serial Commands</div>';
-  var unassigned = sstr.filter(function(_, i) { return !isGadgetSstr(i + 1); });
-  if (unassigned.length === 0 && sstr.length === 0) {
+  // Filter: not hidden, not assigned to a gadget via legacy sstr[] assignment,
+  // and not categorized as an enabled gadget name
+  var visItems = [];
+  sstr.forEach(function(s, i) {
+    var oneIdx = i + 1;
+    if (sstrIsHidden(oneIdx)) return;    // hidden from Sequences tab
+    if (isGadgetSstr(oneIdx)) return;    // legacy gadget assignment
+    var cat = sstrCatFor(oneIdx);
+    if (isGadgetCat(cat)) return;        // categorized as enabled gadget
+    visItems.push({s: s, idx: oneIdx, cat: cat});
+  });
+
+  if (visItems.length === 0 && sstr.length === 0) {
     h += '<div class="empty-note">No serial commands configured. <a href="/config/serial-strings">Add some in Serial Commands.</a></div>';
-  } else if (unassigned.length === 0) {
-    h += '<div class="empty-note">All serial commands are assigned to gadgets. See <a href="/droid-control#gadgets">Gadgets</a>.</div>';
+  } else if (visItems.length === 0) {
+    h += '<div class="empty-note">All commands are hidden or assigned to gadgets.</div>';
   } else {
-    h += '<div class="cmd-grid">';
-    sstr.forEach(function(s, i) {
-      if (isGadgetSstr(i + 1)) return;
-      h += '<button class="grid-btn" onclick="serialPost(' + (i + 1) + ')">' + s.n + '</button>';
+    // Group by category, sort categories alphabetically (empty = "Uncategorized" last)
+    var catMap = {};
+    visItems.forEach(function(item) {
+      var cat = item.cat || '';
+      if (!catMap[cat]) catMap[cat] = [];
+      catMap[cat].push(item);
     });
-    h += '</div>';
+    var cats = Object.keys(catMap).sort(function(a, b) {
+      if (!a && b) return 1;
+      if (a && !b) return -1;
+      return a.toLowerCase() < b.toLowerCase() ? -1 : 1;
+    });
+    cats.forEach(function(cat) {
+      if (cat) {
+        h += '<div class="cat-hdr">' + esc(cat) + '</div>';
+      } else if (cats.length > 1) {
+        h += '<div class="cat-hdr">Uncategorized</div>';
+      }
+      var items = catMap[cat].slice().sort(function(a, b) {
+        return a.s.n.toLowerCase() < b.s.n.toLowerCase() ? -1 : 1;
+      });
+      h += '<div class="cmd-grid">';
+      items.forEach(function(item) {
+        h += '<button class="grid-btn" onclick="serialPost(' + item.idx + ')">' + esc(item.s.n) + '</button>';
+      });
+      h += '</div>';
+    });
   }
 
-  if (_cfg.audiohw === 'hcr') {
-    h += '<div class="sec-hdr">HCR Audio</div>';
-    h += '<div class="cmd-grid">';
-    h += '<button class="grid-btn full" onclick="hcrPost(\'muse\')">Toggle Musing</button>';
-    HCR_EMOS.forEach(function(emo, ei) {
-      h += '<button class="grid-btn" onclick="hcrPost(\'emote\',' + ei + ',0)">' + emo + '<br><span style="font-size:.72rem;opacity:.7">Moderate</span></button>';
-      h += '<button class="grid-btn" onclick="hcrPost(\'emote\',' + ei + ',1)">' + emo + '<br><span style="font-size:.72rem;opacity:.7">Strong</span></button>';
-    });
-    h += '</div>';
-  }
+  h += '</div>';
+  document.getElementById('main').innerHTML = h;
+}
 
+function renderHCR() {
+  var h = '<div class="ctrl-section">';
+  h += '<div class="cmd-grid">';
+  h += '<button class="grid-btn full" onclick="hcrPost(\'muse\')">Toggle Musing</button>';
+  HCR_EMOS.forEach(function(emo, ei) {
+    h += '<button class="grid-btn" onclick="hcrPost(\'emote\',' + ei + ',0)">' + emo + '<br><span style="font-size:.72rem;opacity:.7">Moderate</span></button>';
+    h += '<button class="grid-btn" onclick="hcrPost(\'emote\',' + ei + ',1)">' + emo + '<br><span style="font-size:.72rem;opacity:.7">Strong</span></button>';
+  });
+  h += '</div>';
   h += '</div>';
   document.getElementById('main').innerHTML = h;
 }
@@ -314,15 +403,34 @@ function renderGadgets() {
   var h = '<div class="ctrl-section">';
   gCfg.forEach(function(g, i) {
     if (!g || g.type === 0) return;
-    h += '<div class="sec-hdr">' + GADGET_NAMES[i] + '</div>';
+    var gadgetName = GADGET_NAMES[i];
+    h += '<div class="sec-hdr">' + gadgetName + '</div>';
+
+    // Commands from legacy explicit sstr[] assignment
     var slots = (g.sstr || []).filter(function(idx) { return idx > 0 && idx <= sstr.length; });
-    if (slots.length === 0) {
-      h += '<div style="padding:.3rem 0 .6rem;color:var(--muted);font-size:.78rem">No commands assigned. <a href="/config/gadgets">Configure</a></div>';
+    // Commands from category matching this gadget name
+    var catItems = [];
+    var cats = _cfg.sstr_cats || [];
+    cats.forEach(function(c) {
+      if (c.name !== gadgetName) return;
+      (c.idx || []).forEach(function(oneIdx) {
+        if (oneIdx >= 1 && oneIdx <= sstr.length && slots.indexOf(oneIdx) < 0) {
+          catItems.push({s: sstr[oneIdx - 1], idx: oneIdx});
+        }
+      });
+    });
+
+    if (slots.length === 0 && catItems.length === 0) {
+      h += '<div style="padding:.3rem 0 .6rem;color:var(--muted);font-size:.78rem">No commands assigned. <a href="/config/gadgets">Configure</a> or set category in <a href="/config/serial-strings">Serial Commands</a>.</div>';
     } else {
       h += '<div class="cmd-grid">';
       slots.forEach(function(idx) {
         var s = sstr[idx - 1];
-        if (s) h += '<button class="grid-btn" onclick="serialPost(' + idx + ')">' + s.n + '</button>';
+        if (s) h += '<button class="grid-btn" onclick="serialPost(' + idx + ')">' + esc(s.n) + '</button>';
+      });
+      catItems.sort(function(a, b) { return a.s.n.toLowerCase() < b.s.n.toLowerCase() ? -1 : 1; });
+      catItems.forEach(function(item) {
+        h += '<button class="grid-btn" onclick="serialPost(' + item.idx + ')">' + esc(item.s.n) + '</button>';
       });
       h += '</div>';
     }

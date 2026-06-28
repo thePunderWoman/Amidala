@@ -9,16 +9,24 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/common.css">
 <style>
-.ss-row{display:flex;align-items:center;padding:.6rem 0;border-bottom:1px solid var(--border);gap:.5rem}
-.ss-idx{font-size:.7rem;color:var(--muted);min-width:1.8rem;text-align:right;flex-shrink:0}
+.ss-row{display:flex;align-items:flex-start;padding:.6rem 0;border-bottom:1px solid var(--border);gap:.5rem}
+.ss-idx{font-size:.7rem;color:var(--muted);min-width:1.8rem;text-align:right;flex-shrink:0;padding-top:.25rem}
 .ss-fields{flex:1;display:flex;flex-direction:column;gap:.3rem;min-width:0}
 .ss-name{font-size:.82rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ss-name.empty{color:var(--muted);font-style:italic}
 .ss-val{font-size:.75rem;color:var(--accent);font-family:ui-monospace,'SF Mono',Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ss-meta{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-top:.1rem}
+.ss-cat{font-size:.7rem;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:.1rem .4rem}
+.ss-badge{font-size:.65rem;letter-spacing:.08em;border-radius:3px;padding:.1rem .4rem;border:1px solid}
+.ss-badge.fav{color:#c8a84b;border-color:#c8a84b;background:rgba(200,168,75,.08)}
+.ss-badge.hidden{color:var(--muted);border-color:var(--border)}
 .ss-fields input{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.3rem .5rem;font-family:inherit;font-size:.82rem;box-sizing:border-box;border-radius:4px}
 .ss-fields input:focus{outline:none;border-color:var(--accent)}
 .ss-fields input.mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.75rem}
-.ss-acts{display:flex;gap:.1rem;flex-shrink:0}
+.ss-checkrow{display:flex;gap:1rem;align-items:center;margin-top:.1rem}
+.ss-checkrow label{display:flex;align-items:center;gap:.35rem;font-size:.78rem;color:var(--text);cursor:pointer}
+.ss-checkrow input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;cursor:pointer}
+.ss-acts{display:flex;gap:.1rem;flex-shrink:0;padding-top:.1rem}
 .be,.bs,.bc,.bd{background:none;border:none;color:var(--muted);font-size:1rem;padding:.2rem .4rem;opacity:.7;cursor:pointer}
 .be:hover,.bs:hover{opacity:1;color:var(--accent)}
 .bc:hover,.bd:hover{opacity:1}
@@ -37,25 +45,71 @@
 <main id="main">
   <div id="status">LOADING&#8230;</div>
 </main>
+<datalist id="cat-list"></datalist>
 <script src="/assets/edit.js"></script>
 <script>
-var _d = [];
-var _ed = -1;
+var _d = [];           // [{n, s}, ...] — user-defined sstr entries only
+var _favs = [];        // 1-based sstr indices that are favorites
+var _hidden = [];      // 1-based sstr indices hidden from Droid Control
+var _cats = [];        // [{name, idx:[...]}, ...] — categories
+var _serverCatCount = 0;
+var _ed = -1;          // 0-based index of row being edited, -1 = none
 var _isNew = false;
 
 function load() {
   fetch('/api/config').then(function(r){return r.json();}).then(function(d){
     var allSstr = d.sstr || [];
     var userCnt = (d.sstr_user_cnt !== undefined) ? d.sstr_user_cnt : allSstr.length;
-    _d = allSstr.slice(0, userCnt);
+    _d = allSstr.slice(0, userCnt).map(function(x){return {n:x.n, s:x.s};});
+    _favs   = (d.sstr_favs   || []).slice();
+    _hidden = (d.sstr_hidden || []).slice();
+    _cats   = (d.sstr_cats   || []).map(function(c){
+      return {name:c.name, idx:(c.idx||[]).slice()};
+    });
+    _serverCatCount = _cats.length;
+    renderCatList();
     render();
   }).catch(function(){
     document.getElementById('main').innerHTML='<div id="status">Failed to load</div>';
   });
 }
 
-function esc(s) {
+function renderCatList() {
+  document.getElementById('cat-list').innerHTML = _cats.map(function(c){
+    return '<option value="'+esc(c.name)+'">';
+  }).join('');
+}
+
+function esc(s){
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function catForIdx(ob) {
+  for (var i=0; i<_cats.length; i++) {
+    if (_cats[i].idx.indexOf(ob) >= 0) return _cats[i].name;
+  }
+  return '';
+}
+
+function editRow(i, name, s, cat, fav, hid) {
+  var ob = (i >= 0) ? (i+1) : (_d.length+1);
+  var onSave = (i >= 0) ? 'saveEdit('+i+')' : 'saveNew()';
+  return '<div class="ss-row">'
+    +'<div class="ss-idx">'+ob+'</div>'
+    +'<div class="ss-fields">'
+    +'<input type="text" id="ed-name" value="'+esc(name)+'" placeholder="Name">'
+    +'<input type="text" id="ed-val" value="'+esc(s)+'" placeholder="Serial string" class="mono">'
+    +'<input type="text" id="ed-cat" value="'+esc(cat)+'" placeholder="Category (optional)" list="cat-list">'
+    +'<div class="ss-checkrow">'
+    +'<label><input type="checkbox" id="ed-fav"'+(fav?' checked':'')+'>&#9733; Favorite</label>'
+    +'<label><input type="checkbox" id="ed-hid"'+(hid?' checked':'')+'>Hide from Droid Control</label>'
+    +'</div>'
+    +'</div>'
+    +'<div class="ss-acts">'
+    +'<button class="bs" onclick="'+onSave+'" title="Save">&#10003;</button>'
+    +'<button class="bc" onclick="cancelEdit()" title="Cancel">&#10005;</button>'
+    +'</div>'
+    +'</div>';
 }
 
 function render() {
@@ -64,104 +118,168 @@ function render() {
     h += '<div id="empty">No serial commands yet.</div>';
   } else {
     _d.forEach(function(row, i) {
+      var ob  = i+1;
+      var cat = catForIdx(ob);
+      var fav = _favs.indexOf(ob) >= 0;
+      var hid = _hidden.indexOf(ob) >= 0;
       if (i === _ed && !_isNew) {
-        h += '<div class="ss-row">'
-          + '<div class="ss-idx">'+(i+1)+'</div>'
-          + '<div class="ss-fields">'
-          + '<input type="text" id="ed-name" value="'+esc(row.n)+'" placeholder="Name">'
-          + '<input type="text" id="ed-val"  value="'+esc(row.s)+'" placeholder="Serial string" class="mono">'
-          + '</div>'
-          + '<div class="ss-acts">'
-          + '<button class="bs" onclick="saveEdit('+i+')" title="Save">&#10003;</button>'
-          + '<button class="bc" onclick="cancelEdit()" title="Cancel">&#10005;</button>'
-          + '</div>'
-          + '</div>';
+        h += editRow(i, row.n, row.s, cat, fav, hid);
       } else {
         h += '<div class="ss-row">'
-          + '<div class="ss-idx">'+(i+1)+'</div>'
-          + '<div class="ss-fields">'
-          + '<div class="ss-name'+(row.n?'':' empty')+'">'+(row.n || '(unnamed)')+'</div>'
-          + '<div class="ss-val">'+esc(row.s)+'</div>'
-          + '</div>'
-          + '<div class="ss-acts">'
-          + '<button class="be" onclick="startRowEdit('+i+')" title="Edit">&#9998;</button>'
-          + '<button class="bd" onclick="delStr('+i+')" title="Delete">&#10005;</button>'
-          + '</div>'
-          + '</div>';
+          +'<div class="ss-idx">'+ob+'</div>'
+          +'<div class="ss-fields">'
+          +'<div class="ss-name'+(row.n?'':' empty')+'">'+esc(row.n||'(unnamed)')+'</div>'
+          +'<div class="ss-val">'+esc(row.s)+'</div>'
+          +'<div class="ss-meta">';
+        if (cat) h += '<span class="ss-cat">'+esc(cat)+'</span>';
+        if (fav) h += '<span class="ss-badge fav">&#9733; Favorite</span>';
+        if (hid) h += '<span class="ss-badge hidden">Hidden</span>';
+        h += '</div>'
+          +'</div>'
+          +'<div class="ss-acts">'
+          +'<button class="be" onclick="startRowEdit('+i+')" title="Edit">&#9998;</button>'
+          +'<button class="bd" onclick="delStr('+i+')" title="Delete">&#10005;</button>'
+          +'</div>'
+          +'</div>';
       }
     });
   }
-  if (_isNew) {
-    h += '<div class="ss-row">'
-      + '<div class="ss-idx">'+ (_d.length+1)+'</div>'
-      + '<div class="ss-fields">'
-      + '<input type="text" id="ed-name" value="" placeholder="Name">'
-      + '<input type="text" id="ed-val"  value="" placeholder="Serial string" class="mono">'
-      + '</div>'
-      + '<div class="ss-acts">'
-      + '<button class="bs" onclick="saveNew()" title="Save">&#10003;</button>'
-      + '<button class="bc" onclick="cancelEdit()" title="Cancel">&#10005;</button>'
-      + '</div>'
-      + '</div>';
-  }
+  if (_isNew) h += editRow(-1,'','','',false,false);
   h += '<div class="add-row"><button class="btn-add" onclick="addStr()">+ Add Command</button></div>';
   document.getElementById('main').innerHTML = h;
-  if (_ed >= 0 || _isNew) {
-    var el = document.getElementById('ed-name');
-    if (el) el.focus();
+  if (_ed >= 0 || _isNew) { var el=document.getElementById('ed-name'); if(el) el.focus(); }
+}
+
+function startRowEdit(i){ _ed=i; _isNew=false; render(); }
+function cancelEdit()   { _ed=-1; _isNew=false; render(); }
+function addStr()       { if(_isNew) return; _ed=-1; _isNew=true; render(); }
+
+function readForm() {
+  return {
+    n:   (document.getElementById('ed-name').value||'').trim(),
+    s:   (document.getElementById('ed-val').value||'').trim(),
+    cat: (document.getElementById('ed-cat').value||'').trim(),
+    fav: document.getElementById('ed-fav').checked,
+    hid: document.getElementById('ed-hid').checked,
+  };
+}
+
+function postConfig(key, value) {
+  var body = 'key='+encodeURIComponent(key);
+  if (value !== undefined && value !== '') body += '&value='+encodeURIComponent(value);
+  return fetch('/api/config',{
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:body
+  }).then(function(r){ if(!r.ok) throw new Error('POST '+key+' failed'); });
+}
+
+function applyFav(ob, isFav) {
+  _favs = _favs.filter(function(x){return x!==ob;});
+  if (isFav) _favs.push(ob);
+}
+
+function applyHidden(ob, isHid) {
+  _hidden = _hidden.filter(function(x){return x!==ob;});
+  if (isHid) _hidden.push(ob);
+}
+
+function applyCat(ob, newName) {
+  _cats.forEach(function(cat){
+    var p = cat.idx.indexOf(ob);
+    if (p >= 0) cat.idx.splice(p, 1);
+  });
+  _cats = _cats.filter(function(cat){return cat.idx.length > 0;});
+  if (newName) {
+    var ex = null;
+    _cats.forEach(function(c){if(c.name===newName) ex=c;});
+    if (ex) ex.idx.push(ob);
+    else _cats.push({name:newName, idx:[ob]});
   }
 }
 
-function startRowEdit(i) { _ed = i; _isNew = false; render(); }
-function cancelEdit()    { _ed = -1; _isNew = false; render(); }
-function addStr()        { if (_isNew) return; _ed = -1; _isNew = true; render(); }
+function saveMeta() {
+  var jobs = [];
+  jobs.push(function(){return postConfig('sstr_favs', _favs.join(','));});
+  jobs.push(function(){return postConfig('sstr_hidden', _hidden.join(','));});
+
+  var localLen = _cats.length, serverLen = _serverCatCount;
+  for (var i=0; i<localLen; i++) {
+    (function(idx){
+      jobs.push(function(){
+        var v = _cats[idx].name+'|'+_cats[idx].idx.join(',');
+        return postConfig(idx < serverLen ? 'sstr_cat_'+idx : 'sstr_cat_add', v);
+      });
+    })(i);
+  }
+  for (var i=serverLen-1; i>=localLen; i--) {
+    (function(idx){
+      jobs.push(function(){return postConfig('sstr_cat_del_'+idx);});
+    })(i);
+  }
+
+  var chain = Promise.resolve();
+  jobs.forEach(function(job){chain=chain.then(job);});
+  return chain.then(function(){
+    _serverCatCount = localLen;
+    renderCatList();
+  });
+}
+
+function shiftMetaAfterDelete(deletedOb) {
+  var shift = function(arr) {
+    return arr.filter(function(x){return x!==deletedOb;})
+              .map(function(x){return x>deletedOb ? x-1 : x;});
+  };
+  _favs   = shift(_favs);
+  _hidden = shift(_hidden);
+  _cats.forEach(function(cat){cat.idx=shift(cat.idx);});
+  _cats = _cats.filter(function(cat){return cat.idx.length>0;});
+}
 
 function saveEdit(i) {
-  var n = (document.getElementById('ed-name').value || '').trim();
-  var s = (document.getElementById('ed-val').value  || '').trim();
-  if (!n || !s) { showToast('Name and string required', true); return; }
-  if (n.indexOf('|') >= 0) { showToast('Name cannot contain |', true); return; }
-  fetch('/api/config', {
-    method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body: 'key=sstr_'+i+'&value='+encodeURIComponent(n+'|'+s)
-  }).then(function(r){
-    if (!r.ok) { showToast('Save failed', true); return; }
-    _d[i] = {n:n, s:s};
-    _ed = -1;
-    render();
-    showToast('Saved');
-  }).catch(function(){ showToast('Network error', true); });
+  var form = readForm();
+  if (!form.n||!form.s){showToast('Name and string required',true);return;}
+  if (form.n.indexOf('|')>=0){showToast('Name cannot contain |',true);return;}
+  var ob = i+1;
+  postConfig('sstr_'+i, form.n+'|'+form.s).then(function(){
+    _d[i] = {n:form.n, s:form.s};
+    applyFav(ob, form.fav);
+    applyHidden(ob, form.hid);
+    applyCat(ob, form.cat);
+    return saveMeta();
+  }).then(function(){
+    _ed=-1; render(); showToast('Saved');
+  }).catch(function(){showToast('Save failed',true);});
 }
 
 function saveNew() {
-  var n = (document.getElementById('ed-name').value || '').trim();
-  var s = (document.getElementById('ed-val').value  || '').trim();
-  if (!n || !s) { showToast('Name and string required', true); return; }
-  if (n.indexOf('|') >= 0) { showToast('Name cannot contain |', true); return; }
-  fetch('/api/config', {
-    method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body: 'key=sstr_add&value='+encodeURIComponent(n+'|'+s)
-  }).then(function(r){
-    if (!r.ok) { showToast('Save failed', true); return; }
-    _d.push({n:n, s:s});
-    _isNew = false;
-    render();
-    showToast('Added');
-  }).catch(function(){ showToast('Network error', true); });
+  var form = readForm();
+  if (!form.n||!form.s){showToast('Name and string required',true);return;}
+  if (form.n.indexOf('|')>=0){showToast('Name cannot contain |',true);return;}
+  postConfig('sstr_add', form.n+'|'+form.s).then(function(){
+    _d.push({n:form.n, s:form.s});
+    var ob = _d.length;
+    applyFav(ob, form.fav);
+    applyHidden(ob, form.hid);
+    applyCat(ob, form.cat);
+    return saveMeta();
+  }).then(function(){
+    _isNew=false; render(); showToast('Added');
+  }).catch(function(){showToast('Save failed',true);});
 }
 
 function delStr(i) {
   if (!confirm('Delete "'+_d[i].n+'"?')) return;
-  fetch('/api/config', {
-    method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body: 'key=sstr_del_'+i
-  }).then(function(r){
-    if (!r.ok) { showToast('Delete failed', true); return; }
-    _d.splice(i, 1);
-    if (_ed >= i) _ed = -1;
-    render();
-    showToast('Deleted');
-  }).catch(function(){ showToast('Network error', true); });
+  var ob = i+1;
+  postConfig('sstr_del_'+i).then(function(){
+    _d.splice(i,1);
+    if (_ed>=i) _ed=-1;
+    shiftMetaAfterDelete(ob);
+    return saveMeta();
+  }).then(function(){
+    render(); showToast('Deleted');
+  }).catch(function(){showToast('Delete failed',true);});
 }
 
 load();

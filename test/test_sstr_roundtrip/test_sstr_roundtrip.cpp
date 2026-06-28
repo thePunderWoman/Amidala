@@ -67,6 +67,94 @@ static std::string write_sstr_line(const char* name, const char* str) {
     return std::string("sstr=") + name + "|" + str + "\n";
 }
 
+// ---- Sstr meta block helpers (mirrors new processConfig branches) -------------
+// These replicate f=, hidden=, cat= parsing from config.cpp so tests stay
+// faithful to the real implementation without a full AmidalaController.
+
+static void parse_favs_line(const char* line, AmidalaParameters& p) {
+    const char* cmd = line;
+    if (!startswith(cmd, "f=")) return;
+    p.sstr_fav_cnt = 0;
+    const char* ptr = cmd; // past "f="
+    while (*ptr && p.sstr_fav_cnt < MAX_SSTR_FAVS) {
+        uint16_t v = 0;
+        while (*ptr >= '0' && *ptr <= '9') v = v * 10 + (*ptr++ - '0');
+        if (v > 0) p.sstr_favs[p.sstr_fav_cnt++] = v;
+        if (*ptr == ',') ptr++;
+    }
+}
+
+static void parse_hidden_line(const char* line, AmidalaParameters& p) {
+    const char* cmd = line;
+    if (!startswith(cmd, "hidden=")) return;
+    p.sstr_hidden_cnt = 0;
+    const char* ptr = cmd; // past "hidden="
+    while (*ptr && p.sstr_hidden_cnt < MAX_SSTR_HIDDEN) {
+        uint16_t v = 0;
+        while (*ptr >= '0' && *ptr <= '9') v = v * 10 + (*ptr++ - '0');
+        if (v > 0) p.sstr_hidden[p.sstr_hidden_cnt++] = v;
+        if (*ptr == ',') ptr++;
+    }
+}
+
+static void parse_cat_line(const char* line, AmidalaParameters& p) {
+    const char* cmd = line;
+    if (!startswith(cmd, "cat=")) return;
+    if (p.sstr_cat_count >= MAX_SSTR_CATS) return;
+    const char* val  = cmd; // past "cat="
+    const char* pipe = strchr(val, '|');
+    if (!pipe) return;
+    AmidalaParameters::SstrCat* cat = &p.sstr_cats[p.sstr_cat_count];
+    size_t nlen = (size_t)(pipe - val);
+    if (nlen >= sizeof(cat->name)) nlen = sizeof(cat->name) - 1;
+    memcpy(cat->name, val, nlen);
+    cat->name[nlen] = '\0';
+    cat->cnt = 0;
+    const char* ptr = pipe + 1;
+    while (*ptr && cat->cnt < MAX_SSTR_CAT_ENTRIES) {
+        uint16_t v = 0;
+        while (*ptr >= '0' && *ptr <= '9') v = v * 10 + (*ptr++ - '0');
+        if (v > 0) cat->idx[cat->cnt++] = v;
+        if (*ptr == ',') ptr++;
+    }
+    p.sstr_cat_count++;
+}
+
+static std::string write_f_line(const AmidalaParameters& p) {
+    if (p.sstr_fav_cnt == 0) return "";
+    std::string line = "f=";
+    for (uint8_t i = 0; i < p.sstr_fav_cnt; i++) {
+        if (i > 0) line += ",";
+        line += std::to_string(p.sstr_favs[i]);
+    }
+    return line + "\n";
+}
+
+static std::string write_hidden_line(const AmidalaParameters& p) {
+    if (p.sstr_hidden_cnt == 0) return "";
+    std::string line = "hidden=";
+    for (uint8_t i = 0; i < p.sstr_hidden_cnt; i++) {
+        if (i > 0) line += ",";
+        line += std::to_string(p.sstr_hidden[i]);
+    }
+    return line + "\n";
+}
+
+static std::string write_cat_lines(const AmidalaParameters& p) {
+    std::string result;
+    for (uint8_t i = 0; i < p.sstr_cat_count; i++) {
+        result += "cat=";
+        result += p.sstr_cats[i].name;
+        result += "|";
+        for (uint8_t j = 0; j < p.sstr_cats[i].cnt; j++) {
+            if (j > 0) result += ",";
+            result += std::to_string(p.sstr_cats[i].idx[j]);
+        }
+        result += "\n";
+    }
+    return result;
+}
+
 // ---- Console stub -----------------------------------------------------------
 // Mirrors the key path of AmidalaConsole::process(char, bool):
 //   - Accumulate chars into a CONSOLE_BUFFER_SIZE buffer.
@@ -616,6 +704,209 @@ void test_example_config_buildFullConfigJson_sstr_count_matches() {
     TEST_ASSERT_EQUAL_INT((int)p.serialcount, jsonCount);
 }
 
+// ---- f= favorites block tests -----------------------------------------------
+
+void test_parse_f_multi_indices() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    parse_favs_line("f=1,3,5", p);
+    TEST_ASSERT_EQUAL(3, (int)p.sstr_fav_cnt);
+    TEST_ASSERT_EQUAL(1, (int)p.sstr_favs[0]);
+    TEST_ASSERT_EQUAL(3, (int)p.sstr_favs[1]);
+    TEST_ASSERT_EQUAL(5, (int)p.sstr_favs[2]);
+}
+
+void test_parse_f_single_index() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    parse_favs_line("f=2", p);
+    TEST_ASSERT_EQUAL(1, (int)p.sstr_fav_cnt);
+    TEST_ASSERT_EQUAL(2, (int)p.sstr_favs[0]);
+}
+
+void test_parse_f_empty_value_yields_zero_count() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    p.sstr_fav_cnt = 99; // poison
+    parse_favs_line("f=", p);
+    TEST_ASSERT_EQUAL(0, (int)p.sstr_fav_cnt);
+}
+
+void test_write_f_line_format() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    p.sstr_favs[0] = 1; p.sstr_favs[1] = 3; p.sstr_fav_cnt = 2;
+    std::string line = write_f_line(p);
+    TEST_ASSERT_EQUAL_STRING("f=1,3\n", line.c_str());
+}
+
+void test_write_f_line_empty_when_no_favs() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    std::string line = write_f_line(p);
+    TEST_ASSERT_EQUAL_STRING("", line.c_str());
+}
+
+void test_f_roundtrip() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    p.sstr_favs[0] = 2; p.sstr_favs[1] = 7; p.sstr_fav_cnt = 2;
+    std::string line = write_f_line(p);
+    // strip trailing newline for parse (same as processConfig receives it)
+    line = line.substr(0, line.size() - 1);
+    AmidalaParameters p2; memset(&p2, 0, sizeof(p2));
+    parse_favs_line(line.c_str(), p2);
+    TEST_ASSERT_EQUAL(2, (int)p2.sstr_fav_cnt);
+    TEST_ASSERT_EQUAL(2, (int)p2.sstr_favs[0]);
+    TEST_ASSERT_EQUAL(7, (int)p2.sstr_favs[1]);
+}
+
+// ---- hidden= block tests ----------------------------------------------------
+
+void test_parse_hidden_multi_indices() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    parse_hidden_line("hidden=2,4", p);
+    TEST_ASSERT_EQUAL(2, (int)p.sstr_hidden_cnt);
+    TEST_ASSERT_EQUAL(2, (int)p.sstr_hidden[0]);
+    TEST_ASSERT_EQUAL(4, (int)p.sstr_hidden[1]);
+}
+
+void test_parse_hidden_single() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    parse_hidden_line("hidden=6", p);
+    TEST_ASSERT_EQUAL(1, (int)p.sstr_hidden_cnt);
+    TEST_ASSERT_EQUAL(6, (int)p.sstr_hidden[0]);
+}
+
+void test_write_hidden_line_format() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    p.sstr_hidden[0] = 3; p.sstr_hidden[1] = 5; p.sstr_hidden_cnt = 2;
+    TEST_ASSERT_EQUAL_STRING("hidden=3,5\n", write_hidden_line(p).c_str());
+}
+
+void test_hidden_roundtrip() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    p.sstr_hidden[0] = 1; p.sstr_hidden[1] = 4; p.sstr_hidden[2] = 9; p.sstr_hidden_cnt = 3;
+    std::string line = write_hidden_line(p);
+    line = line.substr(0, line.size() - 1);
+    AmidalaParameters p2; memset(&p2, 0, sizeof(p2));
+    parse_hidden_line(line.c_str(), p2);
+    TEST_ASSERT_EQUAL(3, (int)p2.sstr_hidden_cnt);
+    TEST_ASSERT_EQUAL(1, (int)p2.sstr_hidden[0]);
+    TEST_ASSERT_EQUAL(4, (int)p2.sstr_hidden[1]);
+    TEST_ASSERT_EQUAL(9, (int)p2.sstr_hidden[2]);
+}
+
+// ---- cat= category block tests ----------------------------------------------
+
+void test_parse_cat_single_category() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    parse_cat_line("cat=Dome|1,3", p);
+    TEST_ASSERT_EQUAL(1, (int)p.sstr_cat_count);
+    TEST_ASSERT_EQUAL_STRING("Dome", p.sstr_cats[0].name);
+    TEST_ASSERT_EQUAL(2, (int)p.sstr_cats[0].cnt);
+    TEST_ASSERT_EQUAL(1, (int)p.sstr_cats[0].idx[0]);
+    TEST_ASSERT_EQUAL(3, (int)p.sstr_cats[0].idx[1]);
+}
+
+void test_parse_cat_multiple_categories() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    parse_cat_line("cat=Dome|1,3", p);
+    parse_cat_line("cat=Periscope|2,5,7", p);
+    TEST_ASSERT_EQUAL(2, (int)p.sstr_cat_count);
+    TEST_ASSERT_EQUAL_STRING("Dome",      p.sstr_cats[0].name);
+    TEST_ASSERT_EQUAL_STRING("Periscope", p.sstr_cats[1].name);
+    TEST_ASSERT_EQUAL(3, (int)p.sstr_cats[1].cnt);
+    TEST_ASSERT_EQUAL(7, (int)p.sstr_cats[1].idx[2]);
+}
+
+void test_parse_cat_no_pipe_is_ignored() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    parse_cat_line("cat=NoPipeHere", p);
+    TEST_ASSERT_EQUAL(0, (int)p.sstr_cat_count);
+}
+
+void test_parse_cat_name_with_spaces() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    parse_cat_line("cat=Utility Arms|4,6", p);
+    TEST_ASSERT_EQUAL(1, (int)p.sstr_cat_count);
+    TEST_ASSERT_EQUAL_STRING("Utility Arms", p.sstr_cats[0].name);
+    TEST_ASSERT_EQUAL(4, (int)p.sstr_cats[0].idx[0]);
+}
+
+void test_write_cat_lines_format() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    strncpy(p.sstr_cats[0].name, "Dome", sizeof(p.sstr_cats[0].name) - 1);
+    p.sstr_cats[0].idx[0] = 1; p.sstr_cats[0].idx[1] = 3; p.sstr_cats[0].cnt = 2;
+    p.sstr_cat_count = 1;
+    std::string lines = write_cat_lines(p);
+    TEST_ASSERT_EQUAL_STRING("cat=Dome|1,3\n", lines.c_str());
+}
+
+void test_cat_roundtrip_survives_write_and_reparse() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    strncpy(p.sstr_cats[0].name, "Periscope", sizeof(p.sstr_cats[0].name) - 1);
+    p.sstr_cats[0].idx[0] = 2; p.sstr_cats[0].idx[1] = 5; p.sstr_cats[0].cnt = 2;
+    strncpy(p.sstr_cats[1].name, "Dome", sizeof(p.sstr_cats[1].name) - 1);
+    p.sstr_cats[1].idx[0] = 1; p.sstr_cats[1].idx[1] = 4; p.sstr_cats[1].cnt = 2;
+    p.sstr_cat_count = 2;
+
+    std::string written = write_cat_lines(p);
+    // Re-parse each line
+    AmidalaParameters p2; memset(&p2, 0, sizeof(p2));
+    size_t start = 0;
+    while (start < written.size()) {
+        size_t nl = written.find('\n', start);
+        if (nl == std::string::npos) break;
+        std::string line = written.substr(start, nl - start);
+        parse_cat_line(line.c_str(), p2);
+        start = nl + 1;
+    }
+
+    TEST_ASSERT_EQUAL(2, (int)p2.sstr_cat_count);
+    TEST_ASSERT_EQUAL_STRING("Periscope", p2.sstr_cats[0].name);
+    TEST_ASSERT_EQUAL(2, (int)p2.sstr_cats[0].cnt);
+    TEST_ASSERT_EQUAL(2, (int)p2.sstr_cats[0].idx[0]);
+    TEST_ASSERT_EQUAL(5, (int)p2.sstr_cats[0].idx[1]);
+    TEST_ASSERT_EQUAL_STRING("Dome", p2.sstr_cats[1].name);
+    TEST_ASSERT_EQUAL(2, (int)p2.sstr_cats[1].cnt);
+}
+
+// ---- Combined config block round-trip ---------------------------------------
+
+void test_full_sstr_meta_block_roundtrip() {
+    // Simulate a config file with sstr entries + separate f=, hidden=, cat= blocks.
+    SD.fileContent =
+        "#START\n"
+        "sstr=Sad (Moderate)|<SS0>\n"
+        "sstr=Periscope Up|:PP100\n"
+        "sstr=Dome Spin|:PA90\n"
+        "sstr=Secret|:SECRET\n"
+        "f=2\n"
+        "hidden=4\n"
+        "cat=Dome|3\n"
+        "cat=Periscope|2\n"
+        "#END\n";
+
+    // Parse sstr entries via console
+    SstrConsole console;
+    TEST_ASSERT_TRUE(readConfig(console));
+    TEST_ASSERT_EQUAL(4, console.count);
+    TEST_ASSERT_EQUAL_STRING("Sad (Moderate)", console.names[0]);
+    TEST_ASSERT_EQUAL_STRING("Periscope Up",   console.names[1]);
+    TEST_ASSERT_EQUAL_STRING("Dome Spin",      console.names[2]);
+    TEST_ASSERT_EQUAL_STRING("Secret",         console.names[3]);
+
+    // Parse meta blocks manually (mirrors processConfig)
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    parse_favs_line("f=2", p);
+    parse_hidden_line("hidden=4", p);
+    parse_cat_line("cat=Dome|3", p);
+    parse_cat_line("cat=Periscope|2", p);
+
+    TEST_ASSERT_EQUAL(1, (int)p.sstr_fav_cnt);
+    TEST_ASSERT_EQUAL(2, (int)p.sstr_favs[0]);
+    TEST_ASSERT_EQUAL(1, (int)p.sstr_hidden_cnt);
+    TEST_ASSERT_EQUAL(4, (int)p.sstr_hidden[0]);
+    TEST_ASSERT_EQUAL(2, (int)p.sstr_cat_count);
+    TEST_ASSERT_EQUAL_STRING("Dome",      p.sstr_cats[0].name);
+    TEST_ASSERT_EQUAL_STRING("Periscope", p.sstr_cats[1].name);
+}
+
 // ---- main ------------------------------------------------------------------
 
 int main(int argc, char** argv) {
@@ -649,6 +940,31 @@ int main(int argc, char** argv) {
     // Console buffer limits
     RUN_TEST(test_console_buffer_64_byte_limit_does_not_truncate_typical_sstr);
     RUN_TEST(test_console_buffer_truncates_line_longer_than_63_chars);
+
+    // Favorites block (f=)
+    RUN_TEST(test_parse_f_multi_indices);
+    RUN_TEST(test_parse_f_single_index);
+    RUN_TEST(test_parse_f_empty_value_yields_zero_count);
+    RUN_TEST(test_write_f_line_format);
+    RUN_TEST(test_write_f_line_empty_when_no_favs);
+    RUN_TEST(test_f_roundtrip);
+
+    // Hidden block (hidden=)
+    RUN_TEST(test_parse_hidden_multi_indices);
+    RUN_TEST(test_parse_hidden_single);
+    RUN_TEST(test_write_hidden_line_format);
+    RUN_TEST(test_hidden_roundtrip);
+
+    // Category block (cat=)
+    RUN_TEST(test_parse_cat_single_category);
+    RUN_TEST(test_parse_cat_multiple_categories);
+    RUN_TEST(test_parse_cat_no_pipe_is_ignored);
+    RUN_TEST(test_parse_cat_name_with_spaces);
+    RUN_TEST(test_write_cat_lines_format);
+    RUN_TEST(test_cat_roundtrip_survives_write_and_reparse);
+
+    // Combined meta block round-trip
+    RUN_TEST(test_full_sstr_meta_block_roundtrip);
 
     // example_config.txt spot-check (algorithm-level)
     RUN_TEST(test_example_config_first_five_sstr_entries);

@@ -5004,16 +5004,24 @@ footer a:hover { opacity: 1; }
 #theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
 </style>
 <style>
-.ss-row{display:flex;align-items:center;padding:.6rem 0;border-bottom:1px solid var(--border);gap:.5rem}
-.ss-idx{font-size:.7rem;color:var(--muted);min-width:1.8rem;text-align:right;flex-shrink:0}
+.ss-row{display:flex;align-items:flex-start;padding:.6rem 0;border-bottom:1px solid var(--border);gap:.5rem}
+.ss-idx{font-size:.7rem;color:var(--muted);min-width:1.8rem;text-align:right;flex-shrink:0;padding-top:.25rem}
 .ss-fields{flex:1;display:flex;flex-direction:column;gap:.3rem;min-width:0}
 .ss-name{font-size:.82rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ss-name.empty{color:var(--muted);font-style:italic}
 .ss-val{font-size:.75rem;color:var(--accent);font-family:ui-monospace,'SF Mono',Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ss-meta{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-top:.1rem}
+.ss-cat{font-size:.7rem;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:.1rem .4rem}
+.ss-badge{font-size:.65rem;letter-spacing:.08em;border-radius:3px;padding:.1rem .4rem;border:1px solid}
+.ss-badge.fav{color:#c8a84b;border-color:#c8a84b;background:rgba(200,168,75,.08)}
+.ss-badge.hidden{color:var(--muted);border-color:var(--border)}
 .ss-fields input{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.3rem .5rem;font-family:inherit;font-size:.82rem;box-sizing:border-box;border-radius:4px}
 .ss-fields input:focus{outline:none;border-color:var(--accent)}
 .ss-fields input.mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.75rem}
-.ss-acts{display:flex;gap:.1rem;flex-shrink:0}
+.ss-checkrow{display:flex;gap:1rem;align-items:center;margin-top:.1rem}
+.ss-checkrow label{display:flex;align-items:center;gap:.35rem;font-size:.78rem;color:var(--text);cursor:pointer}
+.ss-checkrow input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;cursor:pointer}
+.ss-acts{display:flex;gap:.1rem;flex-shrink:0;padding-top:.1rem}
 .be,.bs,.bc,.bd{background:none;border:none;color:var(--muted);font-size:1rem;padding:.2rem .4rem;opacity:.7;cursor:pointer}
 .be:hover,.bs:hover{opacity:1;color:var(--accent)}
 .bc:hover,.bd:hover{opacity:1}
@@ -5032,6 +5040,7 @@ footer a:hover { opacity: 1; }
 <main id="main">
   <div id="status">LOADING&#8230;</div>
 </main>
+<datalist id="cat-list"></datalist>
 <script>
 /* Amidala web UI — edit-in-place widget + shared config page helpers.
    Embed script inlines this into every config sub-page.
@@ -5313,23 +5322,68 @@ function buildPage(SCHEMA, endpoint, callback) {
 }
 </script>
 <script>
-var _d = [];
-var _ed = -1;
+var _d = [];           // [{n, s}, ...] — user-defined sstr entries only
+var _favs = [];        // 1-based sstr indices that are favorites
+var _hidden = [];      // 1-based sstr indices hidden from Droid Control
+var _cats = [];        // [{name, idx:[...]}, ...] — categories
+var _serverCatCount = 0;
+var _ed = -1;          // 0-based index of row being edited, -1 = none
 var _isNew = false;
 
 function load() {
   fetch('/api/config').then(function(r){return r.json();}).then(function(d){
     var allSstr = d.sstr || [];
     var userCnt = (d.sstr_user_cnt !== undefined) ? d.sstr_user_cnt : allSstr.length;
-    _d = allSstr.slice(0, userCnt);
+    _d = allSstr.slice(0, userCnt).map(function(x){return {n:x.n, s:x.s};});
+    _favs   = (d.sstr_favs   || []).slice();
+    _hidden = (d.sstr_hidden || []).slice();
+    _cats   = (d.sstr_cats   || []).map(function(c){
+      return {name:c.name, idx:(c.idx||[]).slice()};
+    });
+    _serverCatCount = _cats.length;
+    renderCatList();
     render();
   }).catch(function(){
     document.getElementById('main').innerHTML='<div id="status">Failed to load</div>';
   });
 }
 
-function esc(s) {
+function renderCatList() {
+  document.getElementById('cat-list').innerHTML = _cats.map(function(c){
+    return '<option value="'+esc(c.name)+'">';
+  }).join('');
+}
+
+function esc(s){
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function catForIdx(ob) {
+  for (var i=0; i<_cats.length; i++) {
+    if (_cats[i].idx.indexOf(ob) >= 0) return _cats[i].name;
+  }
+  return '';
+}
+
+function editRow(i, name, s, cat, fav, hid) {
+  var ob = (i >= 0) ? (i+1) : (_d.length+1);
+  var onSave = (i >= 0) ? 'saveEdit('+i+')' : 'saveNew()';
+  return '<div class="ss-row">'
+    +'<div class="ss-idx">'+ob+'</div>'
+    +'<div class="ss-fields">'
+    +'<input type="text" id="ed-name" value="'+esc(name)+'" placeholder="Name">'
+    +'<input type="text" id="ed-val" value="'+esc(s)+'" placeholder="Serial string" class="mono">'
+    +'<input type="text" id="ed-cat" value="'+esc(cat)+'" placeholder="Category (optional)" list="cat-list">'
+    +'<div class="ss-checkrow">'
+    +'<label><input type="checkbox" id="ed-fav"'+(fav?' checked':'')+'>&#9733; Favorite</label>'
+    +'<label><input type="checkbox" id="ed-hid"'+(hid?' checked':'')+'>Hide from Droid Control</label>'
+    +'</div>'
+    +'</div>'
+    +'<div class="ss-acts">'
+    +'<button class="bs" onclick="'+onSave+'" title="Save">&#10003;</button>'
+    +'<button class="bc" onclick="cancelEdit()" title="Cancel">&#10005;</button>'
+    +'</div>'
+    +'</div>';
 }
 
 function render() {
@@ -5338,104 +5392,168 @@ function render() {
     h += '<div id="empty">No serial commands yet.</div>';
   } else {
     _d.forEach(function(row, i) {
+      var ob  = i+1;
+      var cat = catForIdx(ob);
+      var fav = _favs.indexOf(ob) >= 0;
+      var hid = _hidden.indexOf(ob) >= 0;
       if (i === _ed && !_isNew) {
-        h += '<div class="ss-row">'
-          + '<div class="ss-idx">'+(i+1)+'</div>'
-          + '<div class="ss-fields">'
-          + '<input type="text" id="ed-name" value="'+esc(row.n)+'" placeholder="Name">'
-          + '<input type="text" id="ed-val"  value="'+esc(row.s)+'" placeholder="Serial string" class="mono">'
-          + '</div>'
-          + '<div class="ss-acts">'
-          + '<button class="bs" onclick="saveEdit('+i+')" title="Save">&#10003;</button>'
-          + '<button class="bc" onclick="cancelEdit()" title="Cancel">&#10005;</button>'
-          + '</div>'
-          + '</div>';
+        h += editRow(i, row.n, row.s, cat, fav, hid);
       } else {
         h += '<div class="ss-row">'
-          + '<div class="ss-idx">'+(i+1)+'</div>'
-          + '<div class="ss-fields">'
-          + '<div class="ss-name'+(row.n?'':' empty')+'">'+(row.n || '(unnamed)')+'</div>'
-          + '<div class="ss-val">'+esc(row.s)+'</div>'
-          + '</div>'
-          + '<div class="ss-acts">'
-          + '<button class="be" onclick="startRowEdit('+i+')" title="Edit">&#9998;</button>'
-          + '<button class="bd" onclick="delStr('+i+')" title="Delete">&#10005;</button>'
-          + '</div>'
-          + '</div>';
+          +'<div class="ss-idx">'+ob+'</div>'
+          +'<div class="ss-fields">'
+          +'<div class="ss-name'+(row.n?'':' empty')+'">'+esc(row.n||'(unnamed)')+'</div>'
+          +'<div class="ss-val">'+esc(row.s)+'</div>'
+          +'<div class="ss-meta">';
+        if (cat) h += '<span class="ss-cat">'+esc(cat)+'</span>';
+        if (fav) h += '<span class="ss-badge fav">&#9733; Favorite</span>';
+        if (hid) h += '<span class="ss-badge hidden">Hidden</span>';
+        h += '</div>'
+          +'</div>'
+          +'<div class="ss-acts">'
+          +'<button class="be" onclick="startRowEdit('+i+')" title="Edit">&#9998;</button>'
+          +'<button class="bd" onclick="delStr('+i+')" title="Delete">&#10005;</button>'
+          +'</div>'
+          +'</div>';
       }
     });
   }
-  if (_isNew) {
-    h += '<div class="ss-row">'
-      + '<div class="ss-idx">'+ (_d.length+1)+'</div>'
-      + '<div class="ss-fields">'
-      + '<input type="text" id="ed-name" value="" placeholder="Name">'
-      + '<input type="text" id="ed-val"  value="" placeholder="Serial string" class="mono">'
-      + '</div>'
-      + '<div class="ss-acts">'
-      + '<button class="bs" onclick="saveNew()" title="Save">&#10003;</button>'
-      + '<button class="bc" onclick="cancelEdit()" title="Cancel">&#10005;</button>'
-      + '</div>'
-      + '</div>';
-  }
+  if (_isNew) h += editRow(-1,'','','',false,false);
   h += '<div class="add-row"><button class="btn-add" onclick="addStr()">+ Add Command</button></div>';
   document.getElementById('main').innerHTML = h;
-  if (_ed >= 0 || _isNew) {
-    var el = document.getElementById('ed-name');
-    if (el) el.focus();
+  if (_ed >= 0 || _isNew) { var el=document.getElementById('ed-name'); if(el) el.focus(); }
+}
+
+function startRowEdit(i){ _ed=i; _isNew=false; render(); }
+function cancelEdit()   { _ed=-1; _isNew=false; render(); }
+function addStr()       { if(_isNew) return; _ed=-1; _isNew=true; render(); }
+
+function readForm() {
+  return {
+    n:   (document.getElementById('ed-name').value||'').trim(),
+    s:   (document.getElementById('ed-val').value||'').trim(),
+    cat: (document.getElementById('ed-cat').value||'').trim(),
+    fav: document.getElementById('ed-fav').checked,
+    hid: document.getElementById('ed-hid').checked,
+  };
+}
+
+function postConfig(key, value) {
+  var body = 'key='+encodeURIComponent(key);
+  if (value !== undefined && value !== '') body += '&value='+encodeURIComponent(value);
+  return fetch('/api/config',{
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:body
+  }).then(function(r){ if(!r.ok) throw new Error('POST '+key+' failed'); });
+}
+
+function applyFav(ob, isFav) {
+  _favs = _favs.filter(function(x){return x!==ob;});
+  if (isFav) _favs.push(ob);
+}
+
+function applyHidden(ob, isHid) {
+  _hidden = _hidden.filter(function(x){return x!==ob;});
+  if (isHid) _hidden.push(ob);
+}
+
+function applyCat(ob, newName) {
+  _cats.forEach(function(cat){
+    var p = cat.idx.indexOf(ob);
+    if (p >= 0) cat.idx.splice(p, 1);
+  });
+  _cats = _cats.filter(function(cat){return cat.idx.length > 0;});
+  if (newName) {
+    var ex = null;
+    _cats.forEach(function(c){if(c.name===newName) ex=c;});
+    if (ex) ex.idx.push(ob);
+    else _cats.push({name:newName, idx:[ob]});
   }
 }
 
-function startRowEdit(i) { _ed = i; _isNew = false; render(); }
-function cancelEdit()    { _ed = -1; _isNew = false; render(); }
-function addStr()        { if (_isNew) return; _ed = -1; _isNew = true; render(); }
+function saveMeta() {
+  var jobs = [];
+  jobs.push(function(){return postConfig('sstr_favs', _favs.join(','));});
+  jobs.push(function(){return postConfig('sstr_hidden', _hidden.join(','));});
+
+  var localLen = _cats.length, serverLen = _serverCatCount;
+  for (var i=0; i<localLen; i++) {
+    (function(idx){
+      jobs.push(function(){
+        var v = _cats[idx].name+'|'+_cats[idx].idx.join(',');
+        return postConfig(idx < serverLen ? 'sstr_cat_'+idx : 'sstr_cat_add', v);
+      });
+    })(i);
+  }
+  for (var i=serverLen-1; i>=localLen; i--) {
+    (function(idx){
+      jobs.push(function(){return postConfig('sstr_cat_del_'+idx);});
+    })(i);
+  }
+
+  var chain = Promise.resolve();
+  jobs.forEach(function(job){chain=chain.then(job);});
+  return chain.then(function(){
+    _serverCatCount = localLen;
+    renderCatList();
+  });
+}
+
+function shiftMetaAfterDelete(deletedOb) {
+  var shift = function(arr) {
+    return arr.filter(function(x){return x!==deletedOb;})
+              .map(function(x){return x>deletedOb ? x-1 : x;});
+  };
+  _favs   = shift(_favs);
+  _hidden = shift(_hidden);
+  _cats.forEach(function(cat){cat.idx=shift(cat.idx);});
+  _cats = _cats.filter(function(cat){return cat.idx.length>0;});
+}
 
 function saveEdit(i) {
-  var n = (document.getElementById('ed-name').value || '').trim();
-  var s = (document.getElementById('ed-val').value  || '').trim();
-  if (!n || !s) { showToast('Name and string required', true); return; }
-  if (n.indexOf('|') >= 0) { showToast('Name cannot contain |', true); return; }
-  fetch('/api/config', {
-    method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body: 'key=sstr_'+i+'&value='+encodeURIComponent(n+'|'+s)
-  }).then(function(r){
-    if (!r.ok) { showToast('Save failed', true); return; }
-    _d[i] = {n:n, s:s};
-    _ed = -1;
-    render();
-    showToast('Saved');
-  }).catch(function(){ showToast('Network error', true); });
+  var form = readForm();
+  if (!form.n||!form.s){showToast('Name and string required',true);return;}
+  if (form.n.indexOf('|')>=0){showToast('Name cannot contain |',true);return;}
+  var ob = i+1;
+  postConfig('sstr_'+i, form.n+'|'+form.s).then(function(){
+    _d[i] = {n:form.n, s:form.s};
+    applyFav(ob, form.fav);
+    applyHidden(ob, form.hid);
+    applyCat(ob, form.cat);
+    return saveMeta();
+  }).then(function(){
+    _ed=-1; render(); showToast('Saved');
+  }).catch(function(){showToast('Save failed',true);});
 }
 
 function saveNew() {
-  var n = (document.getElementById('ed-name').value || '').trim();
-  var s = (document.getElementById('ed-val').value  || '').trim();
-  if (!n || !s) { showToast('Name and string required', true); return; }
-  if (n.indexOf('|') >= 0) { showToast('Name cannot contain |', true); return; }
-  fetch('/api/config', {
-    method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body: 'key=sstr_add&value='+encodeURIComponent(n+'|'+s)
-  }).then(function(r){
-    if (!r.ok) { showToast('Save failed', true); return; }
-    _d.push({n:n, s:s});
-    _isNew = false;
-    render();
-    showToast('Added');
-  }).catch(function(){ showToast('Network error', true); });
+  var form = readForm();
+  if (!form.n||!form.s){showToast('Name and string required',true);return;}
+  if (form.n.indexOf('|')>=0){showToast('Name cannot contain |',true);return;}
+  postConfig('sstr_add', form.n+'|'+form.s).then(function(){
+    _d.push({n:form.n, s:form.s});
+    var ob = _d.length;
+    applyFav(ob, form.fav);
+    applyHidden(ob, form.hid);
+    applyCat(ob, form.cat);
+    return saveMeta();
+  }).then(function(){
+    _isNew=false; render(); showToast('Added');
+  }).catch(function(){showToast('Save failed',true);});
 }
 
 function delStr(i) {
   if (!confirm('Delete "'+_d[i].n+'"?')) return;
-  fetch('/api/config', {
-    method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body: 'key=sstr_del_'+i
-  }).then(function(r){
-    if (!r.ok) { showToast('Delete failed', true); return; }
-    _d.splice(i, 1);
-    if (_ed >= i) _ed = -1;
-    render();
-    showToast('Deleted');
-  }).catch(function(){ showToast('Network error', true); });
+  var ob = i+1;
+  postConfig('sstr_del_'+i).then(function(){
+    _d.splice(i,1);
+    if (_ed>=i) _ed=-1;
+    shiftMetaAfterDelete(ob);
+    return saveMeta();
+  }).then(function(){
+    render(); showToast('Deleted');
+  }).catch(function(){showToast('Delete failed',true);});
 }
 
 load();
@@ -5751,6 +5869,28 @@ footer a:hover { opacity: 1; }
 .sstr-empty{font-size:.75rem;color:var(--muted);margin-bottom:.4rem}
 .no-sstr{font-size:.75rem;color:var(--muted)}
 .no-sstr a,.info-note a{color:var(--text)}
+/* Periscope command reference */
+.cmd-ref-table{width:100%;border-collapse:collapse;margin:.35rem 0 .1rem}
+.cmd-ref-table td{padding:.2rem .4rem;font-size:.73rem;vertical-align:top}
+.cmd-ref-table td:first-child{font-family:ui-monospace,'SF Mono',Menlo,monospace;color:var(--accent);white-space:nowrap;padding-right:.7rem}
+.cmd-ref-table tr.auto-included td:first-child{color:var(--text)}
+.cmd-ref-table tr.auto-included td:first-child::after{content:' ✓';font-size:.65rem;color:var(--accent);opacity:.7}
+.cmd-ref-table td:last-child{color:var(--muted)}
+.ref-group-hdr{font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:.6rem 0 .2rem;border-top:1px solid var(--border);padding-top:.5rem}
+.ref-group-hdr:first-of-type{border-top:none;padding-top:0}
+/* Periscope sequence management */
+.pseq-row{display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid var(--border)}
+.pseq-slot{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.72rem;color:var(--accent);min-width:2rem;flex-shrink:0}
+.pseq-name{flex:1;font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pseq-seq{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.7rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:14rem}
+.pseq-acts{display:flex;gap:.2rem;flex-shrink:0}
+.pseq-del{background:none;border:none;color:var(--muted);font-size:.85rem;padding:.1rem .3rem;cursor:pointer;opacity:.7}
+.pseq-del:hover{opacity:1;color:var(--danger)}
+.pseq-new{margin-top:.5rem}
+.pseq-inputs{display:grid;grid-template-columns:3rem 1fr 1fr;gap:.4rem;margin-bottom:.4rem}
+.pseq-inputs input{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.3rem .5rem;font-family:inherit;font-size:.78rem;border-radius:4px;width:100%;box-sizing:border-box}
+.pseq-inputs input:focus{outline:none;border-color:var(--accent)}
+.pseq-inputs input.mono{font-family:ui-monospace,'SF Mono',Menlo,monospace}
 </style>
 <script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
 </head>
@@ -6042,27 +6182,66 @@ function buildPage(SCHEMA, endpoint, callback) {
 </script>
 <script>
 var _cfg = null;
+var _periscope_seqs = {};  // slot_str -> {name, seq}
 
-var UPPITY_OPS = [
-  {name:'Home',           str:':PH'},
-  {name:'Raise Full',     str:':PP100'},
-  {name:'Raise Half',     str:':PP50'},
-  {name:'Random Gentle',  str:':PMG'},
-  {name:'Random Medium',  str:':PMM'},
-  {name:'Random Strong',  str:':PMA'},
-  {name:'Stop',           str:':PX'},
-  {name:'Face Forward',   str:':PA0'},
-  {name:'Spin CCW',       str:':PR30'},
-  {name:'Spin CW',        str:':PR-30'},
-  {name:'Stop Spin',      str:':PR0'},
+// Commands automatically included for the Uppity Spinner periscope.
+// These appear in droid control and as button assignment options.
+var UPPITY_AUTO = [
+  {name:'Home',          str:':PH',   desc:'Raise, rotate to 0°, lower'},
+  {name:'Raise Full',    str:':PP100',desc:'Lift to 100%'},
+  {name:'Raise Half',    str:':PP50', desc:'Lift to 50%'},
+  {name:'Random Gentle', str:':PMG',  desc:'One-shot gentle random animation'},
+  {name:'Random Medium', str:':PMM',  desc:'One-shot medium random animation'},
+  {name:'Random Strong', str:':PMA',  desc:'One-shot aggressive random animation'},
+  {name:'Stop',          str:':PX',   desc:'Emergency stop — aborts mid-flight motion'},
+  {name:'Face Forward',  str:':PA0',  desc:'Rotate to 0°'},
+  {name:'Spin CCW',      str:':PR30', desc:'Continuous spin counter-clockwise'},
+  {name:'Spin CW',       str:':PR-30',desc:'Continuous spin clockwise'},
+  {name:'Stop Spin',     str:':PR0',  desc:'Stop continuous spin'},
 ];
-var UPPITY_CFG = [
-  {name:'Calibrate',          str:'#PSC'},
-  {name:'Show Config',        str:'#PCONFIG'},
-  {name:'Default: Gentle',    str:'#PAGGRESSION0'},
-  {name:'Default: Medium',    str:'#PAGGRESSION1'},
-  {name:'Default: Aggressive',str:'#PAGGRESSION2'},
-  {name:'Restart',            str:'#PRESTART'},
+var UPPITY_AUTO_STRS = UPPITY_AUTO.map(function(c){return c.str;});
+
+// Full command reference grouped by category
+var UPPITY_CMD_REF = {
+  'Lifter / Rotary': [
+    {str:':PP&lt;0-100&gt;[,speed]',   raw:':PP',   desc:'Move lifter to position % (0=down, 100=up)'},
+    {str:':PPR[,speed]',               raw:':PPR',  desc:'Random position'},
+    {str:':PH[speed]',                 raw:':PH',   desc:'Home — raise, rotate to 0°, lower'},
+    {str:':PA&lt;deg&gt;[,speed]',     raw:':PA',   desc:'Rotate to absolute degrees'},
+    {str:':PAR[,speed]',               raw:':PAR',  desc:'Random absolute rotation'},
+    {str:':PD&lt;deg&gt;[,speed]',     raw:':PD',   desc:'Rotate relative degrees (+ CCW, − CW)'},
+    {str:':PDR[,speed]',               raw:':PDR',  desc:'Random relative rotation'},
+    {str:':PR&lt;speed&gt;',           raw:':PR',   desc:'Continuous spin (+ CCW, − CW; 0 = stop)'},
+    {str:':PM[,liftSpd,rotSpd,…]',    raw:':PM',   desc:'Safe random animation mode'},
+    {str:':PMG / :PMM / :PMA',         raw:':PMG',  desc:'One-shot Gentle / Medium / Aggressive animation'},
+    {str:':PX',                        raw:':PX',   desc:'Emergency stop — aborts any in-progress motion'},
+    {str:':PW[R]&lt;seconds&gt;',      raw:':PW',   desc:'Wait (R = randomize 1..N seconds)'},
+    {str:':PL&lt;0-7&gt;',             raw:':PL',   desc:'Light kit mode'},
+    {str:':PS&lt;0-100&gt;',           raw:':PS',   desc:'Play stored sequence'},
+  ],
+  'Configuration': [
+    {str:'#PSC',                        raw:'#PSC',         desc:'Run calibration'},
+    {str:'#PCONFIG',                    raw:'#PCONFIG',     desc:'Display full configuration'},
+    {str:'#PSTATUS',                    raw:'#PSTATUS',     desc:'Show WiFi / remote status'},
+    {str:'#PMOTOR&lt;n&gt;',           raw:'#PMOTOR',      desc:'Set lifter motor profile (0=6.3:1, 1=19:1, 2=IA-Parts)'},
+    {str:'#PAGGRESSION[&lt;0-2&gt;]',  raw:'#PAGGRESSION', desc:'Default random aggressiveness (0=Gentle … 2=Aggressive)'},
+    {str:'#PFACTORY',                   raw:'#PFACTORY',    desc:'Factory reset — clears all preferences and sequences'},
+    {str:'#PS&lt;n&gt;:&lt;seq&gt;',   raw:'#PS',          desc:'Store sequence (e.g. #PS1:PP100:PH)'},
+    {str:'#PL',                         raw:'#PL',          desc:'List stored sequences'},
+    {str:'#PD&lt;n&gt;',               raw:'#PD',          desc:'Delete sequence n'},
+    {str:'#PDEBUG[0|1]',               raw:'#PDEBUG',      desc:'Enable/disable verbose debug output'},
+    {str:'#PRESTART',                   raw:'#PRESTART',    desc:'Reboot'},
+  ],
+};
+
+var UPPITY_CFG_BTNS = [
+  {name:'Calibrate',    str:'#PSC'},
+  {name:'Show Config',  str:'#PCONFIG'},
+  {name:'Status',       str:'#PSTATUS'},
+  {name:'Gentle',       str:'#PAGGRESSION0'},
+  {name:'Medium',       str:'#PAGGRESSION1'},
+  {name:'Aggressive',   str:'#PAGGRESSION2'},
+  {name:'Restart',      str:'#PRESTART'},
 ];
 
 var GADGETS = [
@@ -6085,10 +6264,13 @@ function gadgetCmdPost(cmd) {
 }
 
 function load() {
-  fetch('/api/config')
-    .then(function(r) { return r.json(); })
-    .then(function(d) { _cfg = d; render(); })
-    .catch(function() { document.getElementById('status').textContent = 'Failed to load.'; });
+  var p1 = fetch('/api/config').then(function(r) { return r.json(); });
+  var p2 = fetch('/api/periscope/seqs').then(function(r) { return r.json(); }).catch(function() { return {}; });
+  Promise.all([p1, p2]).then(function(results) {
+    _cfg = results[0];
+    _periscope_seqs = results[1] || {};
+    render();
+  }).catch(function() { document.getElementById('status').textContent = 'Failed to load.'; });
 }
 
 function render() {
@@ -6096,7 +6278,7 @@ function render() {
   var sstr = _cfg.sstr || [];
   var h = '';
 
-  h += '<div class="info-banner">Commands assigned to a gadget appear in <a href="/droid-control#gadgets">Droid Control &rsaquo; Gadgets</a> and are excluded from the Sequences tab.</div>';
+  h += '<div class="info-banner">Commands assigned to a gadget appear in <a href="/droid-control#gadgets">Droid Control &rsaquo; Gadgets</a>. You can also set a command\'s category to a gadget name in <a href="/config/serial-strings">Serial Commands</a>.</div>';
 
   GADGETS.forEach(function(g) {
     var cfg      = gCfg[g.id] || {type: 0, sstr: []};
@@ -6113,24 +6295,69 @@ function render() {
     h += '</div>';
 
     if (g.id === 0 && cfg.type === 2) {
+      // ---- Periscope (Uppity Spinner) ----
+
+      // Command reference
       h += '<div class="sstr-section">';
-      h += '<div class="sstr-label">Operational Commands</div>';
-      h += '<div style="font-size:.7rem;color:var(--muted);margin-bottom:.4rem">Auto-available in <a href="/droid-control#gadgets">Droid Control &rarr; Gadgets</a> and as button assignments.</div>';
-      h += '<div style="display:flex;flex-direction:column;gap:.15rem">';
-      UPPITY_OPS.forEach(function(c) {
-        h += '<div class="sstr-empty" style="margin:0"><span style="color:var(--accent);min-width:7rem;display:inline-block">' + c.name + '</span><span style="opacity:.5;font-size:.7rem">' + c.str + '</span></div>';
+      h += '<div class="sstr-label">Command Reference</div>';
+      h += '<div style="font-size:.7rem;color:var(--muted);margin-bottom:.4rem">Commands marked &#10003; are available automatically in <a href="/droid-control#gadgets">Droid Control</a> and as button assignments.</div>';
+      Object.keys(UPPITY_CMD_REF).forEach(function(group) {
+        h += '<div class="ref-group-hdr">' + group + '</div>';
+        h += '<table class="cmd-ref-table">';
+        UPPITY_CMD_REF[group].forEach(function(c) {
+          var isAuto = UPPITY_AUTO_STRS.some(function(s) { return c.raw && (s === c.raw || s.startsWith(c.raw)); });
+          h += '<tr' + (isAuto ? ' class="auto-included"' : '') + '>';
+          h += '<td>' + c.str + '</td><td>' + c.desc + '</td></tr>';
+        });
+        h += '</table>';
       });
       h += '</div>';
+
+      // Custom sequences
+      h += '<div class="sstr-section">';
+      h += '<div class="sstr-label">Custom Sequences</div>';
+      h += '<div style="font-size:.7rem;color:var(--muted);margin-bottom:.5rem">Sequences stored on the periscope (slots 0–100). Trigger with <span style="font-family:ui-monospace,monospace">:PS&lt;n&gt;</span>.</div>';
+
+      var seqSlots = Object.keys(_periscope_seqs).sort(function(a,b){ return parseInt(a)-parseInt(b); });
+      if (seqSlots.length > 0) {
+        seqSlots.forEach(function(slot) {
+          var seq = _periscope_seqs[slot];
+          h += '<div class="pseq-row">';
+          h += '<span class="pseq-slot">#' + slot + '</span>';
+          h += '<span class="pseq-name">' + esc(seq.name || seq.seq) + '</span>';
+          h += '<span class="pseq-seq">' + esc(seq.seq) + '</span>';
+          h += '<div class="pseq-acts">';
+          h += '<button class="sstr-add-btn" onclick="triggerPseq(' + slot + ')" title="Run">&#9654;</button>';
+          h += '<button class="pseq-del" onclick="deletePseq(' + slot + ')" title="Delete">&#10005;</button>';
+          h += '</div>';
+          h += '</div>';
+        });
+      } else {
+        h += '<div class="sstr-empty">No custom sequences stored yet.</div>';
+      }
+
+      h += '<div class="pseq-new">';
+      h += '<div class="sstr-label" style="margin-top:.5rem">Store New Sequence</div>';
+      h += '<div class="pseq-inputs">';
+      h += '<input type="number" id="pseq-slot" min="0" max="100" placeholder="Slot" style="text-align:center">';
+      h += '<input type="text"   id="pseq-name" placeholder="Label (optional)">';
+      h += '<input type="text"   id="pseq-seq"  placeholder="Sequence, e.g. PP100:PH" class="mono">';
+      h += '</div>';
+      h += '<button class="sstr-add-btn" onclick="storePseq()">&#43; Store Sequence</button>';
       h += '</div>';
 
+      h += '</div>';
+
+      // Calibration / setup buttons
       h += '<div class="sstr-section">';
       h += '<div class="sstr-label">Calibration &amp; Setup</div>';
       h += '<div class="sstr-tags" style="gap:.4rem">';
-      UPPITY_CFG.forEach(function(c) {
+      UPPITY_CFG_BTNS.forEach(function(c) {
         h += '<button class="sstr-add-btn" onclick="gadgetCmdPost(' + JSON.stringify(c.str) + ')">' + c.name + '</button>';
       });
       h += '</div>';
       h += '</div>';
+
     } else if (g.serial && cfg.type > 0) {
       h += '<div class="sstr-section">';
       h += '<div class="sstr-label">Serial Commands</div>';
@@ -6173,6 +6400,51 @@ function render() {
   });
 
   document.getElementById('main').innerHTML = h;
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function triggerPseq(slot) {
+  gadgetCmdPost(':PS' + slot);
+}
+
+function storePseq() {
+  var slotEl = document.getElementById('pseq-slot');
+  var nameEl = document.getElementById('pseq-name');
+  var seqEl  = document.getElementById('pseq-seq');
+  if (!slotEl || !seqEl) return;
+  var slot = slotEl.value.trim();
+  var name = (nameEl ? nameEl.value.trim() : '');
+  var seq  = seqEl.value.trim();
+  if (!slot || !seq) { showToast('Slot and sequence required', true); return; }
+  var n = parseInt(slot, 10);
+  if (isNaN(n) || n < 0 || n > 100) { showToast('Slot must be 0–100', true); return; }
+  fetch('/api/periscope/seq', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'slot=' + n + '&name=' + encodeURIComponent(name) + '&seq=' + encodeURIComponent(seq)
+  }).then(function(r) {
+    if (!r.ok) { showToast('Failed to store', true); return; }
+    _periscope_seqs[String(n)] = {name: name, seq: seq};
+    render();
+    showToast('Sequence stored');
+  }).catch(function() { showToast('Network error', true); });
+}
+
+function deletePseq(slot) {
+  if (!confirm('Delete sequence #' + slot + '?')) return;
+  fetch('/api/periscope/seq/delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'slot=' + slot
+  }).then(function(r) {
+    if (!r.ok) { showToast('Delete failed', true); return; }
+    delete _periscope_seqs[String(slot)];
+    render();
+    showToast('Deleted');
+  }).catch(function() { showToast('Network error', true); });
 }
 
 function apiPost(key, value, cb) {
@@ -8084,6 +8356,9 @@ footer a:hover { opacity: 1; }
 .dome-pos-left{display:flex;flex-direction:column;gap:.5rem}
 .dome-pos-right{display:flex;flex-direction:column;align-items:center;gap:.35rem}
 .dome-deg-display{font:500 13px/1 ui-monospace,'SF Mono',Menlo,monospace;color:var(--accent);letter-spacing:.08em}
+/* ---- category groups ---- */
+.cat-hdr{font:600 .7rem/1 ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);padding:.8rem 0 .35rem;border-top:1px solid var(--border);margin-top:.4rem}
+.cat-hdr:first-child{border-top:none;margin-top:0;padding-top:.2rem}
 </style>
 <script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
 </head>
@@ -8106,9 +8381,11 @@ footer a:hover { opacity: 1; }
   </div>
 </div>
 <div class="tabs">
-  <button class="tab" data-tab="dome"      onclick="showHashTab('dome')">Dome</button>
-  <button class="tab" data-tab="sequences" onclick="showHashTab('sequences')">Sequences</button>
-  <button class="tab" data-tab="gadgets"   onclick="showHashTab('gadgets')">Gadgets</button>
+  <button class="tab" data-tab="favorites"  onclick="showHashTab('favorites')">Favorites</button>
+  <button class="tab" data-tab="dome"       onclick="showHashTab('dome')">Dome</button>
+  <button class="tab" data-tab="sequences"  onclick="showHashTab('sequences')">Sequences</button>
+  <button class="tab" data-tab="gadgets"    onclick="showHashTab('gadgets')">Gadgets</button>
+  <button class="tab" data-tab="hcr"        onclick="showHashTab('hcr')" id="hcr-tab" hidden>HCR</button>
 </div>
 <div id="main"><div id="status">LOADING&#8230;</div></div>
 <script>
@@ -8393,16 +8670,38 @@ function buildPage(SCHEMA, endpoint, callback) {
 </script>
 <script>
 var _cfg = null;
-var _tab = 'dome';
+var _tab = 'favorites';
 
 var ANGLES    = [0,45,90,135,180,225,270,315];
-var HCR_EMOS  = ['Happy','Sad','Mad','Scared'];
 var GADGET_NAMES = ['Periscope','Lifeform Scanner','Lightsaber Launcher','Bubble Gun','Zapper Arm','Gripper','Data Probe'];
+var HCR_EMOS  = ['Happy','Sad','Mad','Scared'];
 
 function isGadgetSstr(oneBasedIdx) {
   return (_cfg.gadgets_cfg || []).some(function(g) {
     return g && g.type > 0 && (g.sstr || []).indexOf(oneBasedIdx) >= 0;
   });
+}
+
+function sstrCatFor(oneIdx) {
+  var cats = _cfg.sstr_cats || [];
+  for (var i = 0; i < cats.length; i++) {
+    if ((cats[i].idx || []).indexOf(oneIdx) >= 0) return cats[i].name;
+  }
+  return '';
+}
+
+function sstrIsHidden(oneIdx) {
+  return (_cfg.sstr_hidden || []).indexOf(oneIdx) >= 0;
+}
+
+// True when catName exactly matches an enabled gadget name (used to route commands to Gadgets tab)
+function isGadgetCat(catName) {
+  if (!catName) return false;
+  var gCfg = _cfg.gadgets_cfg || [];
+  for (var i = 0; i < GADGET_NAMES.length; i++) {
+    if (GADGET_NAMES[i] === catName && gCfg[i] && gCfg[i].type > 0) return true;
+  }
+  return false;
 }
 
 function load() {
@@ -8411,16 +8710,20 @@ function load() {
     .then(function(d) {
       _cfg = d;
       initVolBar(d);
-      initHashTabs('dome', function(t) { _tab = t; render(); });
+      var hcrTab = document.getElementById('hcr-tab');
+      if (hcrTab) hcrTab.hidden = (d.audiohw !== 'hcr');
+      initHashTabs('favorites', function(t) { _tab = t; render(); });
     })
     .catch(function() { document.getElementById('status').textContent = 'Failed to load.'; });
 }
 
 function render() {
   if (_tab !== 'dome') stopDomePoll();
-  if (_tab === 'dome')           renderDome();
+  if      (_tab === 'dome')      renderDome();
+  else if (_tab === 'favorites') renderFavorites();
   else if (_tab === 'sequences') renderSequences();
-  else                           renderGadgets();
+  else if (_tab === 'gadgets')   renderGadgets();
+  else if (_tab === 'hcr')       renderHCR();
 }
 
 function domePost(cmd) {
@@ -8527,6 +8830,27 @@ function onVolSlide(val) {
   }, 60);
 }
 
+function renderFavorites() {
+  var sstr = _cfg.sstr || [];
+  var favs = [];
+  (_cfg.sstr_favs || []).forEach(function(oneIdx) {
+    if (oneIdx >= 1 && oneIdx <= sstr.length) favs.push({s: sstr[oneIdx - 1], idx: oneIdx});
+  });
+
+  var h = '<div class="ctrl-section">';
+  if (favs.length === 0) {
+    h += '<div class="empty-note">No favorites yet. Star commands in <a href="/config/serial-strings">Serial Commands</a>.</div>';
+  } else {
+    h += '<div class="cmd-grid">';
+    favs.forEach(function(item) {
+      h += '<button class="grid-btn" onclick="serialPost(' + item.idx + ')">' + esc(item.s.n) + '</button>';
+    });
+    h += '</div>';
+  }
+  h += '</div>';
+  document.getElementById('main').innerHTML = h;
+}
+
 function renderDome() {
   var h = '<div class="ctrl-section">';
   h += '<button class="dome-stop" onclick="domePost(\'stop\')">&#9632;&nbsp; STOP</button>';
@@ -8586,36 +8910,73 @@ function renderDome() {
   startDomePoll();
 }
 
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function renderSequences() {
   var sstr = _cfg.sstr || [];
   var h = '<div class="ctrl-section">';
 
-  h += '<div class="sec-hdr" style="margin-top:0">Serial Commands</div>';
-  var unassigned = sstr.filter(function(_, i) { return !isGadgetSstr(i + 1); });
-  if (unassigned.length === 0 && sstr.length === 0) {
+  // Filter: not hidden, not assigned to a gadget via legacy sstr[] assignment,
+  // and not categorized as an enabled gadget name
+  var visItems = [];
+  sstr.forEach(function(s, i) {
+    var oneIdx = i + 1;
+    if (sstrIsHidden(oneIdx)) return;    // hidden from Sequences tab
+    if (isGadgetSstr(oneIdx)) return;    // legacy gadget assignment
+    var cat = sstrCatFor(oneIdx);
+    if (isGadgetCat(cat)) return;        // categorized as enabled gadget
+    visItems.push({s: s, idx: oneIdx, cat: cat});
+  });
+
+  if (visItems.length === 0 && sstr.length === 0) {
     h += '<div class="empty-note">No serial commands configured. <a href="/config/serial-strings">Add some in Serial Commands.</a></div>';
-  } else if (unassigned.length === 0) {
-    h += '<div class="empty-note">All serial commands are assigned to gadgets. See <a href="/droid-control#gadgets">Gadgets</a>.</div>';
+  } else if (visItems.length === 0) {
+    h += '<div class="empty-note">All commands are hidden or assigned to gadgets.</div>';
   } else {
-    h += '<div class="cmd-grid">';
-    sstr.forEach(function(s, i) {
-      if (isGadgetSstr(i + 1)) return;
-      h += '<button class="grid-btn" onclick="serialPost(' + (i + 1) + ')">' + s.n + '</button>';
+    // Group by category, sort categories alphabetically (empty = "Uncategorized" last)
+    var catMap = {};
+    visItems.forEach(function(item) {
+      var cat = item.cat || '';
+      if (!catMap[cat]) catMap[cat] = [];
+      catMap[cat].push(item);
     });
-    h += '</div>';
+    var cats = Object.keys(catMap).sort(function(a, b) {
+      if (!a && b) return 1;
+      if (a && !b) return -1;
+      return a.toLowerCase() < b.toLowerCase() ? -1 : 1;
+    });
+    cats.forEach(function(cat) {
+      if (cat) {
+        h += '<div class="cat-hdr">' + esc(cat) + '</div>';
+      } else if (cats.length > 1) {
+        h += '<div class="cat-hdr">Uncategorized</div>';
+      }
+      var items = catMap[cat].slice().sort(function(a, b) {
+        return a.s.n.toLowerCase() < b.s.n.toLowerCase() ? -1 : 1;
+      });
+      h += '<div class="cmd-grid">';
+      items.forEach(function(item) {
+        h += '<button class="grid-btn" onclick="serialPost(' + item.idx + ')">' + esc(item.s.n) + '</button>';
+      });
+      h += '</div>';
+    });
   }
 
-  if (_cfg.audiohw === 'hcr') {
-    h += '<div class="sec-hdr">HCR Audio</div>';
-    h += '<div class="cmd-grid">';
-    h += '<button class="grid-btn full" onclick="hcrPost(\'muse\')">Toggle Musing</button>';
-    HCR_EMOS.forEach(function(emo, ei) {
-      h += '<button class="grid-btn" onclick="hcrPost(\'emote\',' + ei + ',0)">' + emo + '<br><span style="font-size:.72rem;opacity:.7">Moderate</span></button>';
-      h += '<button class="grid-btn" onclick="hcrPost(\'emote\',' + ei + ',1)">' + emo + '<br><span style="font-size:.72rem;opacity:.7">Strong</span></button>';
-    });
-    h += '</div>';
-  }
+  h += '</div>';
+  document.getElementById('main').innerHTML = h;
+}
 
+function renderHCR() {
+  var h = '<div class="ctrl-section">';
+  h += '<div class="cmd-grid">';
+  h += '<button class="grid-btn full" onclick="hcrPost(\'muse\')">Toggle Musing</button>';
+  HCR_EMOS.forEach(function(emo, ei) {
+    h += '<button class="grid-btn" onclick="hcrPost(\'emote\',' + ei + ',0)">' + emo + '<br><span style="font-size:.72rem;opacity:.7">Moderate</span></button>';
+    h += '<button class="grid-btn" onclick="hcrPost(\'emote\',' + ei + ',1)">' + emo + '<br><span style="font-size:.72rem;opacity:.7">Strong</span></button>';
+  });
+  h += '</div>';
   h += '</div>';
   document.getElementById('main').innerHTML = h;
 }
@@ -8639,15 +9000,34 @@ function renderGadgets() {
   var h = '<div class="ctrl-section">';
   gCfg.forEach(function(g, i) {
     if (!g || g.type === 0) return;
-    h += '<div class="sec-hdr">' + GADGET_NAMES[i] + '</div>';
+    var gadgetName = GADGET_NAMES[i];
+    h += '<div class="sec-hdr">' + gadgetName + '</div>';
+
+    // Commands from legacy explicit sstr[] assignment
     var slots = (g.sstr || []).filter(function(idx) { return idx > 0 && idx <= sstr.length; });
-    if (slots.length === 0) {
-      h += '<div style="padding:.3rem 0 .6rem;color:var(--muted);font-size:.78rem">No commands assigned. <a href="/config/gadgets">Configure</a></div>';
+    // Commands from category matching this gadget name
+    var catItems = [];
+    var cats = _cfg.sstr_cats || [];
+    cats.forEach(function(c) {
+      if (c.name !== gadgetName) return;
+      (c.idx || []).forEach(function(oneIdx) {
+        if (oneIdx >= 1 && oneIdx <= sstr.length && slots.indexOf(oneIdx) < 0) {
+          catItems.push({s: sstr[oneIdx - 1], idx: oneIdx});
+        }
+      });
+    });
+
+    if (slots.length === 0 && catItems.length === 0) {
+      h += '<div style="padding:.3rem 0 .6rem;color:var(--muted);font-size:.78rem">No commands assigned. <a href="/config/gadgets">Configure</a> or set category in <a href="/config/serial-strings">Serial Commands</a>.</div>';
     } else {
       h += '<div class="cmd-grid">';
       slots.forEach(function(idx) {
         var s = sstr[idx - 1];
-        if (s) h += '<button class="grid-btn" onclick="serialPost(' + idx + ')">' + s.n + '</button>';
+        if (s) h += '<button class="grid-btn" onclick="serialPost(' + idx + ')">' + esc(s.n) + '</button>';
+      });
+      catItems.sort(function(a, b) { return a.s.n.toLowerCase() < b.s.n.toLowerCase() ? -1 : 1; });
+      catItems.forEach(function(item) {
+        h += '<button class="grid-btn" onclick="serialPost(' + item.idx + ')">' + esc(item.s.n) + '</button>';
       });
       h += '</div>';
     }

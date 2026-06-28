@@ -183,6 +183,27 @@ struct AmidalaParameters {
   // auxserial3: enable UART2 at startup (default false).
   bool    auxserial3;
 
+  // ---- Serial string metadata (favorites, hidden, categories) ---------------
+  // Stored as separate config blocks; sstr= entries are unchanged.
+  //   f=1,3,5          → sstr_favs / sstr_fav_cnt
+  //   hidden=2,4       → sstr_hidden / sstr_hidden_cnt
+  //   cat=Dome|1,3     → sstr_cats / sstr_cat_count (one line per category)
+#define MAX_SSTR_FAVS        64
+#define MAX_SSTR_HIDDEN      64
+#define MAX_SSTR_CATS        16
+#define MAX_SSTR_CAT_ENTRIES 64
+  struct SstrCat {
+    char     name[24];
+    uint16_t idx[MAX_SSTR_CAT_ENTRIES]; // 1-based sstr indices
+    uint8_t  cnt;
+  };
+  uint16_t sstr_favs[MAX_SSTR_FAVS];
+  uint8_t  sstr_fav_cnt;
+  uint16_t sstr_hidden[MAX_SSTR_HIDDEN];
+  uint8_t  sstr_hidden_cnt;
+  SstrCat  sstr_cats[MAX_SSTR_CATS];
+  uint8_t  sstr_cat_count;
+
   // ---- E-stop / Resume broadcast commands ----------------------------------
   // Serial strings sent to the WCB whenever an emergency-stop or resume is
   // triggered from the web UI.  Allows per-build customisation of which child

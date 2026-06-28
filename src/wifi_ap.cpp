@@ -293,6 +293,74 @@ static bool rewriteSerialStrings() {
     return true;
 }
 
+// Rewrite f=, hidden=, and cat= lines in config.txt from current params state.
+static bool rewriteSstrMeta() {
+    if (!sCtrl) return false;
+    String path = "/config.txt";
+    File f = SD.open(path, "r");
+    String out;
+    out.reserve(8192);
+    if (f) {
+        while (f.available()) {
+            String line = f.readStringUntil('\n');
+            if (line.endsWith("\r")) line.remove(line.length() - 1);
+            if (!line.startsWith("f=") && !line.startsWith("hidden=") && !line.startsWith("cat="))
+                out += line + "\n";
+        }
+        f.close();
+    } else {
+        out = "#START\n#END\n";
+    }
+
+    AmidalaParameters& p = sCtrl->params;
+    String meta;
+
+    // Favorites
+    if (p.sstr_fav_cnt > 0) {
+        meta += "f=";
+        for (uint8_t i = 0; i < p.sstr_fav_cnt; i++) {
+            if (i > 0) meta += ",";
+            meta += String(p.sstr_favs[i]);
+        }
+        meta += "\n";
+    }
+
+    // Hidden
+    if (p.sstr_hidden_cnt > 0) {
+        meta += "hidden=";
+        for (uint8_t i = 0; i < p.sstr_hidden_cnt; i++) {
+            if (i > 0) meta += ",";
+            meta += String(p.sstr_hidden[i]);
+        }
+        meta += "\n";
+    }
+
+    // Categories
+    for (uint8_t i = 0; i < p.sstr_cat_count; i++) {
+        meta += "cat=";
+        meta += p.sstr_cats[i].name;
+        meta += "|";
+        for (uint8_t j = 0; j < p.sstr_cats[i].cnt; j++) {
+            if (j > 0) meta += ",";
+            meta += String(p.sstr_cats[i].idx[j]);
+        }
+        meta += "\n";
+    }
+
+    int endIdx = out.lastIndexOf("#END");
+    if (endIdx >= 0)
+        out = out.substring(0, endIdx) + meta + out.substring(endIdx);
+    else
+        out += meta;
+
+    SD.remove(path);
+    File wf = SD.open(path, "w");
+    if (!wf) return false;
+    wf.print(out);
+    wf.close();
+    return true;
+}
+
 static bool rewriteSafetyCmds() {
     String path = "/config.txt";
     File f = SD.open(path, "r");
@@ -697,6 +765,88 @@ static void handleApiConfigPost() {
         setSerialStringFields(sCtrl->params.Str[idx], value.c_str());
         bool ok = rewriteSerialStrings();
         sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed — change applied in memory only");
+        return;
+    }
+
+    // sstr_favs — replace entire favorites list; value: "1,3,5"
+    if (key == "sstr_favs") {
+        AmidalaParameters& p = sCtrl->params;
+        p.sstr_fav_cnt = 0;
+        const char* ptr = value.c_str();
+        while (*ptr && p.sstr_fav_cnt < MAX_SSTR_FAVS) {
+            uint16_t v = 0;
+            while (*ptr >= '0' && *ptr <= '9') v = v * 10 + (*ptr++ - '0');
+            if (v > 0) p.sstr_favs[p.sstr_fav_cnt++] = v;
+            if (*ptr == ',') ptr++;
+        }
+        bool ok = rewriteSstrMeta();
+        sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed");
+        return;
+    }
+
+    // sstr_hidden — replace entire hidden list; value: "2,4"
+    if (key == "sstr_hidden") {
+        AmidalaParameters& p = sCtrl->params;
+        p.sstr_hidden_cnt = 0;
+        const char* ptr = value.c_str();
+        while (*ptr && p.sstr_hidden_cnt < MAX_SSTR_HIDDEN) {
+            uint16_t v = 0;
+            while (*ptr >= '0' && *ptr <= '9') v = v * 10 + (*ptr++ - '0');
+            if (v > 0) p.sstr_hidden[p.sstr_hidden_cnt++] = v;
+            if (*ptr == ',') ptr++;
+        }
+        bool ok = rewriteSstrMeta();
+        sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed");
+        return;
+    }
+
+    // sstr_cat_del_N — delete category at index N
+    if (key.startsWith("sstr_cat_del_")) {
+        int idx = key.substring(13).toInt();
+        AmidalaParameters& p = sCtrl->params;
+        if (idx >= 0 && idx < (int)p.sstr_cat_count) {
+            for (int j = idx; j < (int)p.sstr_cat_count - 1; j++)
+                p.sstr_cats[j] = p.sstr_cats[j + 1];
+            p.sstr_cat_count--;
+        }
+        bool ok = rewriteSstrMeta();
+        sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed");
+        return;
+    }
+
+    // sstr_cat_add — append new category; sstr_cat_N — update category at index N.
+    // value format: "Name|1,3,5"
+    if (key == "sstr_cat_add" || (key.startsWith("sstr_cat_") && key.length() > 9 && isDigit(key.charAt(9)))) {
+        AmidalaParameters& p = sCtrl->params;
+        int idx = (key == "sstr_cat_add") ? (int)p.sstr_cat_count : key.substring(9).toInt();
+        bool isAppend = (idx == (int)p.sstr_cat_count);
+        bool isEdit   = (idx >= 0 && idx < (int)p.sstr_cat_count);
+        if (!isEdit && !isAppend) {
+            sServer.send(400, "text/plain", "index out of range"); return;
+        }
+        if (isAppend) {
+            if (p.sstr_cat_count >= MAX_SSTR_CATS) {
+                sServer.send(507, "text/plain", "category limit reached"); return;
+            }
+            memset(&p.sstr_cats[p.sstr_cat_count], 0, sizeof(p.sstr_cats[0]));
+            p.sstr_cat_count++;
+        }
+        AmidalaParameters::SstrCat& cat = p.sstr_cats[idx];
+        int pipe = value.indexOf('|');
+        if (pipe < 0) { sServer.send(400, "text/plain", "bad format"); return; }
+        String name = value.substring(0, pipe);
+        strncpy(cat.name, name.c_str(), sizeof(cat.name) - 1);
+        cat.name[sizeof(cat.name) - 1] = '\0';
+        cat.cnt = 0;
+        const char* ptr = value.c_str() + pipe + 1;
+        while (*ptr && cat.cnt < MAX_SSTR_CAT_ENTRIES) {
+            uint16_t v = 0;
+            while (*ptr >= '0' && *ptr <= '9') v = v * 10 + (*ptr++ - '0');
+            if (v > 0) cat.idx[cat.cnt++] = v;
+            if (*ptr == ',') ptr++;
+        }
+        bool ok = rewriteSstrMeta();
+        sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed");
         return;
     }
 

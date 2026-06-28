@@ -222,6 +222,37 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     }
     json += "],";
 
+    // Favorites list — 1-based sstr indices
+    json += "\"sstr_favs\":[";
+    for (uint8_t i = 0; i < p.sstr_fav_cnt; i++) {
+        if (i > 0) json += ",";
+        json += String(p.sstr_favs[i]);
+    }
+    json += "],";
+
+    // Hidden list — 1-based sstr indices hidden from Droid Control
+    json += "\"sstr_hidden\":[";
+    for (uint8_t i = 0; i < p.sstr_hidden_cnt; i++) {
+        if (i > 0) json += ",";
+        json += String(p.sstr_hidden[i]);
+    }
+    json += "],";
+
+    // Categories — [{name, idx:[...]}]
+    json += "\"sstr_cats\":[";
+    for (uint8_t i = 0; i < p.sstr_cat_count; i++) {
+        if (i > 0) json += ",";
+        json += "{\"name\":\"";
+        json += String(p.sstr_cats[i].name);
+        json += "\",\"idx\":[";
+        for (uint8_t j = 0; j < p.sstr_cats[i].cnt; j++) {
+            if (j > 0) json += ",";
+            json += String(p.sstr_cats[i].idx[j]);
+        }
+        json += "]}";
+    }
+    json += "],";
+
     // Controller settings
     json += "\"altbtn\":"       + String(p.altbtn)       + ",";
     json += "\"mutebutton\":"   + String(p.mutebutton)   + ",";

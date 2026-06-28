@@ -108,6 +108,9 @@ def parse_example_config(path):
         "sbs":         [],
         "servos":      [],
         "sstr":        [],
+        "sstr_favs":   [],  # list of 1-based sstr indices that are favorites
+        "sstr_hidden": [],  # list of 1-based sstr indices hidden from Droid Control
+        "sstr_cats":   [],  # list of {name, idx: [...]} category objects
         "estop_cmds":  [],
         "resume_cmds": [],
         "btaddr":      "",
@@ -115,6 +118,7 @@ def parse_example_config(path):
         "gestures": [],
         "gadgets_cfg": [{"type": 0, "sstr": []} for _ in range(7)],
         "sstr_user_cnt": 0,
+        "periscope_seqs": {},  # slot_num -> {name, seq}
     }
 
     # Simple scalar keys that map directly
@@ -189,13 +193,31 @@ def parse_example_config(path):
                 })
             continue
 
-        # Serial string: sstr=Name|command  (or sstr=command if no name)
+        # Serial string: sstr=Name|command
         if key == "sstr":
-            if "|" in val:
-                name, s = val.split("|", 1)
-            else:
-                name, s = "", val
+            parts = val.split("|", 1)
+            name = parts[0] if len(parts) > 0 else ""
+            s    = parts[1] if len(parts) > 1 else val
             cfg["sstr"].append({"n": name, "s": s})
+            continue
+
+        # Favorites: f=1,3,5
+        if key == "f":
+            cfg["sstr_favs"] = [int(x) for x in val.split(",") if x.strip().isdigit()]
+            continue
+
+        # Hidden: hidden=2,4
+        if key == "hidden":
+            cfg["sstr_hidden"] = [int(x) for x in val.split(",") if x.strip().isdigit()]
+            continue
+
+        # Category: cat=Name|1,3,5
+        if key == "cat":
+            pipe = val.find("|")
+            if pipe >= 0:
+                cat_name = val[:pipe]
+                idx_list = [int(x) for x in val[pipe+1:].split(",") if x.strip().isdigit()]
+                cfg["sstr_cats"].append({"name": cat_name, "idx": idx_list})
             continue
 
         # Safety broadcast commands: estopstr=cmd  resumestr=cmd
@@ -316,6 +338,9 @@ class _Handler(SimpleHTTPRequestHandler):
         if path == "/api/bt/results":
             self._json(_bt_state["results"])
             return
+        if path == "/api/periscope/seqs":
+            self._json(_config.get("periscope_seqs", {}))
+            return
 
         # Map extension-less paths to .html (e.g. /config/general → general.html)
         local = os.path.join(_WEB_DIR, path.lstrip("/"))
@@ -410,6 +435,40 @@ class _Handler(SimpleHTTPRequestHandler):
             _monitor["lines"].append({"t": "> " + cmd, "c": "tx"})
             _monitor["seq"] += 1
             self._text("OK")
+            return
+        if path == "/api/periscope/seqs":
+            self._json(_config.get("periscope_seqs", {}))
+            return
+        if path == "/api/periscope/seq":
+            slot = params.get("slot", "")
+            name = params.get("name", "")
+            seq  = params.get("seq", "")
+            if not slot.isdigit() or not seq:
+                self._text("slot and seq required", 400)
+                return
+            n = int(slot)
+            if not (0 <= n <= 100):
+                self._text("slot must be 0-100", 400)
+                return
+            cmd = f"#PS{n}:{seq}"
+            print(f"  PERISCP store seq {n}: {seq!r}")
+            _monitor["lines"].append({"t": "> " + cmd, "c": "tx"})
+            _monitor["seq"] += 1
+            _config["periscope_seqs"][str(n)] = {"name": name, "seq": seq}
+            self._json({"ok": True})
+            return
+        if path == "/api/periscope/seq/delete":
+            slot = params.get("slot", "")
+            if not slot.isdigit():
+                self._text("slot required", 400)
+                return
+            n = int(slot)
+            cmd = f"#PD{n}"
+            print(f"  PERISCP delete seq {n}")
+            _monitor["lines"].append({"t": "> " + cmd, "c": "tx"})
+            _monitor["seq"] += 1
+            _config["periscope_seqs"].pop(str(n), None)
+            self._json({"ok": True})
             return
         if path == "/api/serial":
             idx = int(params.get("idx", 0))
@@ -568,14 +627,52 @@ class _Handler(SimpleHTTPRequestHandler):
             idx = int(key[9:])
             if 0 <= idx < len(_config["sstr"]):
                 _config["sstr"].pop(idx)
-        # sstr_N — update or append serial string at index N
-        elif key.startswith("sstr_"):
-            idx = int(key[5:])
-            name, s = (value.split("|", 1) + [""])[:2] if "|" in value else ("", value)
-            if idx == len(_config["sstr"]):
-                _config["sstr"].append({"n": name, "s": s})
-            elif 0 <= idx < len(_config["sstr"]):
-                _config["sstr"][idx] = {"n": name, "s": s}
+                _config["sstr_user_cnt"] = len(_config["sstr"])
+        # sstr_favs — replace full favorites list; value: "1,3,5"
+        elif key == "sstr_favs":
+            _config["sstr_favs"] = [int(x) for x in value.split(",") if x.strip().isdigit()]
+        # sstr_hidden — replace full hidden list; value: "2,4"
+        elif key == "sstr_hidden":
+            _config["sstr_hidden"] = [int(x) for x in value.split(",") if x.strip().isdigit()]
+        # sstr_cat_del_N — delete category at index N
+        elif key.startswith("sstr_cat_del_"):
+            idx = int(key[13:])
+            cats = _config["sstr_cats"]
+            if 0 <= idx < len(cats):
+                cats.pop(idx)
+        # sstr_cat_add — append category; sstr_cat_N — update category at index N
+        # value format: "Name|1,3,5"
+        elif key == "sstr_cat_add" or (key.startswith("sstr_cat_") and key[9:].isdigit()):
+            cats = _config["sstr_cats"]
+            pipe = value.find("|")
+            if pipe >= 0:
+                cat_name = value[:pipe]
+                idx_list = [int(x) for x in value[pipe+1:].split(",") if x.strip().isdigit()]
+                entry = {"name": cat_name, "idx": idx_list}
+                if key == "sstr_cat_add":
+                    cats.append(entry)
+                else:
+                    idx = int(key[9:])
+                    if idx == len(cats):
+                        cats.append(entry)
+                    elif 0 <= idx < len(cats):
+                        cats[idx] = entry
+        # sstr_N — update or append serial string at index N; value: "Name|str"
+        elif key.startswith("sstr_") and (key[5:].isdigit() or key == "sstr_add"):
+            parts = value.split("|", 1)
+            name  = parts[0] if len(parts) > 0 else ""
+            s     = parts[1] if len(parts) > 1 else value
+            entry = {"n": name, "s": s}
+            if key == "sstr_add":
+                _config["sstr"].append(entry)
+                _config["sstr_user_cnt"] = len(_config["sstr"])
+            else:
+                idx = int(key[5:])
+                if idx == len(_config["sstr"]):
+                    _config["sstr"].append(entry)
+                    _config["sstr_user_cnt"] = len(_config["sstr"])
+                elif 0 <= idx < len(_config["sstr"]):
+                    _config["sstr"][idx] = entry
         # estopstr_del_N / estopstr_N / estopstr_add
         elif key.startswith("estopstr_del_"):
             idx = int(key[13:])

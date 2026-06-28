@@ -610,6 +610,46 @@ bool AmidalaConfig::processConfig(const char *cmd) {
       a->str[sizeof(a->str) - 1] = '\0';
     }
     params.serialcount++;
+  } else if (startswith(cmd, "f=")) {
+    // Favorites: f=1,3,5 (comma-separated 1-based sstr indices)
+    const char* p = cmd; // past "f="
+    params.sstr_fav_cnt = 0;
+    while (*p && params.sstr_fav_cnt < MAX_SSTR_FAVS) {
+      uint16_t v = 0;
+      while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
+      if (v > 0) params.sstr_favs[params.sstr_fav_cnt++] = v;
+      if (*p == ',') p++;
+    }
+  } else if (startswith(cmd, "hidden=")) {
+    // Hidden: hidden=2,4 (comma-separated 1-based sstr indices hidden from Droid Control)
+    const char* p = cmd; // past "hidden="
+    params.sstr_hidden_cnt = 0;
+    while (*p && params.sstr_hidden_cnt < MAX_SSTR_HIDDEN) {
+      uint16_t v = 0;
+      while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
+      if (v > 0) params.sstr_hidden[params.sstr_hidden_cnt++] = v;
+      if (*p == ',') p++;
+    }
+  } else if (startswith(cmd, "cat=")) {
+    // Category: cat=Name|1,3,5
+    if (params.sstr_cat_count >= MAX_SSTR_CATS) return true;
+    const char* val = cmd; // past "cat="
+    const char* pipe = strchr(val, '|');
+    if (!pipe) return true;
+    AmidalaParameters::SstrCat* cat = &params.sstr_cats[params.sstr_cat_count];
+    size_t nlen = (size_t)(pipe - val);
+    if (nlen >= sizeof(cat->name)) nlen = sizeof(cat->name) - 1;
+    memcpy(cat->name, val, nlen);
+    cat->name[nlen] = '\0';
+    cat->cnt = 0;
+    const char* p = pipe + 1;
+    while (*p && cat->cnt < MAX_SSTR_CAT_ENTRIES) {
+      uint16_t v = 0;
+      while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
+      if (v > 0) cat->idx[cat->cnt++] = v;
+      if (*p == ',') p++;
+    }
+    params.sstr_cat_count++;
   } else if (startswith(cmd, "estopstr=")) {
     if (params.estopCmdCount < MAX_SAFETY_CMDS && *cmd) {
       strncpy(params.EstopCmds[params.estopCmdCount].str, cmd, sizeof(AmidalaParameters::SafetyCmd::str) - 1);
