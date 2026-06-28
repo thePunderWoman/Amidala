@@ -305,4 +305,19 @@ sstr=Random|DM:RANDOM
 sstr=Disco|DM:DISCO
 sstr=Rock March|DM:ROCKMARCH
 
+# --- Serial Command Metadata ---
+# Favorites: comma-separated 1-based sstr indices shown in the Favorites tab.
+f=15,17
+
+# Hidden: comma-separated 1-based sstr indices excluded from the Sequences tab.
+# Useful for utility toggles that are only triggered via button mappings.
+hidden=7,10
+
+# Categories: cat=Name|index,index,...  (one line per category)
+# Commands can belong to at most one category.  Category names are free-form.
+# Commands categorized with an enabled gadget's name appear on the Gadgets tab.
+cat=HCR Emotes|1,2,3,4,5,6
+cat=Dome Panels|12,13,14,19,22,23,24,25,26,27
+cat=Sequences|15,16,17,18,20
+
 gadget=0,2

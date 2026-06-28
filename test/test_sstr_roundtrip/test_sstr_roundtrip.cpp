@@ -502,6 +502,164 @@ void test_example_config_first_five_sstr_entries() {
     TEST_ASSERT_EQUAL_STRING("<SH1>",               console.strs[4]);
 }
 
+// ---- buildFullConfigJson() meta field serialization -------------------------
+// These verify that sstr_favs, sstr_hidden, and sstr_cats actually appear in
+// the JSON that /api/config sends to the browser.
+
+// Parse a JSON integer array: "key":[1,3,5] → values[] filled, returns count.
+// Returns -1 if the key is absent from the JSON (distinguishes missing vs empty).
+static int parseIntArrayFromJson(const std::string& json, const char* key,
+                                  int* values, int maxValues) {
+    std::string search = std::string("\"") + key + "\":[";
+    size_t pos = json.find(search);
+    if (pos == std::string::npos) return -1;
+    pos += search.size();
+    int count = 0;
+    while (pos < json.size() && json[pos] != ']') {
+        if (isdigit((unsigned char)json[pos])) {
+            int v = 0;
+            while (pos < json.size() && isdigit((unsigned char)json[pos]))
+                v = v * 10 + (json[pos++] - '0');
+            if (count < maxValues) values[count++] = v;
+        } else {
+            pos++;
+        }
+    }
+    return count;
+}
+
+// Parse the sstr_cats JSON array.
+// Returns number of categories found; fills catNames[], catIdx[][], catCounts[].
+// Returns -1 if the sstr_cats key is absent.
+static int parseCatsFromJson(const std::string& json,
+                              char catNames[][32], int catIdx[][32],
+                              int catCounts[], int maxCats) {
+    size_t arrayStart = json.find("\"sstr_cats\":[");
+    if (arrayStart == std::string::npos) return -1;
+    arrayStart += 13;
+    int count = 0;
+    size_t pos = arrayStart;
+    while (count < maxCats && pos < json.size() && json[pos] != ']') {
+        size_t nStart = json.find("\"name\":\"", pos);
+        if (nStart == std::string::npos || json[nStart - 1] != '{') break;
+        nStart += 8;
+        size_t nEnd = json.find('"', nStart);
+        if (nEnd == std::string::npos) break;
+        std::string nm = json.substr(nStart, nEnd - nStart);
+        strncpy(catNames[count], nm.c_str(), 31); catNames[count][31] = '\0';
+
+        size_t idxStart = json.find("\"idx\":[", nEnd);
+        if (idxStart == std::string::npos) break;
+        idxStart += 7;
+        int idxCount = 0;
+        while (idxStart < json.size() && json[idxStart] != ']') {
+            if (isdigit((unsigned char)json[idxStart])) {
+                int v = 0;
+                while (idxStart < json.size() && isdigit((unsigned char)json[idxStart]))
+                    v = v * 10 + (json[idxStart++] - '0');
+                if (idxCount < 32) catIdx[count][idxCount++] = v;
+            } else {
+                idxStart++;
+            }
+        }
+        catCounts[count] = idxCount;
+        count++;
+        pos = idxStart + 1;
+    }
+    return count;
+}
+
+void test_buildFullConfigJson_sstr_favs_empty_by_default() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    std::string json(buildFullConfigJson(p).c_str());
+    int vals[64]; int count = parseIntArrayFromJson(json, "sstr_favs", vals, 64);
+    TEST_ASSERT_GREATER_OR_EQUAL_MESSAGE(0, count, "sstr_favs key missing from JSON");
+    TEST_ASSERT_EQUAL(0, count);
+}
+
+void test_buildFullConfigJson_sstr_favs_populated() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    p.sstr_favs[0] = 1; p.sstr_favs[1] = 3; p.sstr_fav_cnt = 2;
+    std::string json(buildFullConfigJson(p).c_str());
+    int vals[64]; int count = parseIntArrayFromJson(json, "sstr_favs", vals, 64);
+    TEST_ASSERT_EQUAL(2, count);
+    TEST_ASSERT_EQUAL(1, vals[0]);
+    TEST_ASSERT_EQUAL(3, vals[1]);
+}
+
+void test_buildFullConfigJson_sstr_hidden_populated() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    p.sstr_hidden[0] = 7; p.sstr_hidden[1] = 10; p.sstr_hidden_cnt = 2;
+    std::string json(buildFullConfigJson(p).c_str());
+    int vals[64]; int count = parseIntArrayFromJson(json, "sstr_hidden", vals, 64);
+    TEST_ASSERT_EQUAL(2, count);
+    TEST_ASSERT_EQUAL(7,  vals[0]);
+    TEST_ASSERT_EQUAL(10, vals[1]);
+}
+
+void test_buildFullConfigJson_sstr_cats_empty_by_default() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    std::string json(buildFullConfigJson(p).c_str());
+    char names[16][32]; int idx[16][32]; int cnts[16];
+    int count = parseCatsFromJson(json, names, idx, cnts, 16);
+    TEST_ASSERT_GREATER_OR_EQUAL_MESSAGE(0, count, "sstr_cats key missing from JSON");
+    TEST_ASSERT_EQUAL(0, count);
+}
+
+void test_buildFullConfigJson_sstr_cats_single_category() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    strncpy(p.sstr_cats[0].name, "Dome", sizeof(p.sstr_cats[0].name) - 1);
+    p.sstr_cats[0].idx[0] = 1; p.sstr_cats[0].idx[1] = 3; p.sstr_cats[0].cnt = 2;
+    p.sstr_cat_count = 1;
+    std::string json(buildFullConfigJson(p).c_str());
+    char names[16][32]; int idx[16][32]; int cnts[16];
+    int count = parseCatsFromJson(json, names, idx, cnts, 16);
+    TEST_ASSERT_EQUAL(1, count);
+    TEST_ASSERT_EQUAL_STRING("Dome", names[0]);
+    TEST_ASSERT_EQUAL(2, cnts[0]);
+    TEST_ASSERT_EQUAL(1, idx[0][0]);
+    TEST_ASSERT_EQUAL(3, idx[0][1]);
+}
+
+void test_buildFullConfigJson_sstr_cats_multiple_categories() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    strncpy(p.sstr_cats[0].name, "HCR Emotes", sizeof(p.sstr_cats[0].name) - 1);
+    p.sstr_cats[0].idx[0] = 1; p.sstr_cats[0].idx[1] = 2; p.sstr_cats[0].cnt = 2;
+    strncpy(p.sstr_cats[1].name, "Dome Panels", sizeof(p.sstr_cats[1].name) - 1);
+    p.sstr_cats[1].idx[0] = 12; p.sstr_cats[1].idx[1] = 13; p.sstr_cats[1].cnt = 2;
+    p.sstr_cat_count = 2;
+    std::string json(buildFullConfigJson(p).c_str());
+    char names[16][32]; int idx[16][32]; int cnts[16];
+    int count = parseCatsFromJson(json, names, idx, cnts, 16);
+    TEST_ASSERT_EQUAL(2, count);
+    TEST_ASSERT_EQUAL_STRING("HCR Emotes",  names[0]);
+    TEST_ASSERT_EQUAL_STRING("Dome Panels", names[1]);
+    TEST_ASSERT_EQUAL(2, cnts[0]);
+    TEST_ASSERT_EQUAL(2, cnts[1]);
+    TEST_ASSERT_EQUAL(12, idx[1][0]);
+    TEST_ASSERT_EQUAL(13, idx[1][1]);
+}
+
+void test_buildFullConfigJson_all_meta_fields_present() {
+    // Set all three meta types and confirm all appear in JSON together.
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    p.sstr_favs[0] = 15; p.sstr_fav_cnt = 1;
+    p.sstr_hidden[0] = 7; p.sstr_hidden_cnt = 1;
+    strncpy(p.sstr_cats[0].name, "Sequences", sizeof(p.sstr_cats[0].name) - 1);
+    p.sstr_cats[0].idx[0] = 15; p.sstr_cats[0].idx[1] = 17; p.sstr_cats[0].cnt = 2;
+    p.sstr_cat_count = 1;
+    std::string json(buildFullConfigJson(p).c_str());
+
+    int vals[64];
+    TEST_ASSERT_EQUAL(1, parseIntArrayFromJson(json, "sstr_favs",   vals, 64));
+    TEST_ASSERT_EQUAL(15, vals[0]);
+    TEST_ASSERT_EQUAL(1, parseIntArrayFromJson(json, "sstr_hidden", vals, 64));
+    TEST_ASSERT_EQUAL(7, vals[0]);
+    char names[16][32]; int idx[16][32]; int cnts[16];
+    TEST_ASSERT_EQUAL(1, parseCatsFromJson(json, names, idx, cnts, 16));
+    TEST_ASSERT_EQUAL_STRING("Sequences", names[0]);
+}
+
 // ---- TRUE END-TO-END: example_config.txt → boot pipeline → JSON output -----
 //
 // These tests use native C file I/O to read example_config.txt from disk,
@@ -965,6 +1123,15 @@ int main(int argc, char** argv) {
 
     // Combined meta block round-trip
     RUN_TEST(test_full_sstr_meta_block_roundtrip);
+
+    // buildFullConfigJson() JSON serialization of meta fields
+    RUN_TEST(test_buildFullConfigJson_sstr_favs_empty_by_default);
+    RUN_TEST(test_buildFullConfigJson_sstr_favs_populated);
+    RUN_TEST(test_buildFullConfigJson_sstr_hidden_populated);
+    RUN_TEST(test_buildFullConfigJson_sstr_cats_empty_by_default);
+    RUN_TEST(test_buildFullConfigJson_sstr_cats_single_category);
+    RUN_TEST(test_buildFullConfigJson_sstr_cats_multiple_categories);
+    RUN_TEST(test_buildFullConfigJson_all_meta_fields_present);
 
     // example_config.txt spot-check (algorithm-level)
     RUN_TEST(test_example_config_first_five_sstr_entries);
