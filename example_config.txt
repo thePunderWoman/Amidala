@@ -206,6 +206,23 @@ s=6,0,180,90,10,0,50,0
 #   ab=3,9,0         Alt+button 3: toggle random dome mode
 #   ab=4,9,3         Alt+button 4: re-run dome homing sweep
 #
+# ---- Double-press layer ----
+# dbtimeout=N  Window (ms) within which a second tap counts as a double-press.
+#   Default 300.  Set to 0 to disable double-press detection entirely.
+#   Only buttons with a configured db= action incur any delay on short-press;
+#   all other buttons continue to fire immediately.
+#
+# db=  Double-press action — same format as b=.
+#   Only fires when the same button is tapped twice within dbtimeout ms.
+#   Alt-press (ab=) is not affected and always fires immediately.
+#
+# Double-press examples:
+#   dbtimeout=300    Use 300 ms window (default; already the built-in default)
+#   db=1,5,17        Double-press button 1: send serial string #17
+#   db=2,7,0,1       Double-press button 2: Very Happy emote
+#   db=3,9,0         Double-press button 3: toggle random dome mode
+#   db=5,8           Double-press button 5: toggle HCR Muse
+#
 # Gestures use the same action/subcmd numbers but drop the button number:
 #   g=GestureStr,9,0          gesture triggers random toggle
 #   g=GestureStr,9,5,90       gesture goes to absolute 90°# Hello There

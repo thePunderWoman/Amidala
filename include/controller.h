@@ -74,6 +74,42 @@ public:
 
   inline void processAltButton(unsigned num) { fConsole.processAltButton(num); }
 
+  inline void processDoubleButton(unsigned num) { fConsole.processDoubleButton(num); }
+
+  // Called on button_up for normal (non-alt, non-long) presses.
+  // If a double-press action is configured for this button, starts/completes
+  // detection; otherwise fires the single-press immediately with no delay.
+  inline void noteButtonUp(unsigned num) {
+    if (num < 1 || num > params.getButtonCount()) return;
+    unsigned idx = num - 1;
+    uint16_t timeout = params.dbtimeout;
+    if (params.DB[idx].action == ButtonAction::kNone || timeout == 0) {
+      fConsole.processButton(num);
+      return;
+    }
+    uint32_t now = millis();
+    if (fDblPressActive[idx] && now - fDblPressTime[idx] <= timeout) {
+      fDblPressActive[idx] = false;
+      fConsole.processDoubleButton(num);
+    } else {
+      fDblPressActive[idx] = true;
+      fDblPressTime[idx] = now;
+    }
+  }
+
+  // Called every animate() frame to fire pending single-presses after timeout.
+  inline void checkDoublePressPending() {
+    uint16_t timeout = params.dbtimeout;
+    if (timeout == 0) return;
+    uint32_t now = millis();
+    for (unsigned i = 0; i < params.getButtonCount(); i++) {
+      if (fDblPressActive[i] && now - fDblPressTime[i] > timeout) {
+        fDblPressActive[i] = false;
+        fConsole.processButton(i + 1);
+      }
+    }
+  }
+
   inline bool isAltHeld() const { return fAltHeld; }
   inline void setAltHeld(bool held) { fAltHeld = held; }
 
@@ -357,6 +393,8 @@ private:
   bool fMinimal = true;
   bool fAltHeld = false;
   uint32_t fLastMuteBtnUpTime = 0;
+  bool fDblPressActive[9] = {};
+  uint32_t fDblPressTime[9] = {};
   uint32_t fDriveStateMillis = 0;
   uint32_t fDomeStateMillis = 0;
   float fDomeThrottle = 0;

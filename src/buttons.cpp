@@ -87,3 +87,7 @@ void AmidalaConsole::processLongButton(unsigned num) {
 void AmidalaConsole::processAltButton(unsigned num) {
   processButtonLayer(num, "Processing Alt Button ", fController->params.AB);
 }
+
+void AmidalaConsole::processDoubleButton(unsigned num) {
+  processButtonLayer(num, "Processing Double Button ", fController->params.DB);
+}

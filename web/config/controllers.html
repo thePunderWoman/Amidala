@@ -186,7 +186,7 @@ function saveGlobal(key, value) { apiPost(key, value); }
 
 function saveBtn(n, lyr, sel) {
   var val = sel.value;
-  var layerName = lyr === 'p' ? 'press' : lyr === 'l' ? 'long' : 'alt';
+  var layerName = lyr === 'p' ? 'press' : lyr === 'l' ? 'long' : lyr === 'a' ? 'alt' : 'double';
   if (val === 'altbtn' || val === 'mutebutton') apiPost(val, String(n));
   else apiPost('btn_' + n + '_' + layerName, val);
 }
@@ -224,6 +224,16 @@ function renderButtons() {
   h += opt('1', 'On — joystick → dome heading', String(ads));
   h += '</select></div>';
 
+  var dbt = _cfg.dbtimeout !== undefined ? _cfg.dbtimeout : 300;
+  h += '<div class="row"><div class="row-label">Double Press Timeout</div>';
+  h += '<select name="dbtimeout" class="row-sel" onchange="saveGlobal(\'dbtimeout\',this.value)">';
+  h += opt('0',   'Disabled',  String(dbt));
+  h += opt('200', '200 ms',    String(dbt));
+  h += opt('300', '300 ms',    String(dbt));
+  h += opt('400', '400 ms',    String(dbt));
+  h += opt('500', '500 ms',    String(dbt));
+  h += '</select></div>';
+
   h += '<div class="sec-hdr">Button Assignments</div>';
   if (showAlt) h += '<div class="gest-note" style="font-size:.65rem;margin:0">Alt Press column active (Alt Button = ' + BTN_NAMES[altbtn] + ').</div>';
 
@@ -241,6 +251,7 @@ function renderButtons() {
 function renderBtnCard(n, showAlt, altbtn, mutebutton) {
   var isAlt  = (altbtn    === n);
   var isMute = (mutebutton === n);
+  var showDbl = (_cfg.dbtimeout !== undefined && _cfg.dbtimeout > 0);
   var title  = BTN_NAMES[n];
   if (isAlt)  title += '<span class="badge">ALT</span>';
   if (isMute) title += '<span class="badge">MUTE</span>';
@@ -250,6 +261,10 @@ function renderBtnCard(n, showAlt, altbtn, mutebutton) {
   h += '<select name="btn-' + n + '-press" class="act-sel" onchange="saveBtn(' + n + ',\'p\',this)">' + actionOptions(getBtnValue(n, 'p')) + '</select></div>';
   h += '<div class="lyr-row"><div class="lyr-label">Long Press</div>';
   h += '<select name="btn-' + n + '-long" class="act-sel" onchange="saveBtn(' + n + ',\'l\',this)">' + actionOptions(getBtnValue(n, 'l')) + '</select></div>';
+  if (showDbl) {
+    h += '<div class="lyr-row"><div class="lyr-label">Double Press</div>';
+    h += '<select name="btn-' + n + '-double" class="act-sel" onchange="saveBtn(' + n + ',\'d\',this)">' + actionOptions(getBtnValue(n, 'd')) + '</select></div>';
+  }
   if (showAlt) {
     h += '<div class="lyr-row"><div class="lyr-label">Alt Press</div>';
     h += '<select name="btn-' + n + '-alt" class="act-sel" onchange="saveBtn(' + n + ',\'a\',this)">' + actionOptions(getBtnValue(n, 'a')) + '</select></div>';

@@ -88,6 +88,7 @@ struct AmidalaParameters {
   ButtonAction B[9];
   ButtonAction LB[9];
   ButtonAction AB[9];   // Alt-button layer (dispatched when altbtn is held)
+  ButtonAction DB[9];   // Double-press layer
   GestureAction G[MAX_GESTURES];
   DigitalOut D[8];
   SerialString Str[MAX_SERIAL_STRINGS];
@@ -178,6 +179,10 @@ struct AmidalaParameters {
   // when double-pressed.  0 = disabled (default).  May be the same button as
   // altbtn — a quick double-tap fires mute while a held press is the alt modifier.
   uint8_t mutebutton;
+  // dbtimeout: window (ms) within which a second press counts as a double-press.
+  // Only matters when a DB[] action is configured for a button.  0 disables
+  // double-press detection entirely.  Default 300.
+  uint16_t dbtimeout;
 
   // ---- Aux serial (Serial 3 / SW-UART header, GPIO21 TX / GPIO38 RX) ------
   // auxserial3: enable UART2 at startup (default false).
@@ -309,6 +314,7 @@ struct AmidalaParameters {
       altbtn = 0;
       altdomestick = 0;
       mutebutton = 0;
+      dbtimeout = 300;
       auxserial3 = false;
       wifion = true;
       strncpy(wifiSSID, "amidala", sizeof(wifiSSID));

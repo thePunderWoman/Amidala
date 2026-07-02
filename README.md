@@ -26,7 +26,7 @@
 - **Advanced Dome Drive** — Built-in support for auto dome drive with a Pololu encoder motor and hall sensor, or any other basic PWM dome drive.
 - **Flexible drive systems** — PWM, Sabertooth serial, or RoboteQ (PWM, serial, or hybrid)
 - **Native built-in safety features** — Web based e-stop, dome obstruction motor disconnect, auto motor disable on controller disconnect.
-- **Layers of controller button configurations** — with short-press, long-press, and alt-modifier layers
+- **Layers of controller button configurations** — with short-press, double-press, long-press, and alt-modifier layers
 - **Effectively unlimited serial strings and gestures** — the only limits are your imagination!
 - **And more** — I2C aux output, digital outputs, analog inputs, SD card config, servo outputs, and emergency stop handling
 
