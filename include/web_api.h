@@ -257,14 +257,16 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     json += "\"altbtn\":"       + String(p.altbtn)       + ",";
     json += "\"mutebutton\":"   + String(p.mutebutton)   + ",";
     json += "\"altdomestick\":" + String(p.altdomestick) + ",";
+    json += "\"dbtimeout\":"    + String(p.dbtimeout)    + ",";
 
-    // Button assignments — 9 buttons × 3 layers {p=press, l=long, a=alt}
+    // Button assignments — 9 buttons × 4 layers {p=press, l=long, a=alt, d=double}
     json += "\"buttons\":[";
     for (unsigned i = 0; i < sizeof(p.B) / sizeof(p.B[0]); i++) {
         if (i > 0) json += ",";
         json += "{\"p\":"; json += buttonActionJson(p.B[i]);
         json += ",\"l\":"; json += buttonActionJson(p.LB[i]);
         json += ",\"a\":"; json += buttonActionJson(p.AB[i]);
+        json += ",\"d\":"; json += buttonActionJson(p.DB[i]);
         json += "}";
     }
     json += "],";

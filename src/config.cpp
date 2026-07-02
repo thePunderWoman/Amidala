@@ -591,6 +591,76 @@ bool AmidalaConfig::processConfig(const char *cmd) {
       return true;
     }
     return false;
+  } else if (startswith(cmd, "db=")) {
+    uint8_t argcount;
+    uint8_t args[5];
+    memset(args, '\0', sizeof(args));
+    ButtonAction *b = params.DB;
+    if (numberparams(cmd, argcount, args, sizeof(args)) && argcount >= 2 &&
+        args[0] >= 1 && args[0] <= params.getButtonCount()) {
+      b += args[0] - 1;
+      memset(b, '\0', sizeof(*b));
+      b->action = args[1];
+      b->sound.serialstr = 0;
+      switch (args[1]) {
+      case ButtonAction::kSound:
+        b->sound.soundbank = max(1, (int)min(args[2], params.sbcount));
+        b->sound.sound = (argcount >= 4) ? args[3] : 0;
+        b->sound.sound =
+            min(b->sound.sound, params.SB[b->sound.soundbank].numfiles);
+        b->action = args[1];
+        break;
+      case ButtonAction::kServo:
+        b->servo.num = max(1, min((int)args[2], 8));
+        b->servo.pos = (argcount >= 4) ? args[3] : 0;
+        b->servo.pos = min(max((int)b->servo.pos, 0), 180);
+        b->action = args[1];
+        break;
+      case ButtonAction::kDigitalOut:
+        b->dout.num = max(1, min((int)args[2], 8));
+        b->dout.state = (argcount >= 4) ? args[3] : 0;
+        b->dout.state = min(2, (int)b->dout.state);
+        b->action = args[1];
+        break;
+      case ButtonAction::kI2CCmd:
+        b->i2ccmd.target = min((int)args[2], 100);
+        b->i2ccmd.cmd = (argcount >= 4) ? args[3] : 0;
+        b->action = args[1];
+        break;
+      case ButtonAction::kSerialStr:
+        b->serial.serialstr = min((int)args[2], MAX_SERIAL_STRINGS);
+        if (b->action == 0)
+          b->action = args[1];
+        break;
+      case ButtonAction::kI2CStr:
+        b->i2cstr.target = min((int)args[2], 100);
+        b->i2cstr.cmd = (argcount >= 4) ? args[3] : 0;
+        b->action = args[1];
+        break;
+      case ButtonAction::kHCREmote:
+        b->emote.emotion = min(args[2], (uint8_t)4);
+        b->emote.level = (argcount >= 4) ? min(args[3], (uint8_t)1) : 0;
+        b->action = args[1];
+        break;
+      case ButtonAction::kHCRMuse:
+        b->action = args[1];
+        break;
+      case ButtonAction::kDomeCmd:
+        b->dome.subcmd = args[2];
+        b->dome.arg    = (argcount >= 4) ? args[3] : 0;
+        b->action = args[1];
+        break;
+      default:
+        b->action = 0;
+        break;
+      }
+      if (b->action != ButtonAction::kSerialStr &&
+          b->action != ButtonAction::kHCREmote &&
+          b->action != ButtonAction::kHCRMuse && argcount >= 5)
+        b->sound.serialstr = args[4];
+      return true;
+    }
+    return false;
   } else if (startswith(cmd, "sstr=")) {
     if (params.serialcount >= params.getSerialStringCount())
       return true; // silently ignore when full
@@ -883,6 +953,8 @@ bool AmidalaConfig::processConfig(const char *cmd) {
   } else if (intparam(cmd, "altdomestick=", params.altdomestick, 0, 1)) {
     return true;
   } else if (intparam(cmd, "mutebutton=", params.mutebutton, 0, 9)) {
+    return true;
+  } else if (intparam(cmd, "dbtimeout=", params.dbtimeout, 0, 5000)) {
     return true;
   } else if (boolparam(cmd, "auxserial3=", params.auxserial3)) {
     return true;

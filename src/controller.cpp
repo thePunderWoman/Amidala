@@ -228,6 +228,7 @@ void AmidalaController::animate() {
 #endif
   if (params.wifion)
     fWiFiAP.handle();
+  checkDoublePressPending();
   fConsole.process();
 #ifdef EXPERIMENTAL_JEVOIS_STEERING
   fJevois.process();

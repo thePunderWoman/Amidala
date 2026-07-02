@@ -541,7 +541,7 @@ static bool rewriteButtons() {
         while (f.available()) {
             String line = f.readStringUntil('\n');
             if (line.endsWith("\r")) line.remove(line.length() - 1);
-            if (!line.startsWith("b=") && !line.startsWith("lb=") && !line.startsWith("ab="))
+            if (!line.startsWith("b=") && !line.startsWith("lb=") && !line.startsWith("ab=") && !line.startsWith("db="))
                 out += line + "\n";
         }
         f.close();
@@ -556,6 +556,8 @@ static bool rewriteButtons() {
             lines += "lb=" + String(i + 1) + "," + buttonActionStr(sCtrl->params.LB[i]) + "\n";
         if (sCtrl->params.AB[i].action != ButtonAction::kNone)
             lines += "ab=" + String(i + 1) + "," + buttonActionStr(sCtrl->params.AB[i]) + "\n";
+        if (sCtrl->params.DB[i].action != ButtonAction::kNone)
+            lines += "db=" + String(i + 1) + "," + buttonActionStr(sCtrl->params.DB[i]) + "\n";
     }
     int endIdx = out.lastIndexOf("#END");
     if (endIdx >= 0)
@@ -923,9 +925,10 @@ static void handleApiConfigPost() {
             if (sCtrl->params.altbtn    == (uint8_t)btnNum) { sCtrl->params.altbtn    = 0; updateConfigFile("altbtn",    "0"); }
             if (sCtrl->params.mutebutton == (uint8_t)btnNum) { sCtrl->params.mutebutton = 0; updateConfigFile("mutebutton","0"); }
         }
-        ButtonAction* arr = (layer == "long") ? sCtrl->params.LB
-                          : (layer == "alt")  ? sCtrl->params.AB
-                          :                     sCtrl->params.B;
+        ButtonAction* arr = (layer == "long")   ? sCtrl->params.LB
+                          : (layer == "alt")    ? sCtrl->params.AB
+                          : (layer == "double") ? sCtrl->params.DB
+                          :                      sCtrl->params.B;
         parseButtonAction(arr[idx], value);
         bool ok = rewriteButtons();
         sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed — change applied in memory only");

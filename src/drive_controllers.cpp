@@ -30,9 +30,9 @@
 //   struct by button number, avoiding repetitive switch blocks.
 // ---------------------------------------------------------------------------
 
-#define DISPATCH_BUTTON(btnfield, num, altbtn, altHeld)                        \
-  if (event.button_up.btnfield && (altbtn) != (num)) {                        \
-    (altHeld) ? fDriver->processAltButton(num) : fDriver->processButton(num); \
+#define DISPATCH_BUTTON(btnfield, num, altbtn, altHeld)                         \
+  if (event.button_up.btnfield && (altbtn) != (num)) {                         \
+    (altHeld) ? fDriver->processAltButton(num) : fDriver->noteButtonUp(num);   \
   }
 
 #define DISPATCH_LONG(btnfield, num, altbtn, altHeld)                          \
