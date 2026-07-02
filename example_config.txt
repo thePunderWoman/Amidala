@@ -127,10 +127,10 @@ s=5,0,180,90,10,0,50,0
 s=6,0,180,90,10,0,50,0
 
 # --- Serial String Definitions ---
-# Format: sstr=Name|string_here
-#   Name is a short human-readable label shown in the web UI and on controller
-#   displays.  The string after | is what gets sent over serial to child boards.
-#   Strings are 1-indexed and read in the order they appear.
+# Format: sstr=ID|Name|string_here
+#   ID is a stable numeric identifier (never changes, even after reordering or
+#   deletion of other strings).  Name is a short human-readable label.
+#   The string after the second | is what gets sent over serial to child boards.
 
 
 # --- Button Mappings ---
@@ -140,17 +140,19 @@ s=6,0,180,90,10,0,50,0
 #                      the normal short-press release event is suppressed so only
 #                      the long-press action runs.  Both use the same format.
 #
-# Format: b=ButtonNum,Action,Arg1,Arg2,SerialStr
-#         lb=ButtonNum,Action,Arg1,Arg2,SerialStr
-#   SerialStr (optional 5th field) sends a serial string side-effect alongside any action.
+# Format: b=ButtonNum,Action,Arg1,Arg2,SerialID
+#         lb=ButtonNum,Action,Arg1,Arg2,SerialID
+#   SerialID (optional last field) is the stable ID of a serial string (from sstr=ID|...).
+#   For Action=5 (SerStr) it is the primary reference.  For other actions it is an
+#   optional side-effect string fired alongside the primary action.
 #
 # Actions:
 #   1=Sound(bank,file)          file is optional; omit to play random from bank
 #   2=Servo(num,pos)
 #   3=DigitalOut(num,state)     state: 0=NO, 1=NC, 2=Momentary
 #   4=I2CCmd(addr,cmd)
-#   5=SerStr(index)             send serial string by 1-based index
-#   6=I2CStr(addr,index)
+#   5=SerStr(ID)                send serial string by stable ID (from sstr= definitions)
+#   6=I2CStr(addr,ID)
 #   7=HCREmote(emotion,level)   emotion: 0=Happy 1=Sad 2=Mad 3=Scared 4=Overload
 #                               level:   0=Moderate 1=Strong
 #   8=HCRMuseToggle
@@ -201,31 +203,15 @@ s=6,0,180,90,10,0,50,0
 # Alt-button examples:
 #   altbtn=5         Drive l3 is the alt modifier
 #   altdomestick=1   Dome stick enters abs-stick mode while alt is held
-#   ab=1,5,17        Alt+button 1: send serial string #17
+#   ab=1,5,Hello There   Alt+button 1: send serial string named "Hello There"
 #   ab=2,7,0,1       Alt+button 2: Very Happy emote
 #   ab=3,9,0         Alt+button 3: toggle random dome mode
 #   ab=4,9,3         Alt+button 4: re-run dome homing sweep
 #
-# ---- Double-press layer ----
-# dbtimeout=N  Window (ms) within which a second tap counts as a double-press.
-#   Default 300.  Set to 0 to disable double-press detection entirely.
-#   Only buttons with a configured db= action incur any delay on short-press;
-#   all other buttons continue to fire immediately.
-#
-# db=  Double-press action — same format as b=.
-#   Only fires when the same button is tapped twice within dbtimeout ms.
-#   Alt-press (ab=) is not affected and always fires immediately.
-#
-# Double-press examples:
-#   dbtimeout=300    Use 300 ms window (default; already the built-in default)
-#   db=1,5,17        Double-press button 1: send serial string #17
-#   db=2,7,0,1       Double-press button 2: Very Happy emote
-#   db=3,9,0         Double-press button 3: toggle random dome mode
-#   db=5,8           Double-press button 5: toggle HCR Muse
-#
 # Gestures use the same action/subcmd numbers but drop the button number:
 #   g=GestureStr,9,0          gesture triggers random toggle
-#   g=GestureStr,9,5,90       gesture goes to absolute 90°# Hello There
+#   g=GestureStr,9,5,90       gesture goes to absolute 90°
+#   g=GestureStr,5,ID         gesture sends serial string with stable ID
 
 ## left controller upper left button is alt button
 altbtn=7
@@ -238,103 +224,112 @@ altvolumewheel=2
 # lb=3,
 # lb=4,
 # Reset / Cancel
-lb=5,5,11
+lb=5,5,3
 # Rock March
-lb=3,5,27
+lb=3,5,19
 # Disco
-lb=4,5,26
+lb=4,5,18
 
 # Hello There
-b=1,5,17
+b=1,5,9
 # Panel Flutter
-b=2,5,19
+b=2,5,11
 # Mad Emote
 b=3,7,2,0
 # Bloom
-b=4,5,24
+b=4,5,16
 # Toggle Musing
 b=5,8
 # Very Happy Emote
 b=6,7,0,1
 # Overload
-b=8,5,20
+b=8,5,12
 # CB Door Toggle
-b=9,5,21
+b=9,5,13
 
 # Sad emote
 ab=1,7,1,0
 # Heart
-ab=2,5,16
+ab=2,5,8
 # Vader
-ab=3,5,8
+ab=3,5,1
 # Alarm
-ab=4,5,22
+ab=4,5,14
 # Toggle Auto Dome
 ab=5,9,0
 # Random
-ab=6,5,25
+ab=6,5,17
 # Scream (Scared Strong)
-ab=8,5,18
+ab=8,5,10
 # Cantina (Scared Strong)
-ab=9,5,23
+ab=9,5,15
 
 # --- Gesture Mappings (Stick Movements) ---
-# Format: g=GestureString,Action,Arg1,Arg2
-# Actions: 5=SerStr, 7=HCREmote(emotion,level), 8=HCRMuseToggle, 9=DomeCmd(subcmd,angle)
+# Format: g=GestureString,Action,Arg1
+# Actions: 5=SerStr(ID), 7=HCREmote(emotion,level), 8=HCRMuseToggle, 9=DomeCmd(subcmd,angle)
 # (See DomeCmd subcmd reference in Button Mappings section above)
 
 # Utility Arms Open Close
-g=9,5,9
+g=9,5,2
 # Pies Open / Close
-g=252,5,12
+g=252,5,4
 # Leia
-g=4,5,15
+g=4,5,7
 # Low Panels Open / Close
-g=8,5,13
+g=8,5,5
 # All Panels Open / Close
-g=858,5,14
+g=858,5,6
 
-sstr=Sad (Moderate)|<SS0>
-sstr=Scared (Moderate)|<SC0>
-sstr=Mad (Moderate)|<SM0>
-sstr=Very Mad (Strong)|<SM1>
-sstr=Very Happy (Strong)|<SH1>
-sstr=Overload Audio Only|<SE>
-sstr=Toggle Mute|BD:VOL
-sstr=Vader|BD:VADER
-sstr=Utility Arms|BD:UARMS
-sstr=Toggle Musing|BD:MUSE
-sstr=Reset All|DM:RESET
-sstr=Pie panels|DM:PIES
-sstr=Low Panels|DM:LOW
-sstr=All Panels|DM:OPENALL
-sstr=Leia Sequence|DM:LEIA
-sstr=Heart Sequence|DM:HEART
-sstr=Hello There|DM:HELLO
-sstr=Scream|DM:SCREAM
-sstr=Flutter|DM:FLUTTER
-sstr=Overload Sequence|DM:OVERLOAD
-sstr=Body Panels|BD:CBIDATADOOR
-sstr=Alarm|DM:ALARM
-sstr=Cantina|DM:CANTINA
-sstr=Bloom|DM:BLOOM
-sstr=Random|DM:RANDOM
-sstr=Disco|DM:DISCO
-sstr=Rock March|DM:ROCKMARCH
-
-# --- Serial Command Metadata ---
-# Favorites: comma-separated 1-based sstr indices shown in the Favorites tab.
-f=15,17
-
-# Hidden: comma-separated 1-based sstr indices excluded from the Sequences tab.
-# Useful for utility toggles that are only triggered via button mappings.
-hidden=7,10
-
-# Categories: cat=Name|index,index,...  (one line per category)
-# Commands can belong to at most one category.  Category names are free-form.
-# Commands categorized with an enabled gadget's name appear on the Gadgets tab.
-cat=HCR Emotes|1,2,3,4,5,6
-cat=Dome Panels|12,13,14,19,22,23,24,25,26,27
-cat=Sequences|15,16,17,18,20
 
 gadget=0,2
+estopstr=:PX
+estopstr=DM:ESTOP
+estopstr=BD:ESTOP
+resumestr=:PH
+resumestr=BD:RESET
+resumestr=DM:RESET
+sstr=1|Vader|BD:VADER
+sstr=2|Utility Arms|BD:UARMS
+sstr=3|Reset All|DM:RESET
+sstr=4|Pie panels|DM:PIES
+sstr=5|Low Panels|DM:LOW
+sstr=6|All Panels|DM:OPENALL
+sstr=7|Leia Sequence|DM:LEIA
+sstr=8|Heart Sequence|DM:HEART
+sstr=9|Hello There|DM:HELLO
+sstr=10|Scream|DM:SCREAM
+sstr=11|Flutter|DM:FLUTTER
+sstr=12|Overload Sequence|DM:OVERLOAD
+sstr=13|Body Panels|BD:DOORS
+sstr=14|Alarm|DM:ALARM|:PL4:PP100:PR30:PW20:PH
+sstr=15|Cantina|DM:CANTINA
+sstr=16|Bloom|DM:BLOOM
+sstr=17|Random|DM:RANDOM
+sstr=18|Disco|DM:DISCO
+sstr=19|Rock March|DM:ROCKMARCH
+sstr=20|Periscope Down|:PH
+sstr=21|Periscope Stop|:PX
+sstr=22|Searchlight|:PL5:PP100:PR30
+sstr=23|Random|:PMA:PL0
+sstr=24|Lights: Full|:PL0
+sstr=25|Lights: Off|:PL1
+sstr=26|Lights: Obiwan|:PL2
+sstr=27|Lights: Yoda|:PL3
+sstr=28|Lights: Sith|:PL4
+sstr=29|Lights: Search|:PL5
+sstr=30|Lights: Dagobah|:PL6
+sstr=31|Lights: Sparkle|:PL7
+sstr=32|Body Flutter|BD:FLUTTER
+sstr=33|Throne Room|BD:THRONE
+sstr=34|Clone Wars Theme|BD:CLONES
+sstr=35|Duel of the Fates|BD:DUEL
+sstr=36|Main Theme|BD:THEME
+sstr=37|Battle Alarm|BD:BATTLEALARM
+f=11,10,9,8
+cat=Panels|4,6,5,16,17,11
+cat=Body|2,32,13
+cat=Music|18,19,15,1,33,34,35,36
+cat=Emote|10,9,8,12,14,37
+cat=Misc|3
+cat=Special|7
+cat=Periscope|20,21,22,23,24,25,27,28,29,30,31

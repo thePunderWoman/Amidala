@@ -67,10 +67,10 @@ void test_sound_fields_accessible() {
     b.action = ButtonAction::kSound;
     b.sound.soundbank = 3;
     b.sound.sound     = 7;
-    b.sound.serialstr = 2;
+    b.serialid        = 2;
     TEST_ASSERT_EQUAL(3, b.sound.soundbank);
     TEST_ASSERT_EQUAL(7, b.sound.sound);
-    TEST_ASSERT_EQUAL(2, b.sound.serialstr);
+    TEST_ASSERT_EQUAL(2, b.serialid);
 }
 
 void test_servo_fields_accessible() {
@@ -109,22 +109,22 @@ void test_dome_fields_accessible() {
     b.action        = ButtonAction::kDomeCmd;
     b.dome.subcmd   = ButtonAction::kDomeGotoAbs;
     b.dome.arg      = 90;
-    b.dome.serialstr = 0;
     TEST_ASSERT_EQUAL(ButtonAction::kDomeGotoAbs, b.dome.subcmd);
     TEST_ASSERT_EQUAL(90, b.dome.arg);
 }
 
 void test_union_members_share_storage() {
-    // All union members must be 3 bytes so they overlay the same memory.
+    // serialid moved out of the union (now a top-level uint16_t).
+    // Most union members are now 2 bytes; i2cstr is 1 byte (only needs target).
     ButtonAction b;
     TEST_ASSERT_EQUAL(sizeof(b.sound), sizeof(b.servo));
     TEST_ASSERT_EQUAL(sizeof(b.sound), sizeof(b.dout));
     TEST_ASSERT_EQUAL(sizeof(b.sound), sizeof(b.i2ccmd));
     TEST_ASSERT_EQUAL(sizeof(b.sound), sizeof(b.serial));
-    TEST_ASSERT_EQUAL(sizeof(b.sound), sizeof(b.i2cstr));
     TEST_ASSERT_EQUAL(sizeof(b.sound), sizeof(b.emote));
     TEST_ASSERT_EQUAL(sizeof(b.sound), sizeof(b.dome));
-    TEST_ASSERT_EQUAL(3, sizeof(b.sound));
+    TEST_ASSERT_EQUAL(2, sizeof(b.sound));
+    TEST_ASSERT_EQUAL(2, sizeof(b.serialid));  // top-level uint16_t
 }
 
 // ---- printDescription -------------------------------------------------------
@@ -226,11 +226,11 @@ void test_print_i2c_cmd() {
 void test_print_ser_str() {
     ButtonAction b;
     memset(&b, 0, sizeof(b));
-    b.action        = ButtonAction::kSerialStr;
-    b.serial.serialstr = 5;
+    b.action   = ButtonAction::kSerialStr;
+    b.serialid = 5;
     StringPrint out;
     b.printDescription(&out);
-    TEST_ASSERT_NOT_NULL(strstr(out.buf, "Serial #"));
+    TEST_ASSERT_NOT_NULL(strstr(out.buf, "Serial Str #"));
     TEST_ASSERT_NOT_NULL(strstr(out.buf, "5"));
 }
 
@@ -239,7 +239,7 @@ void test_print_i2c_str() {
     memset(&b, 0, sizeof(b));
     b.action         = ButtonAction::kI2CStr;
     b.i2cstr.target  = 10;
-    b.i2cstr.cmd     = 3;
+    b.serialid       = 3;
     StringPrint out;
     b.printDescription(&out);
     TEST_ASSERT_NOT_NULL(strstr(out.buf, "Aux I2C Str #"));
@@ -300,7 +300,7 @@ void test_print_appends_serial_string_for_non_serial_actions() {
     memset(&b, 0, sizeof(b));
     b.action          = ButtonAction::kSound;
     b.sound.soundbank = 1;
-    b.sound.serialstr = 3;
+    b.serialid        = 3;
     StringPrint out;
     b.printDescription(&out);
     TEST_ASSERT_NOT_NULL(strstr(out.buf, ", Serial #"));
@@ -381,12 +381,12 @@ void test_print_does_not_append_serial_for_serial_action() {
     // kSerialStr itself must not double-print ", Serial #".
     ButtonAction b;
     memset(&b, 0, sizeof(b));
-    b.action        = ButtonAction::kSerialStr;
-    b.serial.serialstr = 2;
+    b.action   = ButtonAction::kSerialStr;
+    b.serialid = 2;
     StringPrint out;
     b.printDescription(&out);
-    // Should have "Serial #2" but NOT ", Serial #2" appended again
-    const char *first = strstr(out.buf, "Serial #");
+    // Should have "Serial Str #2" but NOT ", Serial #2" appended again
+    const char *first = strstr(out.buf, "Serial Str #");
     TEST_ASSERT_NOT_NULL(first);
     // There must be no second ", Serial #" occurrence
     TEST_ASSERT_NULL(strstr(first + 1, ", Serial #"));

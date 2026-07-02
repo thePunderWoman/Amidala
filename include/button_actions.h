@@ -62,44 +62,40 @@ struct ButtonAction {
     struct {
       uint8_t soundbank;
       uint8_t sound;
-      uint8_t serialstr;
     } sound;
     struct {
       uint8_t num;
       uint8_t pos;
-      uint8_t serialstr;
     } servo;
     struct {
       uint8_t num;
       uint8_t state;
-      uint8_t serialstr;
     } dout;
     struct {
       uint8_t target;
       uint8_t cmd;
-      uint8_t serialstr;
     } i2ccmd;
     struct {
       uint8_t unused1;
       uint8_t unused2;
-      uint8_t serialstr;
     } serial;
     struct {
-      uint8_t target;
-      uint8_t cmd;
-      uint8_t serialstr;
+      uint8_t target;   // I2C address; string looked up by serialid
     } i2cstr;
     struct {
       uint8_t emotion;   // HAPPY=0, SAD=1, MAD=2, SCARED=3, OVERLOAD=4
       uint8_t level;     // EMOTE_MODERATE=0, EMOTE_STRONG=1
-      uint8_t serialstr;
     } emote;
     struct {
       uint8_t subcmd;    // DomeCmdType
       uint8_t arg;       // Angle (0–255°) for kDomeGotoAbs; delta for kDomeRelPos/kDomeRelNeg
-      uint8_t serialstr;
     } dome;
   };
+  // Stable ID of the serial string to send.  0 = none.
+  // For kSerialStr: the string to send (primary ref).
+  // For kI2CStr: the string to send via I2C to i2cstr.target.
+  // For all other actions: optional side-effect string fired alongside the action.
+  uint16_t serialid;
 
   void printDescription(Print *stream) {
     switch (action) {
@@ -142,12 +138,12 @@ struct ButtonAction {
       stream->print(i2ccmd.cmd);
       break;
     case kSerialStr:
-      stream->print(F("Serial #"));
-      stream->print(serial.serialstr);
+      stream->print(F("Serial Str #"));
+      stream->print(serialid);
       break;
     case kI2CStr:
       stream->print(F("Aux I2C Str #"));
-      stream->print(i2cstr.cmd);
+      stream->print(serialid);
       stream->print(F(", Dest "));
       stream->print(i2cstr.target);
       break;
@@ -189,10 +185,9 @@ struct ButtonAction {
       }
       break;
     }
-    if (action != kSerialStr && action != kHCREmote && action != kHCRMuse &&
-        serial.serialstr != 0) {
+    if (action != kSerialStr && action != kI2CStr && serialid != 0) {
       stream->print(F(", Serial #"));
-      stream->print(serial.serialstr);
+      stream->print(serialid);
     }
     stream->println();
   }
@@ -217,6 +212,7 @@ struct GestureAction {
 // ---- SerialString -----------------------------------------------------------
 
 struct SerialString {
+  uint16_t id;    // stable unique ID (assigned at creation; never changes)
   char name[32];  // human-readable label (e.g. "Leia Sequence")
   char str[100];  // serial string to send (e.g. ":LD00")
 };

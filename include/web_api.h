@@ -59,17 +59,17 @@ inline String buildInfoJson(const char* drive, const char* dome,
 // ---------------------------------------------------------------------------
 // buttonActionJson — serialize one ButtonAction to a compact JSON object.
 // Only emits the fields that are relevant to the action type:
-//   {t:TYPE}              for kNone / kHCRMuse
-//   {t:5,  x:SERIALIDX}  for kSerialStr   (1-based index into Str[])
-//   {t:7,  x:EMO,y:LVL}  for kHCREmote
-//   {t:9,  x:SUBCMD}     for kDomeCmd
+//   {t:TYPE}             for kNone / kHCRMuse
+//   {t:5, x:ID}         for kSerialStr   (stable ID of serial string)
+//   {t:7, x:EMO, y:LVL} for kHCREmote
+//   {t:9, x:SUBCMD}     for kDomeCmd
 // ---------------------------------------------------------------------------
 inline String buttonActionJson(const ButtonAction& b) {
     String j = "{\"t\":";
     j += String(b.action);
     switch (b.action) {
     case ButtonAction::kSerialStr:
-        j += ",\"x\":"; j += String(b.serial.serialstr);
+        j += ",\"x\":"; j += String(b.serialid);
         break;
     case ButtonAction::kHCREmote:
         j += ",\"x\":"; j += String(b.emote.emotion);
@@ -210,11 +210,13 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     }
     json += "],";
 
-    // Serial strings — abbreviated keys {n, s} to save flash
+    // Serial strings — abbreviated keys {id, n, s} to save flash
     json += "\"sstr\":[";
     for (uint8_t i = 0; i < p.serialcount && i < MAX_SERIAL_STRINGS; i++) {
         if (i > 0) json += ",";
-        json += "{\"n\":\"";
+        json += "{\"id\":";
+        json += String(p.Str[i].id);
+        json += ",\"n\":\"";
         json += String(p.Str[i].name);
         json += "\",\"s\":\"";
         json += String(p.Str[i].str);
@@ -299,7 +301,7 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
         json += ",\"t\":";     json += String(p.G[gi].action.action);
         switch (p.G[gi].action.action) {
         case ButtonAction::kSerialStr:
-            json += ",\"x\":"; json += String(p.G[gi].action.serial.serialstr);
+            json += ",\"x\":"; json += String(p.G[gi].action.serialid);
             break;
         case ButtonAction::kHCREmote:
             json += ",\"x\":"; json += String(p.G[gi].action.emote.emotion);

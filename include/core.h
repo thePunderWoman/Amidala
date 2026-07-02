@@ -320,3 +320,21 @@ inline bool numberparams(const char *cmd, uint8_t &argcount, uint8_t *args,
   }
   return true;
 }
+
+// Parse comma-separated numeric fields, then capture any trailing string field.
+// cmd must already be positioned past any "key=" prefix (i.e. startswith advanced it).
+// All comma-separated numeric fields are parsed into args[0..maxargs-1] as uint16_t.
+// Returns the number of fields consumed.
+inline uint8_t parseUintArgs(const char *cmd, uint16_t *args, uint8_t maxargs) {
+  uint8_t count = 0;
+  while (count < maxargs) {
+    if (!isdigit((unsigned char)*cmd)) break;
+    const char *end;
+    args[count++] = (uint16_t)strtolu(cmd, &end);
+    cmd = end;
+    if (*cmd == '\0') break;
+    if (*cmd == ',') { cmd++; }
+    else break;
+  }
+  return count;
+}

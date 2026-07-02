@@ -309,6 +309,72 @@ void AmidalaConfig::writeCurrentConfiguration() {
   fOutput->println(F("Updated"));
 }
 
+// Parse one button action line (cmd already past the "b="/"lb="/"ab="/"db=" prefix).
+// Format: ButtonNum,ActionType[,Arg1[,Arg2[,SerialID]]]
+// SerialID is the stable numeric ID of a serial string.  For kSerialStr it is the
+// primary reference (position 3); for kI2CStr it is position 4; for all other
+// actions it is an optional side-effect appended as the last numeric field.
+static bool parseButtonLine(const char *cmd, AmidalaParameters &params,
+                            ButtonAction *arr) {
+  uint16_t args[6] = {};
+  uint8_t argcount = parseUintArgs(cmd, args, 6);
+  if (argcount < 2 || args[0] < 1 || args[0] > params.getButtonCount())
+    return false;
+  ButtonAction *b = &arr[args[0] - 1];
+  memset(b, '\0', sizeof(*b));
+  b->action = (uint8_t)args[1];
+  switch (args[1]) {
+  case ButtonAction::kSound:
+    b->sound.soundbank = (uint8_t)max(1, (int)min((int)args[2], (int)params.sbcount));
+    b->sound.sound = (argcount >= 4) ? (uint8_t)args[3] : 0;
+    if (b->sound.soundbank > 0)
+      b->sound.sound = (uint8_t)min((int)b->sound.sound, (int)params.SB[b->sound.soundbank - 1].numfiles);
+    b->serialid = (argcount >= 5) ? args[4] : 0;
+    break;
+  case ButtonAction::kServo:
+    b->servo.num = (uint8_t)max(1, min((int)args[2], 8));
+    b->servo.pos = (argcount >= 4) ? (uint8_t)min(max((int)args[3], 0), 180) : 0;
+    b->serialid = (argcount >= 5) ? args[4] : 0;
+    break;
+  case ButtonAction::kDigitalOut:
+    b->dout.num   = (uint8_t)max(1, min((int)args[2], 8));
+    b->dout.state = (argcount >= 4) ? (uint8_t)min(2, (int)args[3]) : 0;
+    b->serialid = (argcount >= 5) ? args[4] : 0;
+    break;
+  case ButtonAction::kI2CCmd:
+    b->i2ccmd.target = (uint8_t)min((int)args[2], 100);
+    b->i2ccmd.cmd    = (argcount >= 4) ? (uint8_t)args[3] : 0;
+    b->serialid = (argcount >= 5) ? args[4] : 0;
+    break;
+  case ButtonAction::kSerialStr:
+    b->serialid = args[2];
+    DEBUG_PRINT("BUTTON SERIAL ID: ");
+    DEBUG_PRINTLN(b->serialid);
+    break;
+  case ButtonAction::kI2CStr:
+    b->i2cstr.target = (uint8_t)min((int)args[2], 100);
+    b->serialid = args[3];
+    break;
+  case ButtonAction::kHCREmote:
+    b->emote.emotion = (uint8_t)min((int)args[2], 4);
+    b->emote.level   = (argcount >= 4) ? (uint8_t)min((int)args[3], 1) : 0;
+    b->serialid = (argcount >= 5) ? args[4] : 0;
+    break;
+  case ButtonAction::kHCRMuse:
+    b->serialid = (argcount >= 3) ? args[2] : 0;
+    break;
+  case ButtonAction::kDomeCmd:
+    b->dome.subcmd = (uint8_t)args[2];
+    b->dome.arg    = (argcount >= 4) ? (uint8_t)args[3] : 0;
+    b->serialid = (argcount >= 5) ? args[4] : 0;
+    break;
+  default:
+    b->action = 0;
+    break;
+  }
+  return true;
+}
+
 bool AmidalaConfig::processConfig(const char *cmd) {
   bool boolarg;
   int32_t sintarg;
@@ -380,292 +446,29 @@ bool AmidalaConfig::processConfig(const char *cmd) {
       return true;
     }
   } else if (startswith(cmd, "b=")) {
-    uint8_t argcount;
-    uint8_t args[5];
-    memset(args, '\0', sizeof(args));
-    ButtonAction *b = params.B;
-    if (numberparams(cmd, argcount, args, sizeof(args)) && argcount >= 2 &&
-        args[0] >= 1 && args[0] <= params.getButtonCount()) {
-      b += args[0] - 1;
-      memset(b, '\0', sizeof(*b));
-      b->action = args[1];
-      b->sound.serialstr = 0;
-      switch (args[1]) {
-      case ButtonAction::kSound:
-        b->sound.soundbank = max(1, (int)min(args[2], params.sbcount));
-        b->sound.sound = (argcount >= 4) ? args[3] : 0;
-        b->sound.sound =
-            min(b->sound.sound, params.SB[b->sound.soundbank].numfiles);
-        b->action = args[1];
-        break;
-      case ButtonAction::kServo:
-        b->servo.num = max(1, min((int)args[2], 8));
-        b->servo.pos = (argcount >= 4) ? args[3] : 0;
-        b->servo.pos = min(max((int)b->servo.pos, 0), 180);
-        b->action = args[1];
-        break;
-      case ButtonAction::kDigitalOut:
-        b->dout.num = max(1, min((int)args[2], 8));
-        b->dout.state = (argcount >= 4) ? args[3] : 0;
-        b->dout.state = min(2, (int)b->dout.state);
-        b->action = args[1];
-        break;
-      case ButtonAction::kI2CCmd:
-        b->i2ccmd.target = min((int)args[2], 100);
-        b->i2ccmd.cmd = (argcount >= 4) ? args[3] : 0;
-        b->action = args[1];
-        break;
-      case ButtonAction::kSerialStr:
-        b->serial.serialstr = min((int)args[2], MAX_SERIAL_STRINGS);
-        DEBUG_PRINT("BUTTON SERIAL #");
-        DEBUG_PRINTLN(b->serial.serialstr);
-        if (b->action == 0)
-          b->action = args[1];
-        break;
-      case ButtonAction::kI2CStr:
-        b->i2cstr.target = min((int)args[2], 100);
-        b->i2cstr.cmd = (argcount >= 4) ? args[3] : 0;
-        b->action = args[1];
-        break;
-      case ButtonAction::kHCREmote:
-        b->emote.emotion = min(args[2], (uint8_t)4);
-        b->emote.level = (argcount >= 4) ? min(args[3], (uint8_t)1) : 0;
-        b->action = args[1];
-        break;
-      case ButtonAction::kHCRMuse:
-        b->action = args[1];
-        break;
-      case ButtonAction::kDomeCmd:
-        b->dome.subcmd = args[2];
-        b->dome.arg    = (argcount >= 4) ? args[3] : 0;
-        b->action = args[1];
-        break;
-      default:
-        b->action = 0;
-        break;
-      }
-      if (b->action != ButtonAction::kSerialStr &&
-          b->action != ButtonAction::kHCREmote &&
-          b->action != ButtonAction::kHCRMuse && argcount >= 4)
-        b->sound.serialstr = (argcount >= 5) ? args[4] : 0;
-      return true;
-    }
-    return false;
+    return parseButtonLine(cmd, params, params.B);
   } else if (startswith(cmd, "lb=")) {
-    uint8_t argcount;
-    uint8_t args[5];
-    memset(args, '\0', sizeof(args));
-    ButtonAction *b = params.LB;
-    if (numberparams(cmd, argcount, args, sizeof(args)) && argcount >= 2 &&
-        args[0] >= 1 && args[0] <= params.getButtonCount()) {
-      b += args[0] - 1;
-      memset(b, '\0', sizeof(*b));
-      b->action = args[1];
-      b->sound.serialstr = 0;
-      switch (args[1]) {
-      case ButtonAction::kSound:
-        b->sound.soundbank = max(1, (int)min(args[2], params.sbcount));
-        b->sound.sound = (argcount >= 4) ? args[3] : 0;
-        b->sound.sound =
-            min(b->sound.sound, params.SB[b->sound.soundbank].numfiles);
-        b->action = args[1];
-        break;
-      case ButtonAction::kServo:
-        b->servo.num = max(1, min((int)args[2], 8));
-        b->servo.pos = (argcount >= 4) ? args[3] : 0;
-        b->servo.pos = min(max((int)b->servo.pos, 0), 180);
-        b->action = args[1];
-        break;
-      case ButtonAction::kDigitalOut:
-        b->dout.num = max(1, min((int)args[2], 8));
-        b->dout.state = (argcount >= 4) ? args[3] : 0;
-        b->dout.state = min(2, (int)b->dout.state);
-        b->action = args[1];
-        break;
-      case ButtonAction::kI2CCmd:
-        b->i2ccmd.target = min((int)args[2], 100);
-        b->i2ccmd.cmd = (argcount >= 4) ? args[3] : 0;
-        b->action = args[1];
-        break;
-      case ButtonAction::kSerialStr:
-        b->serial.serialstr = min((int)args[2], MAX_SERIAL_STRINGS);
-        if (b->action == 0)
-          b->action = args[1];
-        break;
-      case ButtonAction::kI2CStr:
-        b->i2cstr.target = min((int)args[2], 100);
-        b->i2cstr.cmd = (argcount >= 4) ? args[3] : 0;
-        b->action = args[1];
-        break;
-      case ButtonAction::kHCREmote:
-        b->emote.emotion = min(args[2], (uint8_t)4);
-        b->emote.level = (argcount >= 4) ? min(args[3], (uint8_t)1) : 0;
-        b->action = args[1];
-        break;
-      case ButtonAction::kHCRMuse:
-        b->action = args[1];
-        break;
-      case ButtonAction::kDomeCmd:
-        b->dome.subcmd = args[2];
-        b->dome.arg    = (argcount >= 4) ? args[3] : 0;
-        b->action = args[1];
-        break;
-      default:
-        b->action = 0;
-        break;
-      }
-      if (b->action != ButtonAction::kSerialStr &&
-          b->action != ButtonAction::kHCREmote &&
-          b->action != ButtonAction::kHCRMuse && argcount >= 4)
-        b->sound.serialstr = args[3];
-      return true;
-    }
-    return false;
+    return parseButtonLine(cmd, params, params.LB);
   } else if (startswith(cmd, "ab=")) {
-    uint8_t argcount;
-    uint8_t args[5];
-    memset(args, '\0', sizeof(args));
-    ButtonAction *b = params.AB;
-    if (numberparams(cmd, argcount, args, sizeof(args)) && argcount >= 2 &&
-        args[0] >= 1 && args[0] <= params.getButtonCount()) {
-      b += args[0] - 1;
-      memset(b, '\0', sizeof(*b));
-      b->action = args[1];
-      b->sound.serialstr = 0;
-      switch (args[1]) {
-      case ButtonAction::kSound:
-        b->sound.soundbank = max(1, (int)min(args[2], params.sbcount));
-        b->sound.sound = (argcount >= 4) ? args[3] : 0;
-        b->sound.sound =
-            min(b->sound.sound, params.SB[b->sound.soundbank].numfiles);
-        b->action = args[1];
-        break;
-      case ButtonAction::kServo:
-        b->servo.num = max(1, min((int)args[2], 8));
-        b->servo.pos = (argcount >= 4) ? args[3] : 0;
-        b->servo.pos = min(max((int)b->servo.pos, 0), 180);
-        b->action = args[1];
-        break;
-      case ButtonAction::kDigitalOut:
-        b->dout.num = max(1, min((int)args[2], 8));
-        b->dout.state = (argcount >= 4) ? args[3] : 0;
-        b->dout.state = min(2, (int)b->dout.state);
-        b->action = args[1];
-        break;
-      case ButtonAction::kI2CCmd:
-        b->i2ccmd.target = min((int)args[2], 100);
-        b->i2ccmd.cmd = (argcount >= 4) ? args[3] : 0;
-        b->action = args[1];
-        break;
-      case ButtonAction::kSerialStr:
-        b->serial.serialstr = min((int)args[2], MAX_SERIAL_STRINGS);
-        if (b->action == 0)
-          b->action = args[1];
-        break;
-      case ButtonAction::kI2CStr:
-        b->i2cstr.target = min((int)args[2], 100);
-        b->i2cstr.cmd = (argcount >= 4) ? args[3] : 0;
-        b->action = args[1];
-        break;
-      case ButtonAction::kHCREmote:
-        b->emote.emotion = min(args[2], (uint8_t)4);
-        b->emote.level = (argcount >= 4) ? min(args[3], (uint8_t)1) : 0;
-        b->action = args[1];
-        break;
-      case ButtonAction::kHCRMuse:
-        b->action = args[1];
-        break;
-      case ButtonAction::kDomeCmd:
-        b->dome.subcmd = args[2];
-        b->dome.arg    = (argcount >= 4) ? args[3] : 0;
-        b->action = args[1];
-        break;
-      default:
-        b->action = 0;
-        break;
-      }
-      if (b->action != ButtonAction::kSerialStr &&
-          b->action != ButtonAction::kHCREmote &&
-          b->action != ButtonAction::kHCRMuse && argcount >= 5)
-        b->sound.serialstr = args[4];
-      return true;
-    }
-    return false;
+    return parseButtonLine(cmd, params, params.AB);
   } else if (startswith(cmd, "db=")) {
-    uint8_t argcount;
-    uint8_t args[5];
-    memset(args, '\0', sizeof(args));
-    ButtonAction *b = params.DB;
-    if (numberparams(cmd, argcount, args, sizeof(args)) && argcount >= 2 &&
-        args[0] >= 1 && args[0] <= params.getButtonCount()) {
-      b += args[0] - 1;
-      memset(b, '\0', sizeof(*b));
-      b->action = args[1];
-      b->sound.serialstr = 0;
-      switch (args[1]) {
-      case ButtonAction::kSound:
-        b->sound.soundbank = max(1, (int)min(args[2], params.sbcount));
-        b->sound.sound = (argcount >= 4) ? args[3] : 0;
-        b->sound.sound =
-            min(b->sound.sound, params.SB[b->sound.soundbank].numfiles);
-        b->action = args[1];
-        break;
-      case ButtonAction::kServo:
-        b->servo.num = max(1, min((int)args[2], 8));
-        b->servo.pos = (argcount >= 4) ? args[3] : 0;
-        b->servo.pos = min(max((int)b->servo.pos, 0), 180);
-        b->action = args[1];
-        break;
-      case ButtonAction::kDigitalOut:
-        b->dout.num = max(1, min((int)args[2], 8));
-        b->dout.state = (argcount >= 4) ? args[3] : 0;
-        b->dout.state = min(2, (int)b->dout.state);
-        b->action = args[1];
-        break;
-      case ButtonAction::kI2CCmd:
-        b->i2ccmd.target = min((int)args[2], 100);
-        b->i2ccmd.cmd = (argcount >= 4) ? args[3] : 0;
-        b->action = args[1];
-        break;
-      case ButtonAction::kSerialStr:
-        b->serial.serialstr = min((int)args[2], MAX_SERIAL_STRINGS);
-        if (b->action == 0)
-          b->action = args[1];
-        break;
-      case ButtonAction::kI2CStr:
-        b->i2cstr.target = min((int)args[2], 100);
-        b->i2cstr.cmd = (argcount >= 4) ? args[3] : 0;
-        b->action = args[1];
-        break;
-      case ButtonAction::kHCREmote:
-        b->emote.emotion = min(args[2], (uint8_t)4);
-        b->emote.level = (argcount >= 4) ? min(args[3], (uint8_t)1) : 0;
-        b->action = args[1];
-        break;
-      case ButtonAction::kHCRMuse:
-        b->action = args[1];
-        break;
-      case ButtonAction::kDomeCmd:
-        b->dome.subcmd = args[2];
-        b->dome.arg    = (argcount >= 4) ? args[3] : 0;
-        b->action = args[1];
-        break;
-      default:
-        b->action = 0;
-        break;
-      }
-      if (b->action != ButtonAction::kSerialStr &&
-          b->action != ButtonAction::kHCREmote &&
-          b->action != ButtonAction::kHCRMuse && argcount >= 5)
-        b->sound.serialstr = args[4];
-      return true;
-    }
-    return false;
+    return parseButtonLine(cmd, params, params.DB);
   } else if (startswith(cmd, "sstr=")) {
     if (params.serialcount >= params.getSerialStringCount())
       return true; // silently ignore when full
     SerialString *a = &params.Str[params.serialcount];
     const char* val = cmd; // startswith already advanced past "sstr="
+    // Format: ID|Name|command
+    // Parse the leading numeric ID
+    const char *end;
+    uint16_t id = (uint16_t)strtolu(val, &end);
+    if (end > val && *end == '|') {
+      // New format: ID|Name|command
+      a->id = id;
+      val = end + 1; // skip past first '|'
+    } else {
+      a->id = 0; // will be assigned below after all strings are loaded
+    }
     const char* pipe = strchr(val, '|');
     if (pipe) {
       size_t nlen = (size_t)(pipe - val);
@@ -680,6 +483,9 @@ bool AmidalaConfig::processConfig(const char *cmd) {
       a->str[sizeof(a->str) - 1] = '\0';
     }
     params.serialcount++;
+    // Track the highest ID seen so nextSstrId stays above it
+    if (a->id >= params.nextSstrId)
+      params.nextSstrId = a->id + 1;
   } else if (startswith(cmd, "f=")) {
     // Favorites: f=1,3,5 (comma-separated 1-based sstr indices)
     const char* p = cmd; // past "f="
@@ -750,62 +556,58 @@ bool AmidalaConfig::processConfig(const char *cmd) {
     ButtonAction *b = &g->action;
     g->gesture.setGesture(gesture);
     if (!g->gesture.isEmpty()) {
-      uint8_t argcount;
-      uint8_t args[5];
-      memset(args, '\0', sizeof(args));
-      if (numberparams(cmd, argcount, args, sizeof(args)) && argcount >= 1) {
+      uint16_t args[5] = {};
+      uint8_t argcount = parseUintArgs(cmd, args, 5);
+      if (argcount >= 1) {
         memset(b, '\0', sizeof(*b));
-        b->action = args[0];
-        b->sound.serialstr = 0;
-        switch (b->action = args[0]) {
+        b->action = (uint8_t)args[0];
+        switch (args[0]) {
         case ButtonAction::kSound:
-          b->sound.soundbank = max(1, (int)min(args[1], params.sbcount));
-          b->sound.sound = (argcount >= 3) ? args[2] : 0;
-          b->sound.sound =
-              min(b->sound.sound, params.SB[b->sound.soundbank].numfiles);
+          b->sound.soundbank = (uint8_t)max(1, (int)min((int)args[1], (int)params.sbcount));
+          b->sound.sound = (argcount >= 3) ? (uint8_t)args[2] : 0;
+          b->serialid = (argcount >= 4) ? args[3] : 0;
           break;
         case ButtonAction::kServo:
-          b->servo.num = max(1, min((int)args[1], 8));
-          b->servo.pos = (argcount >= 3) ? args[2] : 0;
-          b->servo.pos = min(max((int)b->servo.pos, 0), 180);
+          b->servo.num = (uint8_t)max(1, min((int)args[1], 8));
+          b->servo.pos = (argcount >= 3) ? (uint8_t)min(max((int)args[2], 0), 180) : 0;
+          b->serialid = (argcount >= 4) ? args[3] : 0;
           break;
         case ButtonAction::kDigitalOut:
-          b->dout.num = max(1, min((int)args[1], 8));
-          b->dout.state = (argcount >= 3) ? args[2] : 0;
-          b->dout.state = min(2, (int)b->dout.state);
+          b->dout.num   = (uint8_t)max(1, min((int)args[1], 8));
+          b->dout.state = (argcount >= 3) ? (uint8_t)min(2, (int)args[2]) : 0;
+          b->serialid = (argcount >= 4) ? args[3] : 0;
           break;
         case ButtonAction::kI2CCmd:
-          b->i2ccmd.target = min((int)args[1], 100);
-          b->i2ccmd.cmd = (argcount >= 3) ? args[2] : 0;
+          b->i2ccmd.target = (uint8_t)min((int)args[1], 100);
+          b->i2ccmd.cmd    = (argcount >= 3) ? (uint8_t)args[2] : 0;
+          b->serialid = (argcount >= 4) ? args[3] : 0;
           break;
         case ButtonAction::kSerialStr:
-          b->serial.serialstr = min((int)args[1], MAX_SERIAL_STRINGS);
-          DEBUG_PRINT("GESTURE SERIAL #");
-          DEBUG_PRINTLN(b->serial.serialstr);
+          b->serialid = args[1];
+          DEBUG_PRINT("GESTURE SERIAL ID: ");
+          DEBUG_PRINTLN(b->serialid);
           break;
         case ButtonAction::kI2CStr:
-          b->i2cstr.target = min((int)args[1], 100);
-          b->i2cstr.cmd = (argcount >= 3) ? args[2] : 0;
+          b->i2cstr.target = (uint8_t)min((int)args[1], 100);
+          b->serialid = args[2];
           break;
         case ButtonAction::kHCREmote:
-          b->emote.emotion = min(args[1], (uint8_t)4);
-          b->emote.level = (argcount >= 3) ? min(args[2], (uint8_t)1) : 0;
+          b->emote.emotion = (uint8_t)min((int)args[1], 4);
+          b->emote.level   = (argcount >= 3) ? (uint8_t)min((int)args[2], 1) : 0;
+          b->serialid = (argcount >= 4) ? args[3] : 0;
           break;
         case ButtonAction::kHCRMuse:
+          b->serialid = (argcount >= 2) ? args[1] : 0;
           break;
         case ButtonAction::kDomeCmd:
-          b->dome.subcmd = args[1];
-          b->dome.arg    = (argcount >= 3) ? args[2] : 0;
+          b->dome.subcmd = (uint8_t)args[1];
+          b->dome.arg    = (argcount >= 3) ? (uint8_t)args[2] : 0;
+          b->serialid = (argcount >= 4) ? args[3] : 0;
           break;
         default:
           b->action = 0;
           break;
         }
-        if (b->action != ButtonAction::kSerialStr &&
-            b->action != ButtonAction::kHCREmote &&
-            b->action != ButtonAction::kHCRMuse &&
-            b->action != ButtonAction::kDomeCmd && argcount >= 3)
-          b->sound.serialstr = args[2];
         if (params.gcount < params.getGestureCount())
           params.gcount++;
         return true;

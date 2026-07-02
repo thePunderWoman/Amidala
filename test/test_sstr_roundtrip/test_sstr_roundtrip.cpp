@@ -37,14 +37,23 @@
 // src/wifi_ap.cpp (rewriteSerialStrings write loop) so tests remain faithful
 // to the real code without requiring a full AmidalaController.
 
-// Parse a single sstr= line into name and str.
+// Parse a single sstr= line into id, name and str.
 // Mirrors the sstr= branch of AmidalaConfig::processConfig() exactly.
-static bool parse_sstr(const char* line, char* name, size_t nameLen,
+// New format: sstr=ID|Name|cmd.  Old format: sstr=Name|cmd or sstr=cmd still accepted.
+static bool parse_sstr(const char* line, uint16_t* id_out, char* name, size_t nameLen,
                         char* str,  size_t strLen) {
     const char* cmd = line;
     if (!startswith(cmd, "sstr=")) return false;
     // After startswith, cmd points past "sstr=" — same as real processConfig.
-    const char* val  = cmd;
+    const char* val = cmd;
+    *id_out = 0;
+    // New format: leading digits followed by '|' encode the stable ID.
+    if (isdigit((unsigned char)*val)) {
+        const char* p = val;
+        uint16_t parsed_id = 0;
+        while (isdigit((unsigned char)*p)) parsed_id = parsed_id * 10 + (*p++ - '0');
+        if (*p == '|') { *id_out = parsed_id; val = p + 1; }
+    }
     const char* pipe = strchr(val, '|');
     if (pipe) {
         size_t nlen = (size_t)(pipe - val);
@@ -62,9 +71,9 @@ static bool parse_sstr(const char* line, char* name, size_t nameLen,
 }
 
 // Build the sstr= file line as rewriteSerialStrings() does.
-// The real code is: sstrs += "sstr="; sstrs += name; sstrs += "|"; sstrs += str; sstrs += "\n";
-static std::string write_sstr_line(const char* name, const char* str) {
-    return std::string("sstr=") + name + "|" + str + "\n";
+// Format: sstr=ID|Name|str\n
+static std::string write_sstr_line(uint16_t id, const char* name, const char* str) {
+    return std::string("sstr=") + std::to_string(id) + "|" + name + "|" + str + "\n";
 }
 
 // ---- Sstr meta block helpers (mirrors new processConfig branches) -------------
@@ -172,8 +181,11 @@ struct SstrConsole {
     char  strs [kMax][32];
     int   count;
 
+    uint16_t ids  [kMax];
+
     SstrConsole() : pos(0), count(0) {
         memset(buf,   0, sizeof(buf));
+        memset(ids,   0, sizeof(ids));
         memset(names, 0, sizeof(names));
         memset(strs,  0, sizeof(strs));
     }
@@ -183,8 +195,9 @@ struct SstrConsole {
             buf[pos] = '\0';
             pos = 0;
             if (buf[0] != '\0' && count < kMax) {
-                char n[32], s[32];
-                if (parse_sstr(buf, n, sizeof(n), s, sizeof(s))) {
+                uint16_t id; char n[32], s[32];
+                if (parse_sstr(buf, &id, n, sizeof(n), s, sizeof(s))) {
+                    ids[count] = id;
                     strncpy(names[count], n, 31); names[count][31] = '\0';
                     strncpy(strs [count], s, 31); strs [count][31] = '\0';
                     count++;
@@ -209,33 +222,36 @@ void tearDown(void) {}
 // ---- Parse algorithm --------------------------------------------------------
 
 void test_parse_sstr_basic_name_and_str() {
-    char n[32], s[32];
-    TEST_ASSERT_TRUE(parse_sstr("sstr=Sad (Moderate)|<SS0>", n, sizeof(n), s, sizeof(s)));
+    uint16_t id; char n[32], s[32];
+    TEST_ASSERT_TRUE(parse_sstr("sstr=1|Sad (Moderate)|<SS0>", &id, n, sizeof(n), s, sizeof(s)));
+    TEST_ASSERT_EQUAL(1, (int)id);
     TEST_ASSERT_EQUAL_STRING("Sad (Moderate)", n);
     TEST_ASSERT_EQUAL_STRING("<SS0>", s);
 }
 
 void test_parse_sstr_no_pipe_yields_empty_name() {
-    // Old Stealth/OG format — no pipe, no name.
-    char n[32], s[32];
+    // Old format — no pipe, no name.  Backward compat: still accepted.
+    uint16_t id = 99; char n[32], s[32];
     n[0] = 0xFF;
-    TEST_ASSERT_TRUE(parse_sstr("sstr=<SS0>", n, sizeof(n), s, sizeof(s)));
+    TEST_ASSERT_TRUE(parse_sstr("sstr=<SS0>", &id, n, sizeof(n), s, sizeof(s)));
+    TEST_ASSERT_EQUAL(0, (int)id);         // no ID in old format
     TEST_ASSERT_EQUAL_STRING("", n);       // name is empty
     TEST_ASSERT_EQUAL_STRING("<SS0>", s);  // str still correct
 }
 
 void test_parse_sstr_pipe_at_start_yields_empty_name() {
-    // Pipe as first char → zero-length name.
-    char n[32], s[32];
-    TEST_ASSERT_TRUE(parse_sstr("sstr=|<SS0>", n, sizeof(n), s, sizeof(s)));
+    // Old format: pipe as first char → zero-length name.  Backward compat.
+    uint16_t id; char n[32], s[32];
+    TEST_ASSERT_TRUE(parse_sstr("sstr=|<SS0>", &id, n, sizeof(n), s, sizeof(s)));
     TEST_ASSERT_EQUAL_STRING("", n);
     TEST_ASSERT_EQUAL_STRING("<SS0>", s);
 }
 
 void test_parse_sstr_short_name_not_empty() {
-    // Regression for the old double-skip bug: 5-char name "Vader" was eaten.
-    char n[32], s[32];
-    TEST_ASSERT_TRUE(parse_sstr("sstr=Vader|BD:VADER", n, sizeof(n), s, sizeof(s)));
+    // New format with ID: regression for the old double-skip bug.
+    uint16_t id; char n[32], s[32];
+    TEST_ASSERT_TRUE(parse_sstr("sstr=1|Vader|BD:VADER", &id, n, sizeof(n), s, sizeof(s)));
+    TEST_ASSERT_EQUAL(1, (int)id);
     TEST_ASSERT_EQUAL_STRING("Vader", n);
     TEST_ASSERT_EQUAL_STRING("BD:VADER", s);
 }
@@ -243,34 +259,35 @@ void test_parse_sstr_short_name_not_empty() {
 // ---- Write format -----------------------------------------------------------
 
 void test_write_sstr_line_format() {
-    std::string line = write_sstr_line("Sad Moderate", "<SS0>");
-    TEST_ASSERT_EQUAL_STRING("sstr=Sad Moderate|<SS0>\n", line.c_str());
+    std::string line = write_sstr_line(1, "Sad Moderate", "<SS0>");
+    TEST_ASSERT_EQUAL_STRING("sstr=1|Sad Moderate|<SS0>\n", line.c_str());
 }
 
-void test_write_sstr_line_empty_name_writes_pipe_at_start() {
-    // If name is "", the written line has an empty name (pipe first).
-    // This is what gets written when Str[i].name is empty.
-    std::string line = write_sstr_line("", "<SS0>");
-    TEST_ASSERT_EQUAL_STRING("sstr=|<SS0>\n", line.c_str());
+void test_write_sstr_line_empty_name_includes_id() {
+    // ID is always written even when name is empty.
+    std::string line = write_sstr_line(5, "", "<SS0>");
+    TEST_ASSERT_EQUAL_STRING("sstr=5||<SS0>\n", line.c_str());
 }
 
 // ---- Single-entry round-trip ------------------------------------------------
 
 void test_roundtrip_name_survives_write_and_reparse() {
     // Step 1: parse original config line (as processConfig does on first boot)
-    char n1[32], s1[32];
-    parse_sstr("sstr=Sad Moderate|<SS0>", n1, sizeof(n1), s1, sizeof(s1));
+    uint16_t id1; char n1[32], s1[32];
+    parse_sstr("sstr=1|Sad Moderate|<SS0>", &id1, n1, sizeof(n1), s1, sizeof(s1));
+    TEST_ASSERT_EQUAL(1, (int)id1);
     TEST_ASSERT_EQUAL_STRING("Sad Moderate", n1);
 
     // Step 2: build write line (as rewriteSerialStrings does)
-    std::string written = write_sstr_line(n1, s1);
+    std::string written = write_sstr_line(id1, n1, s1);
 
     // Step 3: parse the written line on next boot (strip trailing \n)
     std::string stripped = written.substr(0, written.size() - 1);
-    char n2[32], s2[32];
-    bool ok = parse_sstr(stripped.c_str(), n2, sizeof(n2), s2, sizeof(s2));
+    uint16_t id2; char n2[32], s2[32];
+    bool ok = parse_sstr(stripped.c_str(), &id2, n2, sizeof(n2), s2, sizeof(s2));
     TEST_ASSERT_TRUE(ok);
-    TEST_ASSERT_EQUAL_STRING("Sad Moderate", n2);   // name must survive
+    TEST_ASSERT_EQUAL(1, (int)id2);             // ID must survive
+    TEST_ASSERT_EQUAL_STRING("Sad Moderate", n2);
     TEST_ASSERT_EQUAL_STRING("<SS0>",         s2);
 }
 
@@ -282,12 +299,13 @@ void test_readConfig_single_sstr_name_parsed() {
     SD.fileContent =
         "#START\n"
         "rvrmin=0\n"
-        "sstr=Sad (Moderate)|<SS0>\n"
+        "sstr=1|Sad (Moderate)|<SS0>\n"
         "#END\n";
 
     SstrConsole console;
     TEST_ASSERT_TRUE(readConfig(console));
     TEST_ASSERT_EQUAL(1, console.count);
+    TEST_ASSERT_EQUAL(1, (int)console.ids[0]);
     TEST_ASSERT_EQUAL_STRING("Sad (Moderate)", console.names[0]);
     TEST_ASSERT_EQUAL_STRING("<SS0>",           console.strs[0]);
 }
@@ -296,11 +314,11 @@ void test_readConfig_first_sstr_name_not_empty_when_file_has_names() {
     // Core regression: first entry's name must survive config load.
     SD.fileContent =
         "#START\n"
-        "sstr=Sad (Moderate)|<SS0>\n"
-        "sstr=Scared (Moderate)|<SC0>\n"
-        "sstr=Mad (Moderate)|<SM0>\n"
-        "sstr=Very Mad (Strong)|<SM1>\n"
-        "sstr=Very Happy (Strong)|<SH1>\n"
+        "sstr=1|Sad (Moderate)|<SS0>\n"
+        "sstr=2|Scared (Moderate)|<SC0>\n"
+        "sstr=3|Mad (Moderate)|<SM0>\n"
+        "sstr=4|Very Mad (Strong)|<SM1>\n"
+        "sstr=5|Very Happy (Strong)|<SH1>\n"
         "#END\n";
 
     SstrConsole console;
@@ -331,8 +349,8 @@ void test_readConfig_sstr_after_many_other_config_lines() {
         "rvlmax=1014\n"
         "volume=50\n"
         "audiohw=hcr\n"
-        "sstr=Sad (Moderate)|<SS0>\n"
-        "sstr=Vader|BD:VADER\n"
+        "sstr=1|Sad (Moderate)|<SS0>\n"
+        "sstr=2|Vader|BD:VADER\n"
         "#END\n";
 
     SstrConsole console;
@@ -347,8 +365,8 @@ void test_readConfig_crlf_line_endings() {
     SD.fileContent =
         "#START\r\n"
         "rvrmin=0\r\n"
-        "sstr=Sad (Moderate)|<SS0>\r\n"
-        "sstr=Scared (Moderate)|<SC0>\r\n"
+        "sstr=1|Sad (Moderate)|<SS0>\r\n"
+        "sstr=2|Scared (Moderate)|<SC0>\r\n"
         "#END\r\n";
 
     SstrConsole console;
@@ -385,12 +403,12 @@ void test_after_resave_name_persists_through_reboot() {
     //   sstr=Sad Moderate|<SS0>
     // Verify next-boot read correctly populates the name.
 
-    // Simulate the rewritten file content.
+    // Simulate the rewritten file content (new ID|Name|str format).
     static const char rewritten[] =
         "#START\n"
         "rvrmin=0\n"
-        "sstr=Sad Moderate|<SS0>\n"
-        "sstr=Sad Strong|<SS1>\n"
+        "sstr=1|Sad Moderate|<SS0>\n"
+        "sstr=2|Sad Strong|<SS1>\n"
         "#END\n";
 
     SD.fileContent = rewritten;
@@ -405,12 +423,12 @@ void test_after_resave_name_persists_through_reboot() {
 }
 
 void test_full_roundtrip_multi_entry_first_name_preserved() {
-    // Boot 1: file has names.
+    // Boot 1: file has IDs and names.
     static const char boot1_file[] =
         "#START\n"
-        "sstr=Sad (Moderate)|<SS0>\n"
-        "sstr=Scared (Moderate)|<SC0>\n"
-        "sstr=Overload|<SE>\n"
+        "sstr=1|Sad (Moderate)|<SS0>\n"
+        "sstr=2|Scared (Moderate)|<SC0>\n"
+        "sstr=3|Overload|<SE>\n"
         "#END\n";
 
     SD.fileContent = boot1_file;
@@ -422,7 +440,7 @@ void test_full_roundtrip_multi_entry_first_name_preserved() {
     // Simulate rewriteSerialStrings(): build the file it would write.
     std::string rewritten = "#START\n";
     for (int i = 0; i < c1.count; i++)
-        rewritten += write_sstr_line(c1.names[i], c1.strs[i]);
+        rewritten += write_sstr_line(c1.ids[i], c1.names[i], c1.strs[i]);
     rewritten += "#END\n";
 
     // Boot 2: read the rewritten file.
@@ -440,13 +458,14 @@ void test_full_roundtrip_multi_entry_first_name_preserved() {
 
 void test_console_buffer_64_byte_limit_does_not_truncate_typical_sstr() {
     // Verify that a typical sstr= line (well under 64 chars) is not truncated.
-    // The longest line in example_config.txt is "sstr=Overload Sequence|DM:OVERLOAD"
-    // at 34 chars — safely within the 64-byte (63 usable + null) buffer.
-    const char* long_but_safe = "sstr=Overload Sequence|DM:OVERLOAD";
+    // "sstr=12|Overload Sequence|DM:OVERLOAD" is 38 chars — safely within the
+    // 64-byte (63 usable + null) buffer.
+    const char* long_but_safe = "sstr=12|Overload Sequence|DM:OVERLOAD";
     TEST_ASSERT_TRUE(strlen(long_but_safe) < CONSOLE_BUFFER_SIZE - 1);
 
-    char n[32], s[32];
-    TEST_ASSERT_TRUE(parse_sstr(long_but_safe, n, sizeof(n), s, sizeof(s)));
+    uint16_t id; char n[32], s[32];
+    TEST_ASSERT_TRUE(parse_sstr(long_but_safe, &id, n, sizeof(n), s, sizeof(s)));
+    TEST_ASSERT_EQUAL(12, (int)id);
     TEST_ASSERT_EQUAL_STRING("Overload Sequence", n);
     TEST_ASSERT_EQUAL_STRING("DM:OVERLOAD",       s);
 }
@@ -477,29 +496,31 @@ void test_console_buffer_truncates_line_longer_than_63_chars() {
 // none are affected by any encoding or length issue.
 
 void test_example_config_first_five_sstr_entries() {
+    // First 5 entries from the current example_config.txt (ID-based format).
     SD.fileContent =
         "#START\n"
-        "sstr=Sad (Moderate)|<SS0>\n"
-        "sstr=Scared (Moderate)|<SC0>\n"
-        "sstr=Mad (Moderate)|<SM0>\n"
-        "sstr=Very Mad (Strong)|<SM1>\n"
-        "sstr=Very Happy (Strong)|<SH1>\n"
+        "sstr=1|Vader|BD:VADER\n"
+        "sstr=2|Utility Arms|BD:UARMS\n"
+        "sstr=3|Reset All|DM:RESET\n"
+        "sstr=4|Pie panels|DM:PIES\n"
+        "sstr=5|Low Panels|DM:LOW\n"
         "#END\n";
 
     SstrConsole console;
     readConfig(console);
 
     TEST_ASSERT_EQUAL(5, console.count);
-    TEST_ASSERT_EQUAL_STRING("Sad (Moderate)",      console.names[0]);
-    TEST_ASSERT_EQUAL_STRING("<SS0>",               console.strs[0]);
-    TEST_ASSERT_EQUAL_STRING("Scared (Moderate)",   console.names[1]);
-    TEST_ASSERT_EQUAL_STRING("<SC0>",               console.strs[1]);
-    TEST_ASSERT_EQUAL_STRING("Mad (Moderate)",      console.names[2]);
-    TEST_ASSERT_EQUAL_STRING("<SM0>",               console.strs[2]);
-    TEST_ASSERT_EQUAL_STRING("Very Mad (Strong)",   console.names[3]);
-    TEST_ASSERT_EQUAL_STRING("<SM1>",               console.strs[3]);
-    TEST_ASSERT_EQUAL_STRING("Very Happy (Strong)", console.names[4]);
-    TEST_ASSERT_EQUAL_STRING("<SH1>",               console.strs[4]);
+    TEST_ASSERT_EQUAL(1, (int)console.ids[0]);
+    TEST_ASSERT_EQUAL_STRING("Vader",        console.names[0]);
+    TEST_ASSERT_EQUAL_STRING("BD:VADER",     console.strs[0]);
+    TEST_ASSERT_EQUAL(2, (int)console.ids[1]);
+    TEST_ASSERT_EQUAL_STRING("Utility Arms", console.names[1]);
+    TEST_ASSERT_EQUAL(3, (int)console.ids[2]);
+    TEST_ASSERT_EQUAL_STRING("Reset All",    console.names[2]);
+    TEST_ASSERT_EQUAL(4, (int)console.ids[3]);
+    TEST_ASSERT_EQUAL_STRING("Pie panels",   console.names[3]);
+    TEST_ASSERT_EQUAL(5, (int)console.ids[4]);
+    TEST_ASSERT_EQUAL_STRING("Low Panels",   console.names[4]);
 }
 
 // ---- buildFullConfigJson() meta field serialization -------------------------
@@ -708,7 +729,16 @@ static void populateParamsFromConfig(const char* content, size_t len,
         if (!startswith(cmd, "sstr=")) return;
         if (p.serialcount >= p.getSerialStringCount()) return;
         SerialString* a = &p.Str[p.serialcount];
-        const char* val  = cmd;   // startswith advanced past "sstr="
+        const char* val = cmd;   // startswith advanced past "sstr="
+        // New format: leading digits + '|' encode the stable ID.
+        uint16_t id = 0;
+        if (isdigit((unsigned char)*val)) {
+            const char* q = val;
+            while (isdigit((unsigned char)*q)) id = id * 10 + (*q++ - '0');
+            if (*q == '|') { val = q + 1; }
+        }
+        a->id = id;
+        if (id >= p.nextSstrId) p.nextSstrId = id + 1;
         const char* pipe = strchr(val, '|');
         if (pipe) {
             size_t nlen = (size_t)(pipe - val);
@@ -748,9 +778,10 @@ static int parseSstrFromJson(const std::string& json,
     int count = 0;
     size_t pos = arrayStart;
     while (count < maxEntries && pos < json.size() && json[pos] != ']') {
-        // Find {"n":"<name>","s":"<str>"}
+        // Find "n":"<name>" inside the current sstr object.
+        // Note: object may start with "id":N, so we cannot check for '{' before "n":".
         size_t nStart = json.find("\"n\":\"", pos);
-        if (nStart == std::string::npos || json[nStart - 1] != '{') break;
+        if (nStart == std::string::npos) break;
         nStart += 5;
         size_t nEnd = json.find('"', nStart);
         if (nEnd == std::string::npos) break;
@@ -791,8 +822,8 @@ void test_example_config_boot_pipeline_first_sstr_name_in_params() {
     TEST_ASSERT_GREATER_THAN(0, (int)strlen(p.Str[0].name));
 
     // Check it matches the expected first entry from example_config.txt
-    TEST_ASSERT_EQUAL_STRING("Sad (Moderate)", p.Str[0].name);
-    TEST_ASSERT_EQUAL_STRING("<SS0>",           p.Str[0].str);
+    TEST_ASSERT_EQUAL_STRING("Vader",    p.Str[0].name);
+    TEST_ASSERT_EQUAL_STRING("BD:VADER", p.Str[0].str);
 }
 
 void test_example_config_boot_pipeline_all_sstr_names_in_params() {
@@ -840,8 +871,8 @@ void test_example_config_buildFullConfigJson_first_sstr_name() {
     // If this passes, the bug is in the SD card write path (rewriteSerialStrings).
     TEST_ASSERT_GREATER_THAN_MESSAGE(0, (int)strlen(names[0]),
         "First sstr name is empty in JSON — bug is in the parse or JSON build path");
-    TEST_ASSERT_EQUAL_STRING("Sad (Moderate)", names[0]);
-    TEST_ASSERT_EQUAL_STRING("<SS0>",           strs[0]);
+    TEST_ASSERT_EQUAL_STRING("Vader",    names[0]);
+    TEST_ASSERT_EQUAL_STRING("BD:VADER", strs[0]);
 }
 
 void test_example_config_buildFullConfigJson_sstr_count_matches() {
@@ -1030,10 +1061,10 @@ void test_full_sstr_meta_block_roundtrip() {
     // Simulate a config file with sstr entries + separate f=, hidden=, cat= blocks.
     SD.fileContent =
         "#START\n"
-        "sstr=Sad (Moderate)|<SS0>\n"
-        "sstr=Periscope Up|:PP100\n"
-        "sstr=Dome Spin|:PA90\n"
-        "sstr=Secret|:SECRET\n"
+        "sstr=1|Sad (Moderate)|<SS0>\n"
+        "sstr=2|Periscope Up|:PP100\n"
+        "sstr=3|Dome Spin|:PA90\n"
+        "sstr=4|Secret|:SECRET\n"
         "f=2\n"
         "hidden=4\n"
         "cat=Dome|3\n"
@@ -1079,7 +1110,7 @@ int main(int argc, char** argv) {
 
     // Write format
     RUN_TEST(test_write_sstr_line_format);
-    RUN_TEST(test_write_sstr_line_empty_name_writes_pipe_at_start);
+    RUN_TEST(test_write_sstr_line_empty_name_includes_id);
 
     // Single-entry round-trip
     RUN_TEST(test_roundtrip_name_survives_write_and_reparse);
