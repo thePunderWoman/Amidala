@@ -74,7 +74,7 @@ function load() {
   fetch('/api/config').then(function(r){return r.json();}).then(function(d){
     var allSstr = d.sstr || [];
     var userCnt = (d.sstr_user_cnt !== undefined) ? d.sstr_user_cnt : allSstr.length;
-    _d = allSstr.slice(0, userCnt).map(function(x){return {n:x.n, s:x.s};});
+    _d = allSstr.slice(0, userCnt).map(function(x){return {id:x.id, n:x.n, s:x.s};});
     _favs   = (d.sstr_favs   || []).slice();
     _hidden = (d.sstr_hidden || []).slice();
     _cats   = (d.sstr_cats   || []).map(function(c){
@@ -105,15 +105,16 @@ function catForIdx(ob) {
   return '';
 }
 
-function editRow(i, name, s, cat, fav, hid) {
+function editRow(i, name, s, cat, fav, hid, id) {
   var ob = (i >= 0) ? (i+1) : (_d.length+1);
   var onSave = (i >= 0) ? 'saveEdit('+i+')' : 'saveNew()';
+  var idLabel = (id !== undefined && id > 0) ? '<span style="font-size:.6rem;color:var(--muted)">#'+id+'</span>' : '';
   return '<div class="ss-row">'
-    +'<div class="ss-idx">'+ob+'</div>'
+    +'<div class="ss-idx">'+ob+'<br>'+idLabel+'</div>'
     +'<div class="ss-fields">'
-    +'<input type="text" id="ed-name" value="'+esc(name)+'" placeholder="Name">'
-    +'<input type="text" id="ed-val" value="'+esc(s)+'" placeholder="Serial string" class="mono">'
-    +'<input type="text" id="ed-cat" value="'+esc(cat)+'" placeholder="Category (optional)" list="cat-list">'
+    +'<input type="text" id="ed-name" value="'+esc(name)+'" placeholder="Name" autocomplete="off">'
+    +'<input type="text" id="ed-val" value="'+esc(s)+'" placeholder="Serial string" class="mono" autocomplete="off">'
+    +'<input type="text" id="ed-cat" value="'+esc(cat)+'" placeholder="Category (optional)" list="cat-list" autocomplete="off">'
     +'<div class="ss-checkrow">'
     +'<label><input type="checkbox" id="ed-fav"'+(fav?' checked':'')+'>&#9733; Favorite</label>'
     +'<label><input type="checkbox" id="ed-hid"'+(hid?' checked':'')+'>Hide from Droid Control</label>'
@@ -148,10 +149,11 @@ function render() {
       var fav = _favs.indexOf(ob) >= 0;
       var hid = _hidden.indexOf(ob) >= 0;
       if (i === _ed && !_isNew) {
-        h += editRow(i, row.n, row.s, cat, fav, hid);
+        h += editRow(i, row.n, row.s, cat, fav, hid, row.id);
       } else {
+        var idBadge = (row.id > 0) ? '<br><span style="font-size:.6rem;color:var(--muted)">#'+row.id+'</span>' : '';
         h += '<div class="ss-row">'
-          +'<div class="ss-idx">'+ob+'</div>'
+          +'<div class="ss-idx">'+ob+idBadge+'</div>'
           +'<div class="ss-fields">'
           +'<div class="ss-name'+(row.n?'':' empty')+'">'+esc(row.n||'(unnamed)')+'</div>'
           +'<div class="ss-val">'+esc(row.s)+'</div>'
@@ -175,7 +177,12 @@ function render() {
   h += '<div class="add-row"><button class="btn-add" onclick="addStr()">+ Add Command</button></div>';
   h += renderCategories();
   document.getElementById('main').innerHTML = h;
-  if (_ed >= 0 || _isNew) { var el=document.getElementById('ed-name'); if(el) el.focus(); }
+  if (_isNew) {
+    var ev = document.getElementById('ed-val'); if (ev) ev.value = '';
+    var en = document.getElementById('ed-name'); if (en) { en.value = ''; en.focus(); }
+  } else if (_ed >= 0) {
+    var el = document.getElementById('ed-name'); if (el) el.focus();
+  }
 }
 
 function sendStr(s) {
@@ -287,7 +294,7 @@ function saveEdit(i) {
   if (form.n.indexOf('|')>=0){showToast('Name cannot contain |',true);return;}
   var ob = i+1;
   postConfig('sstr_'+i, form.n+'|'+form.s).then(function(){
-    _d[i] = {n:form.n, s:form.s};
+    _d[i] = {id:_d[i].id, n:form.n, s:form.s};
     applyFav(ob, form.fav);
     applyHidden(ob, form.hid);
     applyCat(ob, form.cat);
@@ -302,14 +309,17 @@ function saveNew() {
   if (!form.n||!form.s){showToast('Name and string required',true);return;}
   if (form.n.indexOf('|')>=0){showToast('Name cannot contain |',true);return;}
   postConfig('sstr_add', form.n+'|'+form.s).then(function(){
-    _d.push({n:form.n, s:form.s});
+    // Push a placeholder so applyFav/Hidden/Cat compute the right 1-based ob
+    _d.push({id:0, n:form.n, s:form.s});
     var ob = _d.length;
     applyFav(ob, form.fav);
     applyHidden(ob, form.hid);
     applyCat(ob, form.cat);
     return saveMeta();
   }).then(function(){
-    _isNew=false; render(); showToast('Added');
+    _isNew=false;
+    // Reload to pick up the server-assigned stable ID
+    load(); showToast('Added');
   }).catch(function(){showToast('Save failed',true);});
 }
 

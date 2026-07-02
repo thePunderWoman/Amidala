@@ -269,9 +269,12 @@ static bool rewriteSerialStrings() {
     }
 
     // Build new sstr= lines — only user-defined strings, not builtin injected ones.
+    // Format: sstr=ID|Name|command
     String sstrs;
     for (uint8_t i = 0; i < sUserSerialCount; i++) {
         sstrs += "sstr=";
+        sstrs += String(sCtrl->params.Str[i].id);
+        sstrs += "|";
         sstrs += sCtrl->params.Str[i].name;
         sstrs += "|";
         sstrs += sCtrl->params.Str[i].str;
@@ -490,19 +493,33 @@ static bool rewriteSoundBanks() {
 // Button / gesture config file helpers
 // ---------------------------------------------------------------------------
 
-// Serialize a ButtonAction's parameters as "type[,p1[,p2]]"
+// Serialize a ButtonAction as "type[,arg1[,arg2[,name]]]"
 static String buttonActionStr(const ButtonAction& b) {
     String s = String(b.action);
     switch (b.action) {
-    case ButtonAction::kSerialStr: s += "," + String(b.serial.serialstr);                                    break;
-    case ButtonAction::kHCREmote:  s += "," + String(b.emote.emotion) + "," + String(b.emote.level);        break;
-    case ButtonAction::kDomeCmd:   s += "," + String(b.dome.subcmd);                                         break;
-    default: break;
+    case ButtonAction::kSerialStr:
+        s += "," + String(b.serialid);
+        break;
+    case ButtonAction::kI2CStr:
+        s += "," + String(b.i2cstr.target) + "," + String(b.serialid);
+        break;
+    case ButtonAction::kHCREmote:
+        s += "," + String(b.emote.emotion) + "," + String(b.emote.level);
+        if (b.serialid) s += "," + String(b.serialid);
+        break;
+    case ButtonAction::kDomeCmd:
+        s += "," + String(b.dome.subcmd);
+        if (b.dome.arg || b.serialid) s += "," + String(b.dome.arg);
+        if (b.serialid) s += "," + String(b.serialid);
+        break;
+    default:
+        if (b.serialid) s += "," + String(b.serialid);
+        break;
     }
     return s;
 }
 
-// Parse "type[,p1[,p2]]" value string into a ButtonAction
+// Parse "type[,arg1[,arg2[,serialid]]]" value string into a ButtonAction.
 static void parseButtonAction(ButtonAction& b, const String& value) {
     memset(&b, 0, sizeof(b));
     if (value.isEmpty() || value == "0") return;
@@ -511,22 +528,37 @@ static void parseButtonAction(ButtonAction& b, const String& value) {
     switch (type) {
     case ButtonAction::kSerialStr:
         b.action = type;
-        if (c1 > 0) b.serial.serialstr = (uint8_t)value.substring(c1 + 1).toInt();
+        if (c1 > 0) b.serialid = (uint16_t)value.substring(c1 + 1).toInt();
         break;
+    case ButtonAction::kI2CStr: {
+        b.action = type;
+        int c2 = c1 > 0 ? value.indexOf(',', c1 + 1) : -1;
+        if (c1 > 0) b.i2cstr.target = (uint8_t)value.substring(c1 + 1, c2 > 0 ? c2 : (int)value.length()).toInt();
+        if (c2 > 0) b.serialid = (uint16_t)value.substring(c2 + 1).toInt();
+        break;
+    }
     case ButtonAction::kHCREmote: {
         b.action = type;
         int c2 = c1 > 0 ? value.indexOf(',', c1 + 1) : -1;
+        int c3 = c2 > 0 ? value.indexOf(',', c2 + 1) : -1;
         if (c1 > 0) b.emote.emotion = (uint8_t)value.substring(c1 + 1, c2 > 0 ? c2 : (int)value.length()).toInt();
-        if (c2 > 0) b.emote.level   = (uint8_t)value.substring(c2 + 1).toInt();
+        if (c2 > 0) b.emote.level   = (uint8_t)value.substring(c2 + 1, c3 > 0 ? c3 : (int)value.length()).toInt();
+        if (c3 > 0) b.serialid = (uint16_t)value.substring(c3 + 1).toInt();
         break;
     }
     case ButtonAction::kHCRMuse:
         b.action = type;
+        if (c1 > 0) b.serialid = (uint16_t)value.substring(c1 + 1).toInt();
         break;
-    case ButtonAction::kDomeCmd:
+    case ButtonAction::kDomeCmd: {
         b.action = type;
-        if (c1 > 0) b.dome.subcmd = (uint8_t)value.substring(c1 + 1).toInt();
+        int c2 = c1 > 0 ? value.indexOf(',', c1 + 1) : -1;
+        int c3 = c2 > 0 ? value.indexOf(',', c2 + 1) : -1;
+        if (c1 > 0) b.dome.subcmd = (uint8_t)value.substring(c1 + 1, c2 > 0 ? c2 : (int)value.length()).toInt();
+        if (c2 > 0) b.dome.arg    = (uint8_t)value.substring(c2 + 1, c3 > 0 ? c3 : (int)value.length()).toInt();
+        if (c3 > 0) b.serialid = (uint16_t)value.substring(c3 + 1).toInt();
         break;
+    }
     default: break;
     }
 }
@@ -712,6 +744,7 @@ static void handleApiConfigPost() {
         if (idx < 0 || idx >= (int)sUserSerialCount) {
             sServer.send(400, "text/plain", "index out of range"); return;
         }
+        uint16_t deletedId = sCtrl->params.Str[idx].id;
         // Shift all strings (including injected) down by one
         for (int j = idx; j < (int)sCtrl->params.serialcount - 1; j++)
             sCtrl->params.Str[j] = sCtrl->params.Str[j + 1];
@@ -731,8 +764,29 @@ static void handleApiConfigPost() {
             }
             sGadgets[g].sstrCnt = wk;
         }
+        // Clear any button/gesture refs pointing to the deleted string's ID.
+        bool buttonsDirty = false;
+        if (deletedId != 0) {
+            AmidalaParameters& p = sCtrl->params;
+            ButtonAction* layers[4] = {p.B, p.LB, p.AB, p.DB};
+            for (int l = 0; l < 4; l++) {
+                for (int i = 0; i < (int)p.getButtonCount(); i++) {
+                    if (layers[l][i].serialid == deletedId) {
+                        layers[l][i].serialid = 0;
+                        buttonsDirty = true;
+                    }
+                }
+            }
+            for (int i = 0; i < (int)p.gcount; i++) {
+                if (p.G[i].action.serialid == deletedId) {
+                    p.G[i].action.serialid = 0;
+                    buttonsDirty = true;
+                }
+            }
+        }
         bool ok = rewriteSerialStrings();
         if (gadgetsDirty) rewriteGadgetConfig();
+        if (buttonsDirty) rewriteButtons();
         sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed — delete applied in memory only");
         return;
     }
@@ -757,6 +811,8 @@ static void handleApiConfigPost() {
                 sCtrl->params.Str[j] = sCtrl->params.Str[j - 1];
             memset(&sCtrl->params.Str[sUserSerialCount], 0, sizeof(SerialString));
             sCtrl->params.serialcount++;
+            // Assign a stable ID that will never shift even if the array is reordered.
+            sCtrl->params.Str[sUserSerialCount].id = sCtrl->params.nextSstrId++;
             // Update gadget sstr indices: entries at or above new position shift up
             for (int g = 0; g < GADGET_COUNT; g++)
                 for (uint8_t k = 0; k < sGadgets[g].sstrCnt; k++)
@@ -764,6 +820,7 @@ static void handleApiConfigPost() {
                         sGadgets[g].sstr[k]++;
             sUserSerialCount++;
         }
+        // Rename is a no-op for button refs — they track by ID, not name.
         setSerialStringFields(sCtrl->params.Str[idx], value.c_str());
         bool ok = rewriteSerialStrings();
         sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed — change applied in memory only");

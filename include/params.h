@@ -93,6 +93,7 @@ struct AmidalaParameters {
   DigitalOut D[8];
   SerialString Str[MAX_SERIAL_STRINGS];
   uint8_t serialcount;
+  uint16_t nextSstrId; // monotonic counter; set to max(all IDs)+1 after config load
   uint8_t gcount;
   uint8_t sbcount;
   uint8_t volume;

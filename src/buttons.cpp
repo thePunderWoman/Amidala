@@ -1,5 +1,13 @@
 #include "controller.h"
 
+static int findSerialStringById(AmidalaParameters &params, uint16_t id) {
+  if (id == 0) return -1;
+  for (int i = 0; i < (int)params.serialcount; i++) {
+    if (params.Str[i].id == id) return i;
+  }
+  return -1;
+}
+
 void AmidalaConsole::process(ButtonAction &button) {
   AmidalaParameters &params = fController->params;
   switch (button.action) {
@@ -21,10 +29,10 @@ void AmidalaConsole::process(ButtonAction &button) {
     DEBUG_PRINTLN(button.i2ccmd.cmd);
     sendI2CCmd(button.i2ccmd.target, button.i2ccmd.cmd);
     break;
-  case button.kI2CStr:
-    if (button.i2cstr.cmd != 0 &&
-        button.i2cstr.cmd <= params.getSerialStringCount()) {
-      const char *str = params.Str[button.i2cstr.cmd - 1].str;
+  case button.kI2CStr: {
+    int idx = findSerialStringById(params, button.serialid);
+    if (idx >= 0) {
+      const char *str = params.Str[idx].str;
       DEBUG_PRINT("I2C STR addr=");
       DEBUG_PRINT(button.i2cstr.target);
       DEBUG_PRINT(" str=");
@@ -32,6 +40,16 @@ void AmidalaConsole::process(ButtonAction &button) {
       sendI2CStr(button.i2cstr.target, str);
     }
     break;
+  }
+  case button.kSerialStr: {
+    int idx = findSerialStringById(params, button.serialid);
+    if (idx >= 0) {
+      DEBUG_PRINT("SERIAL: ");
+      DEBUG_PRINTLN(params.Str[idx].str);
+      fController->sendSerialString(params.Str[idx].str);
+    }
+    break;
+  }
   case button.kHCREmote:
     fController->fAudio.playEmote(button.emote.emotion, button.emote.level);
     break;
@@ -48,11 +66,16 @@ void AmidalaConsole::process(ButtonAction &button) {
       button.action != ButtonAction::kHCRMuse) {
     fController->fAudio.playAck();
   }
-  if (button.serial.serialstr != 0 &&
-      button.serial.serialstr <= params.getSerialStringCount()) {
-    DEBUG_PRINT("SERIAL #");
-    DEBUG_PRINTLN(params.Str[button.serial.serialstr - 1].str);
-    fController->sendSerialString(params.Str[button.serial.serialstr - 1].str);
+  // Side-effect serial string (only for actions where serialid is not already the primary ref)
+  if (button.action != ButtonAction::kSerialStr &&
+      button.action != ButtonAction::kI2CStr &&
+      button.serialid != 0) {
+    int idx = findSerialStringById(params, button.serialid);
+    if (idx >= 0) {
+      DEBUG_PRINT("SERIAL (side-effect): ");
+      DEBUG_PRINTLN(params.Str[idx].str);
+      fController->sendSerialString(params.Str[idx].str);
+    }
   }
 }
 

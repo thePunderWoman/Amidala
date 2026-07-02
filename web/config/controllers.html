@@ -105,7 +105,7 @@ function actionOptions(sel) {
     var idx = i + 1;
     var cat = catOf[idx] || '';
     if (!groups[cat]) { groups[cat] = []; order.push(cat); }
-    groups[cat].push({idx: idx, name: s.n});
+    groups[cat].push({idx: idx, id: s.id, name: s.n});
   }
   // De-dup while preserving first-seen order
   var seen = {};
@@ -116,7 +116,7 @@ function actionOptions(sel) {
     if (!items || !items.length) return;
     var label = cat || 'Serial Commands';
     h += '<optgroup label="' + label.replace(/"/g, '&quot;') + '">';
-    items.forEach(function(item) { h += opt('5,' + item.idx, item.name, sel); });
+    items.forEach(function(item) { h += opt('5,' + item.id, item.name, sel); });
     h += '</optgroup>';
   });
 

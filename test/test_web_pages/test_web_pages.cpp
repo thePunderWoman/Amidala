@@ -690,7 +690,7 @@ void test_buttonActionJson_kHCRMuse_emits_type_only() {
 
 void test_buttonActionJson_kSerialStr_emits_index() {
     ButtonAction b = makeAction(ButtonAction::kSerialStr);
-    b.serial.serialstr = 3;
+    b.serialid = 3;
     String j = buttonActionJson(b);
     TEST_ASSERT_TRUE(contains(j.c_str(), "\"t\":5"));
     TEST_ASSERT_TRUE(contains(j.c_str(), "\"x\":3"));
@@ -699,7 +699,7 @@ void test_buttonActionJson_kSerialStr_emits_index() {
 
 void test_buttonActionJson_kSerialStr_index_one() {
     ButtonAction b = makeAction(ButtonAction::kSerialStr);
-    b.serial.serialstr = 1;
+    b.serialid = 1;
     String j = buttonActionJson(b);
     TEST_ASSERT_TRUE(contains(j.c_str(), "\"x\":1"));
 }
