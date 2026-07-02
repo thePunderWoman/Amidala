@@ -726,13 +726,14 @@ function generateConfig(parsedData, sstrNames, conv) {
   }
 
   // Serial strings (converted from aux strings)
+  // IDs are assigned 1-based sequentially, matching old 1-based button index refs.
   if (parsedData.auxStrings.length > 0) {
     lines.push('');
     for (let i = 0; i < parsedData.auxStrings.length; i++) {
       const name = (sstrNames[i] || '').trim() || `String ${i + 1}`;
       // Sanitize: strip | from name to avoid breaking format
       const safeName = name.replace(/\|/g, '-');
-      lines.push(`sstr=${safeName}|${parsedData.auxStrings[i]}`);
+      lines.push(`sstr=${i + 1}|${safeName}|${parsedData.auxStrings[i]}`);
     }
   }
 
@@ -872,7 +873,7 @@ function buildChanges(changes, warnings, sstrNames) {
       <ul class="changes-list">
         ${parsed.auxStrings.map((s, i) => {
           const name = (sstrNames[i] || '').trim() || `String ${i+1}`;
-          return `<li>a=${escHtml(s)} → sstr=${escHtml(name)}|${escHtml(s)}</li>`;
+          return `<li>a=${escHtml(s)} → sstr=${i+1}|${escHtml(name)}|${escHtml(s)}</li>`;
         }).join('')}
       </ul>
     </div>`;
@@ -901,7 +902,7 @@ function buildChanges(changes, warnings, sstrNames) {
     html += `<div class="result-section">
       <h3>No serial strings detected</h3>
       <ul class="changes-list info-list">
-        <li><span>Amidala's primary accessory interface is serial.${i2cNote} Your old config had no auxiliary strings — if your accessories accept serial commands, add <code>sstr=Name|command</code> entries and configure serial string actions via the web UI after flashing.</span></li>
+        <li><span>Amidala's primary accessory interface is serial.${i2cNote} Your old config had no auxiliary strings — if your accessories accept serial commands, add serial strings via the web UI after flashing (IDs are assigned automatically).</span></li>
       </ul>
     </div>`;
   }
