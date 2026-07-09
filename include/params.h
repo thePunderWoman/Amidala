@@ -223,8 +223,11 @@ struct AmidalaParameters {
   uint8_t   resumeCmdCount;
 
   // ---- Bluetooth controller --------------------------------------------------
+  // btcontrolleron: enable the BLE HID gamepad at runtime (default false —
+  // opt-in since it requires the user to pair a device).
   // btaddr: MAC address of a paired BLE HID gamepad (AA:BB:CC:DD:EE:FF format).
   // Empty string means "connect to any BLE HID device found during scan."
+  bool btcontrolleron;
   char btaddr[18];
 
   // ---- WiFi access point -----------------------------------------------
@@ -317,6 +320,7 @@ struct AmidalaParameters {
       mutebutton = 0;
       dbtimeout = 300;
       auxserial3 = false;
+      btcontrolleron = false;
       wifion = true;
       strncpy(wifiSSID, "amidala", sizeof(wifiSSID));
       strncpy(wifiPassword, "Astromech", sizeof(wifiPassword));

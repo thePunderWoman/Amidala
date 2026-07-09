@@ -1,5 +1,3 @@
-#ifdef USE_BT_CONTROLLER
-
 #include "bt_gamepad.h"
 #include <BLEDevice.h>
 #include <BLEUtils.h>
@@ -83,6 +81,9 @@ void BTGamepad::setTargetAddr(const char* addr)
 
 void BTGamepad::setup()
 {
+    // Idempotent: may be called again if the controller is re-enabled at
+    // runtime without a reboot.
+    if (sInstance == this) return;
     sInstance = this;
     BLEDevice::init("Amidala");
 }
@@ -116,6 +117,18 @@ void BTGamepad::pairWith(const char* addr)
 void BTGamepad::forget()
 {
     fTargetAddr[0] = '\0';
+}
+
+void BTGamepad::disable()
+{
+    if (fScanning) {
+        BLEDevice::getScan()->stop();
+        fScanning = false;
+    }
+    fConnectedAddr[0] = '\0';
+    fConnecting = false;
+    fDoConnect  = false;
+    onDisconnect(); // clears fConnected so isConnected() is false immediately
 }
 
 void BTGamepad::animate()
@@ -331,5 +344,3 @@ void BTGamepad::_onReport(const uint8_t* data, size_t len)
 {
     _parseReport(data, len);
 }
-
-#endif // USE_BT_CONTROLLER

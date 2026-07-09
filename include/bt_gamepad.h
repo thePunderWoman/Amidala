@@ -1,5 +1,4 @@
 #pragma once
-#ifdef USE_BT_CONTROLLER
 
 #include "ReelTwo.h"
 #include "JoystickController.h"
@@ -53,6 +52,13 @@ public:
     // Clear pairing — will scan and connect to the first HID device seen.
     void forget();
 
+    // --- Runtime enable/disable ----------------------------------------------
+
+    // Stop scanning/connecting and force isConnected() false immediately, so
+    // drive/dome stop trusting BT stick input the instant the feature is
+    // turned off — regardless of whether the underlying BLE link is still up.
+    void disable();
+
     // --- Status --------------------------------------------------------------
 
     const char* connectedAddr() const { return fConnectedAddr; }
@@ -88,5 +94,3 @@ private:
 
 // Global instance — declared here, defined in bt_gamepad.cpp.
 extern BTGamepad gBTGamepad;
-
-#endif // USE_BT_CONTROLLER
