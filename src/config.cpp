@@ -211,6 +211,8 @@ void AmidalaConfig::showCurrentConfiguration() {
     fOutput->println();
     fOutput->println(F("Serial String Commands:"));
     fOutput->println();
+    fOutput->print(F("Bluetooth Controller: "));
+    fOutput->println(params.btcontrolleron ? F("On") : F("Off"));
     fOutput->print(F("WiFi AP: "));
     fOutput->println(params.wifion ? F("On") : F("Off"));
     fOutput->print(F("WiFi SSID: "));
@@ -759,6 +761,8 @@ bool AmidalaConfig::processConfig(const char *cmd) {
   } else if (intparam(cmd, "dbtimeout=", params.dbtimeout, 0, 5000)) {
     return true;
   } else if (boolparam(cmd, "auxserial3=", params.auxserial3)) {
+    return true;
+  } else if (boolparam(cmd, "btcontrolleron=", params.btcontrolleron)) {
     return true;
   } else if (startswith(cmd, "btaddr=")) {
     strncpy(params.btaddr, cmd, sizeof(params.btaddr) - 1);

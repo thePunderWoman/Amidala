@@ -75,6 +75,11 @@ void test_default_ackon_false() {
     TEST_ASSERT_FALSE(gDefaultParams.ackon);
 }
 
+void test_default_btcontrolleron_false() {
+    gDefaultParams.init();
+    TEST_ASSERT_FALSE(gDefaultParams.btcontrolleron);
+}
+
 void test_default_mindelay() {
     gDefaultParams.init();
     TEST_ASSERT_EQUAL(60, gDefaultParams.mindelay);
@@ -318,6 +323,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_default_startup_true);
     RUN_TEST(test_default_rndon_true);
     RUN_TEST(test_default_ackon_false);
+    RUN_TEST(test_default_btcontrolleron_false);
     RUN_TEST(test_default_mindelay);
     RUN_TEST(test_default_maxdelay);
     RUN_TEST(test_default_serialbaud);

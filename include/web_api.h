@@ -121,6 +121,7 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     json += "\"xbl\":\"" + hexStr(p.xbl) + "\",";
 
     // Bluetooth
+    json += "\"btcontrolleron\":\"" + String(p.btcontrolleron ? "y" : "n") + "\",";
     json += "\"btaddr\":\"" + String(p.btaddr) + "\",";
 
     // Audio

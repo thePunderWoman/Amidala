@@ -27,7 +27,9 @@ var SCHEMA = [
   {section:'WiFi Access Point'},
   {key:'wifion',       label:'Enable WiFi AP', type:'bool'},
   {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars'},
-  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars'}
+  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars'},
+  {section:'Bluetooth Controller'},
+  {key:'btcontrolleron', label:'Enable Bluetooth Controller', type:'bool'}
 ];
 
 buildPage(SCHEMA, '/api/config', function() {
@@ -56,11 +58,17 @@ function refreshBTStatus() {
     var panel = document.getElementById('bt-panel');
     if (!panel) return;
 
+    if (!d.enabled) {
+      panel.innerHTML = '<div class="row"><div class="row-label" style="color:var(--muted)">'
+        + 'Enable above to scan and pair a controller.</div></div>';
+      return;
+    }
+
     var connText = d.connected
       ? (d.addr ? escHtml(d.addr) : 'Connected')
       : 'Not connected';
 
-    var html = '<div class="section-label">Bluetooth Controller</div>';
+    var html = '';
 
     // Status row
     html += '<div class="row"><div class="row-label">Controller</div>';
@@ -85,7 +93,7 @@ function refreshBTStatus() {
     panel.innerHTML = html;
     if (_scanning) pollScanResults();
   }).catch(function() {
-    // /api/bt/status not available — firmware built without USE_BT_CONTROLLER
+    // /api/bt/status not available (shouldn't happen — route is unconditional).
     var panel = document.getElementById('bt-panel');
     if (panel) panel.innerHTML = '';
   });

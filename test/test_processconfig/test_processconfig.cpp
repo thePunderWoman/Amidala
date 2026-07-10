@@ -759,6 +759,34 @@ void test_btaddr_defaults_to_empty_string() {
     TEST_ASSERT_EQUAL_STRING("", p.btaddr);
 }
 
+// ---- btcontrolleron: runtime toggle (was USE_BT_CONTROLLER compile flag) ----
+// Uses boolparam() with the exact same field reference as config.cpp to
+// confirm the key routes to the right struct member and parses y/n.
+
+void test_btcontrolleron_boolparam_parses_y() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = boolparam("btcontrolleron=y", "btcontrolleron=", p.btcontrolleron);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_TRUE(p.btcontrolleron);
+}
+
+void test_btcontrolleron_boolparam_parses_n() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    p.btcontrolleron = true;
+    bool ok = boolparam("btcontrolleron=n", "btcontrolleron=", p.btcontrolleron);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_FALSE(p.btcontrolleron);
+}
+
+void test_btcontrolleron_defaults_to_false() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    p.init(true);
+    TEST_ASSERT_FALSE(p.btcontrolleron);
+}
+
 // ---- main -------------------------------------------------------------------
 
 int main(int argc, char **argv) {
@@ -842,6 +870,9 @@ int main(int argc, char **argv) {
     RUN_TEST(test_btaddr_parse_stores_address);
     RUN_TEST(test_btaddr_parse_empty_stays_empty);
     RUN_TEST(test_btaddr_defaults_to_empty_string);
+    RUN_TEST(test_btcontrolleron_boolparam_parses_y);
+    RUN_TEST(test_btcontrolleron_boolparam_parses_n);
+    RUN_TEST(test_btcontrolleron_defaults_to_false);
 
     return UNITY_END();
 }

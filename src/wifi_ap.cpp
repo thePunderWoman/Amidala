@@ -11,10 +11,8 @@
 #include "web_api.h"
 #include "controller.h"
 #include "drive_config.h"
-#ifdef USE_BT_CONTROLLER
 #include "bt_gamepad.h"
 #include <BLEDevice.h>
-#endif
 
 static WebServer          sServer(80);
 static AmidalaController* sCtrl = nullptr;
@@ -684,11 +682,7 @@ static void handleApiInfo() {
                       ESP.getFreeHeap(),
                       sCtrl->fDriveStick.isConnected(),
                       sCtrl->fDomeStick.isConnected(),
-#ifdef USE_BT_CONTROLLER
                       gBTGamepad.isConnected(),
-#else
-                      false,
-#endif
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
                       sCtrl->fDomeDrive.isHomed(),
                       sCtrl->fDomeDrive.getCurrentDegrees()
@@ -1139,6 +1133,15 @@ static void handleApiConfigPost() {
         sServer.send(500, "text/plain", "SD write failed — change applied in memory only");
         return;
     }
+    // Apply BT controller enable/disable immediately — no reboot required.
+    if (key == "btcontrolleron") {
+        if (sCtrl->params.btcontrolleron) {
+            gBTGamepad.setup();
+            gBTGamepad.setTargetAddr(sCtrl->params.btaddr);
+        } else {
+            gBTGamepad.disable();
+        }
+    }
     sServer.send(200, "text/plain", "OK");
 }
 
@@ -1335,31 +1338,35 @@ static void handleConfigGadgets()       { sServer.send(200, "text/html", WEB_PAG
 static void handleSafety()             { sServer.send(200, "text/html", WEB_PAGE_SAFETY);           }
 static void handleComingSoon()          { sServer.send(200, "text/html", WEB_PAGE_COMING_SOON);     }
 static void handleDiagnostics()         { sServer.send(200, "text/html", WEB_PAGE_DIAGNOSTICS);      }
-#ifdef USE_BT_CONTROLLER
 static void handleConfigConnectivity()  { sServer.send(200, "text/html", WEB_PAGE_CONFIG_CONNECTIVITY); }
-#endif
 
 // ---------------------------------------------------------------------------
 // BT API endpoints
 // ---------------------------------------------------------------------------
 
-#ifdef USE_BT_CONTROLLER
-
 static void handleApiBtStatus() {
+    bool enabled = sCtrl && sCtrl->params.btcontrolleron;
     String json = "{";
-    json += "\"connected\":";
+    json += "\"enabled\":";
+    json += enabled ? "true" : "false";
+    json += ",\"connected\":";
     json += gBTGamepad.isConnected() ? "true" : "false";
     json += ",\"addr\":\"";
     json += String(gBTGamepad.connectedAddr());
     json += "\",\"scanning\":";
     json += gBTGamepad.isScanRunning() ? "true" : "false";
     json += ",\"local_addr\":\"";
-    json += String(BLEDevice::getAddress().toString().c_str());
+    // BLEDevice may not be initialized yet if the controller is disabled.
+    json += enabled ? String(BLEDevice::getAddress().toString().c_str()) : String("");
     json += "\"}";
     sServer.send(200, "application/json", json);
 }
 
 static void handleApiBtScan() {
+    if (!sCtrl || !sCtrl->params.btcontrolleron) {
+        sServer.send(400, "text/plain", "Bluetooth controller is disabled");
+        return;
+    }
     gBTGamepad.startScan();
     // Immediately return — results are polled via /api/bt/status
     sServer.send(200, "application/json", "{\"ok\":true}");
@@ -1383,6 +1390,10 @@ static void handleApiBtResults() {
 }
 
 static void handleApiBtPair() {
+    if (!sCtrl || !sCtrl->params.btcontrolleron) {
+        sServer.send(400, "text/plain", "Bluetooth controller is disabled");
+        return;
+    }
     String addr = sServer.arg("addr");
     if (addr.length() == 0) {
         sServer.send(400, "text/plain", "addr required");
@@ -1409,8 +1420,6 @@ static void handleApiBtForget() {
     monAppend("BT: cleared pairing", 'i');
     sServer.send(200, "application/json", "{\"ok\":true}");
 }
-
-#endif // USE_BT_CONTROLLER
 
 // ---------------------------------------------------------------------------
 // AmidalaWiFiAP
@@ -1476,14 +1485,12 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/api/config", HTTP_POST, handleApiConfigPost);
     sServer.on("/api/pins",   HTTP_GET,  handleApiPins);
     sServer.on("/diagnostics", HTTP_GET, handleDiagnostics);
-#ifdef USE_BT_CONTROLLER
     sServer.on("/config/connectivity",   HTTP_GET,  handleConfigConnectivity);
     sServer.on("/api/bt/status",         HTTP_GET,  handleApiBtStatus);
     sServer.on("/api/bt/scan",           HTTP_POST, handleApiBtScan);
     sServer.on("/api/bt/results",        HTTP_GET,  handleApiBtResults);
     sServer.on("/api/bt/pair",           HTTP_POST, handleApiBtPair);
     sServer.on("/api/bt/forget",         HTTP_POST, handleApiBtForget);
-#endif
 
     sServer.onNotFound([]() { sServer.send(404, "text/plain", "Not found"); });
 

@@ -95,6 +95,7 @@ void test_connectivity_page_has_all_sections() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wifissid'"));
     // BT section uses standard section-label class (no custom bt-* styles needed)
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "Bluetooth Controller"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'btcontrolleron'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/bt/status"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/bt/scan"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/bt/pair"));
@@ -335,6 +336,19 @@ void test_full_config_json_btaddr_stored_correctly() {
     strncpy(p.btaddr, "AA:BB:CC:DD:EE:FF", sizeof(p.btaddr));
     String json = buildFullConfigJson(p);
     TEST_ASSERT_TRUE(contains(json.c_str(), "\"btaddr\":\"AA:BB:CC:DD:EE:FF\""));
+}
+
+void test_full_config_json_btcontrolleron_false_by_default() {
+    AmidalaParameters p = makeParams(); // btcontrolleron left zeroed = false
+    String json = buildFullConfigJson(p);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"btcontrolleron\":\"n\""));
+}
+
+void test_full_config_json_btcontrolleron_true() {
+    AmidalaParameters p = makeParams();
+    p.btcontrolleron = true;
+    String json = buildFullConfigJson(p);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"btcontrolleron\":\"y\""));
 }
 
 void test_full_config_json_audio_keys() {
@@ -821,6 +835,8 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_full_config_json_xbee_hex_format);
     RUN_TEST(test_full_config_json_btaddr_empty_by_default);
     RUN_TEST(test_full_config_json_btaddr_stored_correctly);
+    RUN_TEST(test_full_config_json_btcontrolleron_false_by_default);
+    RUN_TEST(test_full_config_json_btcontrolleron_true);
     RUN_TEST(test_full_config_json_audio_keys);
     RUN_TEST(test_full_config_json_rc_radio_keys);
     RUN_TEST(test_full_config_json_dome_keys);
