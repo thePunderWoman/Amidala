@@ -1319,26 +1319,26 @@ static void handleUpdatePost() {
 // ---------------------------------------------------------------------------
 
 static void handleHome() {
-    sServer.send(200, "text/html", WEB_PAGE_HOME);
+    sServer.send_P(200, "text/html", WEB_PAGE_HOME);
 }
 
-static void handleConfigGeneral()       { sServer.send(200, "text/html", WEB_PAGE_GENERAL);        }
-static void handleConfigWifi()          { sServer.send(200, "text/html", WEB_PAGE_WIFI);            }
-static void handleConfigXbee()          { sServer.send(200, "text/html", WEB_PAGE_XBEE);            }
-static void handleConfigAudio()         { sServer.send(200, "text/html", WEB_PAGE_AUDIO);           }
-static void handleConfigRcRadio()       { sServer.send(200, "text/html", WEB_PAGE_RC_RADIO);        }
-static void handleConfigDome()          { sServer.send(200, "text/html", WEB_PAGE_DOME);            }
-static void handleConfigSerialStrings() { sServer.send(200, "text/html", WEB_PAGE_SERIAL_STRINGS);  }
-static void handleConfigServos()        { sServer.send(200, "text/html", WEB_PAGE_SERVOS);           }
-static void handleConfigControllers()   { sServer.send(200, "text/html", WEB_PAGE_CONTROLLERS);     }
-static void handleMonitor()             { sServer.send(200, "text/html", WEB_PAGE_MONITOR);         }
-static void handleUpdatePage()          { sServer.send(200, "text/html", WEB_PAGE_UPDATE);          }
-static void handleDroidControl()        { sServer.send(200, "text/html", WEB_PAGE_DROID_CONTROL);   }
-static void handleConfigGadgets()       { sServer.send(200, "text/html", WEB_PAGE_GADGETS);         }
-static void handleSafety()             { sServer.send(200, "text/html", WEB_PAGE_SAFETY);           }
-static void handleComingSoon()          { sServer.send(200, "text/html", WEB_PAGE_COMING_SOON);     }
-static void handleDiagnostics()         { sServer.send(200, "text/html", WEB_PAGE_DIAGNOSTICS);      }
-static void handleConfigConnectivity()  { sServer.send(200, "text/html", WEB_PAGE_CONFIG_CONNECTIVITY); }
+static void handleConfigGeneral()       { sServer.send_P(200, "text/html", WEB_PAGE_GENERAL);        }
+static void handleConfigWifi()          { sServer.send_P(200, "text/html", WEB_PAGE_WIFI);            }
+static void handleConfigXbee()          { sServer.send_P(200, "text/html", WEB_PAGE_XBEE);            }
+static void handleConfigAudio()         { sServer.send_P(200, "text/html", WEB_PAGE_AUDIO);           }
+static void handleConfigRcRadio()       { sServer.send_P(200, "text/html", WEB_PAGE_RC_RADIO);        }
+static void handleConfigDome()          { sServer.send_P(200, "text/html", WEB_PAGE_DOME);            }
+static void handleConfigSerialStrings() { sServer.send_P(200, "text/html", WEB_PAGE_SERIAL_STRINGS);  }
+static void handleConfigServos()        { sServer.send_P(200, "text/html", WEB_PAGE_SERVOS);           }
+static void handleConfigControllers()   { sServer.send_P(200, "text/html", WEB_PAGE_CONTROLLERS);     }
+static void handleMonitor()             { sServer.send_P(200, "text/html", WEB_PAGE_MONITOR);         }
+static void handleUpdatePage()          { sServer.send_P(200, "text/html", WEB_PAGE_UPDATE);          }
+static void handleDroidControl()        { sServer.send_P(200, "text/html", WEB_PAGE_DROID_CONTROL);   }
+static void handleConfigGadgets()       { sServer.send_P(200, "text/html", WEB_PAGE_GADGETS);         }
+static void handleSafety()             { sServer.send_P(200, "text/html", WEB_PAGE_SAFETY);           }
+static void handleComingSoon()          { sServer.send_P(200, "text/html", WEB_PAGE_COMING_SOON);     }
+static void handleDiagnostics()         { sServer.send_P(200, "text/html", WEB_PAGE_DIAGNOSTICS);      }
+static void handleConfigConnectivity()  { sServer.send_P(200, "text/html", WEB_PAGE_CONFIG_CONNECTIVITY); }
 
 // ---------------------------------------------------------------------------
 // BT API endpoints
