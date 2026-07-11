@@ -1,6 +1,8 @@
 #pragma once
 
 #include "ReelTwo.h"
+#include "core/SetupEvent.h"
+#include "core/AnimatedEvent.h"
 #include "JoystickController.h"
 
 // Maximum number of devices returned by a BLE scan.
