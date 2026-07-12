@@ -2,6 +2,7 @@
 #include "dome_position_math.h"
 #include "xbee_spi.h"
 #include "bt_gamepad.h"
+#include "config_file.h"
 
 // Hardware globals defined in src/globals.cpp.
 // ServoDispatch& avoids including ServoDispatchDirect.h here, which would
@@ -79,7 +80,15 @@ void AmidalaController::setup() {
 #endif
 
   fConsole.println(F("Reading Config File"));
-  fConsole.setMinimal(!loadConfig());
+  bool configLoaded = loadConfig();
+  fConsole.setMinimal(!configLoaded);
+#ifndef VMUSIC_SERIAL
+  // Self-heal config.txt: append defaults for any scalar setting that's
+  // missing, so newly-added settings never end up in an undocumented,
+  // invisible-to-the-user in-memory-only state.
+  if (configLoaded)
+    ensureConfigDefaults(params);
+#endif
   fConfig.showCurrentConfiguration();
 
   if (params.wifion)

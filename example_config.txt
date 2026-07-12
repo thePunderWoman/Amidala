@@ -41,6 +41,9 @@ acklvl=0
 # --- General System Settings ---
 # Global Volume (0-100)
 volume=50
+# HCR channel A/B initial volume (0-100, defaults to match volume above)
+volumeChA=50
+volumeChB=50
 # Startup Sound: Play a sound when the robot boots (y/n)
 startup=y
 # Random Sounds: Start in random sound mode on boot (y/n)
@@ -60,6 +63,12 @@ auto=y
 mindelay=20
 maxdelay=45
 
+# --- Sound Banks ---
+# Format: sb=dirname,numfiles,r|s  (r=random order, s=sequential; default r)
+# One entry per bank, in the order they should be numbered. None configured
+# by default (0 banks).
+# sb=snd1,20,r
+
 # --- Aux I2C ---
 # This board's I2C address (0 = Master, used for auxiliary I2C output)
 myi2c=0
@@ -69,6 +78,8 @@ serialbaud=9600
 serialdelim=124
 # ASCII code for EOL (default 13 = Carriage Return)
 serialeol=13
+# Aux Serial 3: enable a second software-serial output on UART2 (y/n)
+auxserial3=n
 
 # --- Dome Motor Control ---
 # Default Dome Mode: 0=Manual, 1=Auto-Home, 2=Random, 3=Seek
@@ -88,6 +99,8 @@ domespeedseek=60
 # Minimum motor speed % when approaching a target (0-30).
 # Lower values allow gentler final approach and reduce overshoot.
 domespeedmin=5
+# Deceleration zone: degrees before target where the dome starts slowing down
+domedecelzone=30
 # Delays between movements (Seconds)
 domeseekmin=8
 domeseekmax=25
@@ -96,6 +109,11 @@ domeseekl=40
 domeseekr=40
 # Enable Dome Control on RC Channel 6 (y/n)
 domech6=n
+# Dome IMU: use an onboard IMU to assist homing/leveling (y/n)
+domeimu=y
+# domespmin=/domespmax= (analog dome-position potentiometer calibration)
+# exist in params but their config.txt parsing is currently commented out
+# in config.cpp -- not a working option yet, omitted here on purpose.
 
 # --- RoboClaw Dome Drive Settings (DOME_DRIVE_ROBOCLAW only) ---
 # RoboClaw packet-serial address (128-135, default 128)
@@ -108,6 +126,22 @@ domercqpps=5280
 domefront=90
 # Milliseconds of stall before obstruction is declared (100-5000)
 domestall=500
+
+# --- WiFi Access Point ---
+# Enable the on-board WiFi soft-AP for the web configuration UI (y/n)
+wifion=y
+# Network name broadcast by the AP (max 32 chars)
+wifissid=amidala
+# WPA2 passphrase (min 8, max 64 chars)
+wifipassword=Astromech
+
+# --- Bluetooth Controller ---
+# Enable the BLE HID gamepad at runtime (default n — opt-in since it
+# requires pairing a device via the web UI's connectivity page).
+btcontrolleron=n
+# MAC address of a paired BLE HID gamepad (AA:BB:CC:DD:EE:FF format).
+# Leave blank/omitted to connect to any BLE HID device found during scan.
+# btaddr=AA:BB:CC:DD:EE:FF
 
 # --- Gestures for Special Toggles ---
 # These set which stick gesture string toggles which mode (default values)
@@ -131,6 +165,9 @@ s=6,0,180,90,10,0,50,0
 #   ID is a stable numeric identifier (never changes, even after reordering or
 #   deletion of other strings).  Name is a short human-readable label.
 #   The string after the second | is what gets sent over serial to child boards.
+#
+# hidden=2,4  Comma-separated 1-based sstr IDs to hide from the Droid Control
+#   page (still usable from button/gesture mappings). None hidden by default.
 
 
 # --- Button Mappings ---
@@ -139,9 +176,12 @@ s=6,0,180,90,10,0,50,0
 #   lb= Long press   — fires after holding the button for 3 seconds (3000 ms);
 #                      the normal short-press release event is suppressed so only
 #                      the long-press action runs.  Both use the same format.
+#   db= Digital Output button — same format again, drives a digital output
+#                      board input instead of the drive/dome controller.
 #
 # Format: b=ButtonNum,Action,Arg1,Arg2,SerialID
 #         lb=ButtonNum,Action,Arg1,Arg2,SerialID
+#         db=ButtonNum,Action,Arg1,Arg2,SerialID
 #   SerialID (optional last field) is the stable ID of a serial string (from sstr=ID|...).
 #   For Action=5 (SerStr) it is the primary reference.  For other actions it is an
 #   optional side-effect string fired alongside the primary action.
@@ -218,6 +258,16 @@ altbtn=7
 altdomestick=1
 volumewheel=1
 altvolumewheel=2
+# mutebutton=N  Which button (1-9, same numbering as altbtn) toggles HCR
+#   mute (default 0 = none).
+mutebutton=0
+# b9=  What dome-stick square (button 9) does, since it has no dedicated
+#   action slot of its own: y/b=normal button action, n/k=Enable/Disable
+#   Remotes (default), s=Slow/Fast Mode toggle, d=Enable/Disable Drives.
+b9=n
+# dbtimeout=N  Window (ms) within which a second press counts as a
+#   double-press (default 300).
+dbtimeout=300
 
 # lb=1,
 # lb=2,

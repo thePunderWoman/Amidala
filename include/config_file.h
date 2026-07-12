@@ -10,6 +10,8 @@
 
 #pragma once
 
+#include "params.h"
+
 // ---------------------------------------------------------------------------
 // updateConfigFile — update or insert a single key=value line in /config.txt.
 //
@@ -68,5 +70,79 @@ inline bool updateConfigFile(const char* key, const char* value) {
     if (!wf) return false;
     wf.print(out);
     wf.close();
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// ensureConfigDefaults — append "key=value" to /config.txt for any scalar
+// setting that isn't already present, using its current (already-defaulted)
+// value from params.
+//
+// Unlike updateConfigFile(), this NEVER overwrites an existing key -- it only
+// adds lines for keys that are completely absent, so a setting added after a
+// user's config.txt was written self-heals into the file (instead of
+// silently living only in an in-memory default forever, invisible to anyone
+// reading the file) without ever touching a value the user deliberately set.
+//
+// Deliberately excludes repeatable/list-style keys (b=, lb=, ab=, db=, g=,
+// sstr=, sb=, gadget=, cat=, estopstr=, resumestr=, f=) since "0 or more of
+// these" has no single sensible default line to add, and domespmin=/
+// domespmax=, whose config.txt parsing is currently commented out in
+// AmidalaConfig::processConfig() (not a working option yet).
+// Keep this list in sync with the scalar keys processConfig() understands.
+//
+// Returns false only on SD read/write failure; true (including when nothing
+// was missing) otherwise.
+// ---------------------------------------------------------------------------
+inline bool ensureConfigDefaults(const AmidalaParameters& params) {
+    struct DefaultableConfigKey {
+        const char* key;  // includes trailing '='
+        String value;
+    };
+    auto fmtBool = [](bool b) { return String(b ? "y" : "n"); };
+    const DefaultableConfigKey keys[] = {
+        {"volumeChA=",      String(params.volumeChA)},
+        {"volumeChB=",      String(params.volumeChB)},
+        {"auxserial3=",     fmtBool(params.auxserial3)},
+        {"domedecelzone=",  String(params.domedecelzone)},
+        {"domeimu=",        fmtBool(params.domeimu)},
+        {"wifion=",         fmtBool(params.wifion)},
+        {"wifissid=",       String(params.wifiSSID)},
+        {"wifipassword=",   String(params.wifiPassword)},
+        {"btcontrolleron=", fmtBool(params.btcontrolleron)},
+        {"btaddr=",         String(params.btaddr)},
+        {"mutebutton=",     String(params.mutebutton)},
+        {"b9=",             String(params.b9)},
+        {"dbtimeout=",      String(params.dbtimeout)},
+    };
+    constexpr unsigned kNumKeys = sizeof(keys) / sizeof(keys[0]);
+
+    File f = SD.open("/config.txt", "r");
+    if (!f) return false;
+
+    bool present[kNumKeys] = {};
+    while (f.available()) {
+        String line = f.readStringUntil('\n');
+        if (line.endsWith("\r")) line.remove(line.length() - 1);
+        if (line.startsWith("#") || line.startsWith("//")) continue;
+        for (unsigned i = 0; i < kNumKeys; i++) {
+            if (!present[i] && line.startsWith(keys[i].key))
+                present[i] = true;
+        }
+    }
+    f.close();
+
+    String toAdd;
+    for (unsigned i = 0; i < kNumKeys; i++) {
+        if (!present[i])
+            toAdd += String(keys[i].key) + keys[i].value + "\n";
+    }
+    if (toAdd.length() == 0) return true;  // nothing missing
+
+    File out = SD.open("/config.txt", "a");
+    if (!out) return false;
+    out.print("\n# --- Auto-added defaults for settings missing from this file ---\n");
+    out.print(toAdd);
+    out.close();
     return true;
 }

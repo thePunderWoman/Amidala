@@ -401,7 +401,7 @@ struct MockSDClass {
     return fileContent ? File(fileContent) : File();
   }
 
-  // 2-arg open: "r" or "w" (matches ESP32 SD.h signature)
+  // 2-arg open: "r", "w", or "a" (matches ESP32 SD.h / FILE_APPEND signature)
   File open(const char* name, const char* mode) {
     std::string n(name ? name : "");
     if (mode && mode[0] == 'r') {
@@ -412,6 +412,11 @@ struct MockSDClass {
     if (mode && mode[0] == 'w') {
       _fs[n] = "";
       return File(&_fs[n]);  // stable pointer: std::map doesn't invalidate on insert
+    }
+    if (mode && mode[0] == 'a') {
+      // Append: create if missing, but keep existing content otherwise.
+      if (_fs.find(n) == _fs.end()) _fs[n] = "";
+      return File(&_fs[n]);
     }
     return File();
   }
