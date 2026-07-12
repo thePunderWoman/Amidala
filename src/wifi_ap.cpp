@@ -1367,7 +1367,7 @@ static void handleApiBtScan() {
         sServer.send(400, "text/plain", "Bluetooth controller is disabled");
         return;
     }
-    gBTGamepad.startScan();
+    gBTGamepad.requestPairing();
     // Immediately return — results are polled via /api/bt/status
     sServer.send(200, "application/json", "{\"ok\":true}");
 }

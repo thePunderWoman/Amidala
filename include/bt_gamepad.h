@@ -4,6 +4,7 @@
 #include "core/SetupEvent.h"
 #include "core/AnimatedEvent.h"
 #include "JoystickController.h"
+#include "bt_scan_policy.h"
 
 // Maximum number of devices returned by a BLE scan.
 #define BT_SCAN_MAX_RESULTS 10
@@ -16,8 +17,9 @@ struct BTScanResult {
 
 // BLE HID gamepad that presents as a JoystickController.
 //
-// Connects to any BLE HID device (gamepad, joystick).  When btaddr is empty,
-// pairs with the first advertising HID device found during a scan.
+// Reconnects only to an already-paired device (btaddr); never scans for an
+// unspecified HID device on its own. Pairing with a new device only happens
+// via an explicit requestPairing() call (see the web UI's Connectivity page).
 //
 // Left analog stick → state.analog.stick.lx / .ly   (drive)
 // Right analog stick → state.analog.stick.rx / .ry  (dome via alt stick)
@@ -39,7 +41,10 @@ public:
     // --- Scanning ------------------------------------------------------------
 
     // Non-blocking: start a 5-second passive scan.  Results are available via
-    // getScanResults() after scanComplete() returns true.
+    // getScanResults() after scanComplete() returns true.  Only called
+    // internally (during an explicit pairing request) or directly by the web
+    // UI's "scan for devices" action -- never triggered automatically for an
+    // unpaired gamepad, see requestPairing().
     void startScan();
     bool isScanRunning() const { return fScanning; }
     bool scanComplete()  const { return fScanDone; }
@@ -47,6 +52,12 @@ public:
     const BTScanResult* getScanResults() const { return fScanResults; }
 
     // --- Pairing -------------------------------------------------------------
+
+    // Explicit, user-initiated discovery: scan for any HID device for up to
+    // BTScanPolicy::kPairingTimeoutMs, connecting to (and persisting as the
+    // new target) the first one found. This is the ONLY path that scans for
+    // an unspecified device -- animate() never does this on its own.
+    void requestPairing();
 
     // Persist a new target address and immediately attempt to connect.
     void pairWith(const char* addr);
@@ -88,7 +99,7 @@ private:
     int          fScanResultCount;
     BTScanResult fScanResults[BT_SCAN_MAX_RESULTS];
 
-    uint32_t fLastConnectAttemptMs;
+    BTScanPolicy fScanPolicy;
 
     void _attemptConnect();
     void _parseReport(const uint8_t* data, size_t len);
