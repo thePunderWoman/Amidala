@@ -45,10 +45,10 @@ inline void recoverI2CBus() {
 #endif
 }
 
-inline byte sendI2CCmd(byte addr, byte cmd) {
+inline uint8_t sendI2CCmd(uint8_t addr, uint8_t cmd) {
   Wire.beginTransmission(addr);
   Wire.write(cmd);
-  byte err = Wire.endTransmission();
+  uint8_t err = Wire.endTransmission();
   if (err != 0) {
     Serial.print(F("I2C err "));
     Serial.print(err);
@@ -60,10 +60,10 @@ inline byte sendI2CCmd(byte addr, byte cmd) {
   return err;
 }
 
-inline byte sendI2CStr(byte addr, const char *str) {
+inline uint8_t sendI2CStr(uint8_t addr, const char *str) {
   Wire.beginTransmission(addr);
   Wire.write(str);
-  byte err = Wire.endTransmission();
+  uint8_t err = Wire.endTransmission();
   if (err != 0) {
     Serial.print(F("I2C err "));
     Serial.print(err);
