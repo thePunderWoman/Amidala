@@ -26,10 +26,14 @@ void setup() {
   pinMode(SPI_SPARE_CS_PIN, OUTPUT);
   digitalWrite(SPI_SPARE_CS_PIN, HIGH);
 
-  SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
   // MISO is open-drain on most SD cards; pull it up so the line isn't
-  // floating when no device is actively driving it.
+  // floating when no device is actively driving it. Must happen BEFORE
+  // SPI.begin() claims the pin -- arduino-esp32 3.x's peripheral manager
+  // deinitializes a pin's existing peripheral claim (e.g. SPI_MASTER_MISO)
+  // whenever pinMode() reassigns it to plain GPIO, silently disconnecting
+  // MISO from the SPI controller's receive line if this runs afterward.
   pinMode(SPI_MISO_PIN, INPUT_PULLUP);
+  SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
 
   CONSOLE_SERIAL.begin(DEFAULT_BAUD_RATE);
   // Wait up to 3 s for USB-CDC to connect so boot log messages (including SD
