@@ -13,6 +13,9 @@
 #include "drive_config.h"
 #include "bt_gamepad.h"
 #include <BLEDevice.h>
+#include <esp_log.h>
+#include <esp_mac.h>
+#include <esp_wifi.h>
 
 static WebServer          sServer(80);
 static AmidalaController* sCtrl = nullptr;
@@ -1319,26 +1322,26 @@ static void handleUpdatePost() {
 // ---------------------------------------------------------------------------
 
 static void handleHome() {
-    sServer.send(200, "text/html", WEB_PAGE_HOME);
+    sServer.send_P(200, "text/html", WEB_PAGE_HOME);
 }
 
-static void handleConfigGeneral()       { sServer.send(200, "text/html", WEB_PAGE_GENERAL);        }
-static void handleConfigWifi()          { sServer.send(200, "text/html", WEB_PAGE_WIFI);            }
-static void handleConfigXbee()          { sServer.send(200, "text/html", WEB_PAGE_XBEE);            }
-static void handleConfigAudio()         { sServer.send(200, "text/html", WEB_PAGE_AUDIO);           }
-static void handleConfigRcRadio()       { sServer.send(200, "text/html", WEB_PAGE_RC_RADIO);        }
-static void handleConfigDome()          { sServer.send(200, "text/html", WEB_PAGE_DOME);            }
-static void handleConfigSerialStrings() { sServer.send(200, "text/html", WEB_PAGE_SERIAL_STRINGS);  }
-static void handleConfigServos()        { sServer.send(200, "text/html", WEB_PAGE_SERVOS);           }
-static void handleConfigControllers()   { sServer.send(200, "text/html", WEB_PAGE_CONTROLLERS);     }
-static void handleMonitor()             { sServer.send(200, "text/html", WEB_PAGE_MONITOR);         }
-static void handleUpdatePage()          { sServer.send(200, "text/html", WEB_PAGE_UPDATE);          }
-static void handleDroidControl()        { sServer.send(200, "text/html", WEB_PAGE_DROID_CONTROL);   }
-static void handleConfigGadgets()       { sServer.send(200, "text/html", WEB_PAGE_GADGETS);         }
-static void handleSafety()             { sServer.send(200, "text/html", WEB_PAGE_SAFETY);           }
-static void handleComingSoon()          { sServer.send(200, "text/html", WEB_PAGE_COMING_SOON);     }
-static void handleDiagnostics()         { sServer.send(200, "text/html", WEB_PAGE_DIAGNOSTICS);      }
-static void handleConfigConnectivity()  { sServer.send(200, "text/html", WEB_PAGE_CONFIG_CONNECTIVITY); }
+static void handleConfigGeneral()       { sServer.send_P(200, "text/html", WEB_PAGE_GENERAL);        }
+static void handleConfigWifi()          { sServer.send_P(200, "text/html", WEB_PAGE_WIFI);            }
+static void handleConfigXbee()          { sServer.send_P(200, "text/html", WEB_PAGE_XBEE);            }
+static void handleConfigAudio()         { sServer.send_P(200, "text/html", WEB_PAGE_AUDIO);           }
+static void handleConfigRcRadio()       { sServer.send_P(200, "text/html", WEB_PAGE_RC_RADIO);        }
+static void handleConfigDome()          { sServer.send_P(200, "text/html", WEB_PAGE_DOME);            }
+static void handleConfigSerialStrings() { sServer.send_P(200, "text/html", WEB_PAGE_SERIAL_STRINGS);  }
+static void handleConfigServos()        { sServer.send_P(200, "text/html", WEB_PAGE_SERVOS);           }
+static void handleConfigControllers()   { sServer.send_P(200, "text/html", WEB_PAGE_CONTROLLERS);     }
+static void handleMonitor()             { sServer.send_P(200, "text/html", WEB_PAGE_MONITOR);         }
+static void handleUpdatePage()          { sServer.send_P(200, "text/html", WEB_PAGE_UPDATE);          }
+static void handleDroidControl()        { sServer.send_P(200, "text/html", WEB_PAGE_DROID_CONTROL);   }
+static void handleConfigGadgets()       { sServer.send_P(200, "text/html", WEB_PAGE_GADGETS);         }
+static void handleSafety()             { sServer.send_P(200, "text/html", WEB_PAGE_SAFETY);           }
+static void handleComingSoon()          { sServer.send_P(200, "text/html", WEB_PAGE_COMING_SOON);     }
+static void handleDiagnostics()         { sServer.send_P(200, "text/html", WEB_PAGE_DIAGNOSTICS);      }
+static void handleConfigConnectivity()  { sServer.send_P(200, "text/html", WEB_PAGE_CONFIG_CONNECTIVITY); }
 
 // ---------------------------------------------------------------------------
 // BT API endpoints
@@ -1367,7 +1370,7 @@ static void handleApiBtScan() {
         sServer.send(400, "text/plain", "Bluetooth controller is disabled");
         return;
     }
-    gBTGamepad.startScan();
+    gBTGamepad.requestPairing();
     // Immediately return — results are polled via /api/bt/status
     sServer.send(200, "application/json", "{\"ok\":true}");
 }
@@ -1425,6 +1428,39 @@ static void handleApiBtForget() {
 // AmidalaWiFiAP
 // ---------------------------------------------------------------------------
 
+// arduino-esp32 mutes the underlying esp_wifi driver's own "wifi" tag logging
+// by default, so client join/auth failures are otherwise completely silent on
+// the console -- log AP client connect/disconnect (with the raw 802.11
+// disconnect reason code) so a failed join can actually be diagnosed.
+static const char* wifiDisconnectReasonStr(uint16_t reason) {
+    switch (reason) {
+        case 2:  return "AUTH_EXPIRE";
+        case 6:  return "CLASS2_FRAME_FROM_NONAUTH_STA";
+        case 7:  return "CLASS3_FRAME_FROM_NONASSOC_STA";
+        case 8:  return "DISASSOC_STA_HAS_LEFT";
+        case 14: return "MIC_FAILURE (wrong password)";
+        case 15: return "4WAY_HANDSHAKE_TIMEOUT (wrong password or too weak a signal)";
+        case 16: return "GROUP_KEY_UPDATE_TIMEOUT";
+        case 202:return "AUTH_FAIL";
+        default: return "unknown";
+    }
+}
+
+static void onWiFiApStaEvent(arduino_event_id_t event, arduino_event_info_t info) {
+    if (event == ARDUINO_EVENT_WIFI_AP_STACONNECTED) {
+        Serial.printf(
+            "[WiFi] station " MACSTR " connected (AID %d)\n",
+            MAC2STR(info.wifi_ap_staconnected.mac), info.wifi_ap_staconnected.aid
+        );
+    } else if (event == ARDUINO_EVENT_WIFI_AP_STADISCONNECTED) {
+        Serial.printf(
+            "[WiFi] station " MACSTR " disconnected, reason=%d (%s)\n",
+            MAC2STR(info.wifi_ap_stadisconnected.mac), info.wifi_ap_stadisconnected.reason,
+            wifiDisconnectReasonStr(info.wifi_ap_stadisconnected.reason)
+        );
+    }
+}
+
 void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaController* ctrl) {
     sCtrl = ctrl;
     sCtrl->fSerialTxLog = [](const char* s) {
@@ -1436,13 +1472,32 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sUserSerialCount = sCtrl->params.serialcount; // snapshot before builtin injection
     injectBuiltinSerialCmds();
 
+    esp_log_level_set("wifi", ESP_LOG_INFO);
+    WiFi.onEvent(onWiFiApStaEvent, ARDUINO_EVENT_WIFI_AP_STACONNECTED);
+    WiFi.onEvent(onWiFiApStaEvent, ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
+
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(ssid, password);
+    // Modem power-save timing on the AP interface can miss/mistime the WPA2
+    // 4-way handshake, intermittently making a correct password appear to be
+    // rejected (a long-standing arduino-esp32 quirk, not password-related --
+    // see espressif/arduino-esp32#5806). This robot isn't power-constrained
+    // enough for WiFi power-save to be worth that tradeoff.
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    bool apOk = WiFi.softAP(ssid, password);
     IPAddress ip = WiFi.softAPIP();
     Serial.print(F("[WiFi] AP \""));
     Serial.print(ssid);
     Serial.print(F("\" @ "));
-    Serial.println(ip);
+    Serial.print(ip);
+    Serial.printf(" (softAP()=%s)\n", apOk ? "ok" : "FAILED");
+
+    wifi_config_t apConf;
+    if (esp_wifi_get_config(WIFI_IF_AP, &apConf) == ESP_OK) {
+        Serial.printf(
+            "[WiFi] applied config: ssid=\"%s\" authmode=%d channel=%d password=\"%s\"\n",
+            apConf.ap.ssid, apConf.ap.authmode, apConf.ap.channel, apConf.ap.password
+        );
+    }
 
     // mDNS: advertise <ssid>.local
     if (MDNS.begin(ssid)) {

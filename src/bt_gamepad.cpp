@@ -66,8 +66,7 @@ BTGamepad::BTGamepad() :
     fScanDone(false),
     fDoConnect(false),
     fConnecting(false),
-    fScanResultCount(0),
-    fLastConnectAttemptMs(0)
+    fScanResultCount(0)
 {
     fTargetAddr[0]    = '\0';
     fConnectedAddr[0] = '\0';
@@ -106,17 +105,25 @@ void BTGamepad::startScan()
     }, false);
 }
 
+void BTGamepad::requestPairing()
+{
+    fScanPolicy.beginPairing(millis());
+    startScan();
+}
+
 void BTGamepad::pairWith(const char* addr)
 {
     setTargetAddr(addr);
     fDoConnect = true;
     fScanDone  = false;
     fScanning  = false;
+    fScanPolicy.onPaired(); // reset backoff so animate() retries promptly
 }
 
 void BTGamepad::forget()
 {
     fTargetAddr[0] = '\0';
+    fScanPolicy.reset();
 }
 
 void BTGamepad::disable()
@@ -128,28 +135,38 @@ void BTGamepad::disable()
     fConnectedAddr[0] = '\0';
     fConnecting = false;
     fDoConnect  = false;
+    fScanPolicy.reset();
     onDisconnect(); // clears fConnected so isConnected() is false immediately
 }
 
 void BTGamepad::animate()
 {
     if (fConnected) return;
-
-    // Retry connection every 10 s.
     uint32_t now = millis();
-    if (!fConnecting && (now - fLastConnectAttemptMs > 10000)) {
-        fLastConnectAttemptMs = now;
-        _attemptConnect();
+
+    if (fScanPolicy.isPairing()) {
+        // Explicit, user-requested discovery -- bounded by a timeout so we
+        // never scan for "any" device indefinitely.
+        if (!fScanPolicy.pairingActive(now)) return;
+        if (!fScanning) startScan();
+        return;
     }
+
+    // Never scan automatically for an unspecified device -- only try to
+    // reconnect to an already-paired target, and back off if it can't be
+    // found (e.g. powered off or dead battery) so we don't keep the BLE
+    // radio busy indefinitely.
+    if (fTargetAddr[0] == '\0' || fConnecting) return;
+    if (!fScanPolicy.reconnectDue(now)) return;
+
+    _attemptConnect();
+    if (!fConnected) fScanPolicy.onReconnectFailed();
 }
 
 void BTGamepad::_attemptConnect()
 {
-    // If we have no target, scan first to find any HID device.
-    if (fTargetAddr[0] == '\0') {
-        startScan();
-        return;
-    }
+    // Defensive only -- animate() never reaches here without a target.
+    if (fTargetAddr[0] == '\0') return;
 
     fConnecting = true;
     BLEAddress bleAddr(fTargetAddr);
@@ -196,6 +213,7 @@ void BTGamepad::_onConnected(const char* addr)
     strncpy(fConnectedAddr, addr ? addr : "", sizeof(fConnectedAddr) - 1);
     fConnectedAddr[sizeof(fConnectedAddr) - 1] = '\0';
     fConnected = true;
+    fScanPolicy.onPaired(); // reset backoff/pairing state on any successful connect
     onConnect();
     notify();
 }
@@ -217,8 +235,11 @@ void BTGamepad::_onScanResult(const char* addr, const char* name, int rssi)
     r.name[sizeof(r.name) - 1] = '\0';
     r.rssi = rssi;
 
-    // If this matches our target (or we'll take any), trigger connect.
-    if (fTargetAddr[0] == '\0' || strcasecmp(addr, fTargetAddr) == 0) {
+    // Only auto-select an unspecified device while an explicit pairing
+    // request is active (see requestPairing()) -- a reconnect-only scan for
+    // a known target never gets here with an empty fTargetAddr.
+    if (fScanPolicy.isPairing() &&
+        (fTargetAddr[0] == '\0' || strcasecmp(addr, fTargetAddr) == 0)) {
         setTargetAddr(addr);
         BLEDevice::getScan()->stop();
         fDoConnect = true;

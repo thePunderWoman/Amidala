@@ -112,8 +112,8 @@ struct AmidalaParameters {
   bool rndon;
   bool ackon;
   char acktype;
-  unsigned mindelay;
-  unsigned maxdelay;
+  uint32_t mindelay;
+  uint32_t maxdelay;
   bool mix12;
   uint8_t myi2c;
   uint32_t serialbaud;

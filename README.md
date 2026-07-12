@@ -13,6 +13,8 @@
 
 **Amidala** is an ESP32-S3 firmware for controlling your droids. It runs on the [Amidala PCB](PCB/) — a PCB designed to make wiring a full-featured droid build straightforward — and is compatible with both the N8R2 (8 MB flash) and N16R8 (16 MB flash) module variants.
 
+> **Building from source?** Flash size and PSRAM mode are baked into the firmware image at build time, so you need to tell PlatformIO which module your board has *before* your first flash — it can't be changed later via the web UI. Check the label on your ESP32-S3 module (or your PCB order) for "N8R2" or "N16R8", then build/upload with the matching environment: `pio run -e esp32s3-n16r8 -t upload` (the default) or `pio run -e esp32s3-n8r2 -t upload`.
+
 > **[Amidala Wizards →](https://thepunderwoman.github.io/Amidala/)** — browser-based tools for setting up your droid. Includes a **Config Converter** for migrating Stealth RC / OG Amidala configs to the current format.
 
 ---

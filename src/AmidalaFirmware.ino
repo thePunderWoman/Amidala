@@ -6,10 +6,20 @@
 #include "drive_config.h"
 #include "controller.h"
 #include <esp_ota_ops.h>
+#include <esp_heap_caps.h>
 
 AmidalaController amidala;
 
 void setup() {
+  // Internal DRAM is scarce (WiFi's own DMA buffers alone use ~50KB of the
+  // ~140KB available), while PSRAM sits almost entirely unused by default --
+  // the stock threshold below which malloc()/new always stay internal is
+  // 4096 bytes, so most of WebServer/mDNS/lwIP's smaller allocations never
+  // get a chance at PSRAM. Lower it so they do, freeing internal DRAM for
+  // WiFi's own buffers (which can't be moved -- they require DMA-capable
+  // memory) and the per-connection state it needs when a client joins.
+  heap_caps_malloc_extmem_enable(64);
+
   esp_ota_mark_app_valid_cancel_rollback();
 
   REELTWO_READY();
@@ -26,10 +36,14 @@ void setup() {
   pinMode(SPI_SPARE_CS_PIN, OUTPUT);
   digitalWrite(SPI_SPARE_CS_PIN, HIGH);
 
-  SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
   // MISO is open-drain on most SD cards; pull it up so the line isn't
-  // floating when no device is actively driving it.
+  // floating when no device is actively driving it. Must happen BEFORE
+  // SPI.begin() claims the pin -- arduino-esp32 3.x's peripheral manager
+  // deinitializes a pin's existing peripheral claim (e.g. SPI_MASTER_MISO)
+  // whenever pinMode() reassigns it to plain GPIO, silently disconnecting
+  // MISO from the SPI controller's receive line if this runs afterward.
   pinMode(SPI_MISO_PIN, INPUT_PULLUP);
+  SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
 
   CONSOLE_SERIAL.begin(DEFAULT_BAUD_RATE);
   // Wait up to 3 s for USB-CDC to connect so boot log messages (including SD
