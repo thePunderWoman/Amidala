@@ -5,8 +5,8 @@
 //
 // Target: ESP32-S3 WROOM1 N16R8 — Amidala custom PCB v1.1.
 //
-// Note: drive-system serial symbols (DOME_DRIVE_SERIAL, RDH_SERIAL) come from
-// drive_config.h and must be resolved before this header is included.
+// Note: RDH_SERIAL (see rdh_serial.h) must be resolved before this header is
+// included — it shares Serial0's RX/TX pins with the SERIAL macro below.
 
 #pragma once
 
@@ -86,7 +86,11 @@
 
 // SERIAL (downstream WCB output) — ESP32 Arduino.h defines SERIAL as 0x0
 // (a UART index constant).  Undefine it so we can use SERIAL as a Stream alias.
-#if !defined(DOME_DRIVE_SERIAL) && !defined(RDH_SERIAL)
+// DOME_DRIVE_SERIAL / DRIVE_SERIAL no longer need to suppress this: drive and
+// dome serial links use AUX_SERIAL (UART2), not Serial0 — see
+// drive_config.h. Only RDH_SERIAL, which shares Serial0's RX/TX pins (see
+// AmidalaFirmware.ino), still genuinely conflicts.
+#if !defined(RDH_SERIAL)
 #undef  SERIAL
 #define SERIAL  Serial0          // UART0, GPIO43/44 — WCB serial out
 #endif

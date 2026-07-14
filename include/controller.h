@@ -11,6 +11,12 @@
 
 #include "drive_config.h"
 #include "ReelTwo.h"
+// Needed unconditionally: globals.cpp/controller.cpp/servo.cpp reference the
+// ServoDispatch base class for the physical PWM servo outputs regardless of
+// DRIVE_SYSTEM. TankDrivePWM.h and TankDriveRoboteq.h happen to pull this in
+// transitively, but TankDriveSabertooth.h (packet-serial, no PWM) does not —
+// include it directly so DRIVE_SYSTEM_SABER builds don't lose it.
+#include "ServoDispatch.h"
 #if DRIVE_SYSTEM == DRIVE_SYSTEM_PWM
 #include "drive/TankDrivePWM.h"
 #endif
@@ -18,7 +24,7 @@
     DRIVE_SYSTEM <= DRIVE_SYSTEM_ROBOTEQ_PWM_SERIAL
 #include "drive/TankDriveRoboteq.h"
 #endif
-#if DOME_DRIVE == DRIVE_SYSTEM_SABER
+#if DRIVE_SYSTEM == DRIVE_SYSTEM_SABER
 #include "drive/TankDriveSabertooth.h"
 #endif
 #if DOME_DRIVE == DOME_DRIVE_PWM
