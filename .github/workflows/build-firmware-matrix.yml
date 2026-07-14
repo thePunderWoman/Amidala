@@ -61,6 +61,16 @@ jobs:
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
 
+      # HumanCyborgRelationsAPI is deliberately git-ignored (lib/*) and expected
+      # to be installed manually per lib/README.md — the esp32s3 environments
+      # rely on this local copy rather than a lib_deps URL (env:native is the
+      # only environment that fetches it automatically, via its own lib_deps
+      # entry). A fresh checkout has no lib/ contents, so CI must install it
+      # itself before building. Pinned to the same tag as env:native's lib_deps
+      # in platformio.ini.
+      - name: Install HumanCyborgRelationsAPI
+        run: git clone --branch 1.0.1 --depth 1 https://github.com/thePunderWoman/HumanCyborgRelationsAPI lib/HumanCyborgRelationsAPI
+
       - name: Build firmware
         env:
           PLATFORMIO_BUILD_FLAGS: "-D DRIVE_SYSTEM=${{ matrix.drive.value }} -D DOME_DRIVE=${{ matrix.dome.value }}"
