@@ -69,7 +69,7 @@ jobs:
       # itself before building. Pinned to the same tag as env:native's lib_deps
       # in platformio.ini.
       - name: Install HumanCyborgRelationsAPI
-        run: git clone --branch 1.0.1 --depth 1 https://github.com/thePunderWoman/HumanCyborgRelationsAPI lib/HumanCyborgRelationsAPI
+        run: git clone --branch 1.0.2 --depth 1 https://github.com/thePunderWoman/HumanCyborgRelationsAPI lib/HumanCyborgRelationsAPI
 
       - name: Build firmware
         env:
