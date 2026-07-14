@@ -97,7 +97,12 @@ void AmidalaController::setup() {
   // BT gamepad left stick drives when the primary XBee stick is absent.
   fTankDrive.setGuestStick(gBTGamepad);
   // BT gamepad right stick steers the dome when the XBee dome stick is absent.
+  // setAltDomeStick() only exists on our DomeDriveRoboclaw class — Reeltwo's
+  // DomeDrive base (used by DomeDrivePWM/DomeDriveSabertooth) has no
+  // alt-stick concept, so this degrades gracefully to unavailable there.
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
   fDomeDrive.setAltDomeStick(&gBTGamepad);
+#endif
   if (params.btcontrolleron) {
     gBTGamepad.setup();
     gBTGamepad.setTargetAddr(params.btaddr);

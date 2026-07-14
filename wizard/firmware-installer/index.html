@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amidala Firmware Installer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 780px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    header h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #63b3ed;
+      letter-spacing: -0.5px;
+    }
+
+    header p {
+      margin-top: 0.5rem;
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+
+    #release-line {
+      margin-top: 0.6rem;
+      font-size: 0.8rem;
+      color: #718096;
+    }
+
+    /* --- Step indicator (shared with config-converter) --- */
+    .step-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      margin-bottom: 2.5rem;
+    }
+
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: #4a5568;
+    }
+
+    .step-item.active { color: #63b3ed; }
+    .step-item.done   { color: #68d391; }
+
+    .step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid currentColor;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .step-item.done .step-num {
+      background: #68d391;
+      border-color: #68d391;
+      color: #1a202c;
+    }
+
+    .step-item.active .step-num {
+      background: #63b3ed;
+      border-color: #63b3ed;
+      color: #1a202c;
+    }
+
+    .step-label {
+      font-size: 0.85rem;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .step-connector {
+      width: 48px;
+      height: 2px;
+      background: #2d3748;
+      margin: 0 0.5rem;
+      flex-shrink: 0;
+    }
+
+    /* --- Cards --- */
+    .card {
+      background: #1a202c;
+      border: 1px solid #2d3748;
+      border-radius: 10px;
+      padding: 1.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .card h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #e2e8f0;
+      margin-bottom: 0.6rem;
+    }
+
+    .card p { color: #94a3b8; font-size: 0.9rem; line-height: 1.6; }
+
+    /* --- Form fields --- */
+    .field { margin-bottom: 1.25rem; }
+    .field:last-child { margin-bottom: 0; }
+
+    .field label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #e2e8f0;
+      margin-bottom: 0.4rem;
+    }
+
+    .field .hint {
+      font-size: 0.78rem;
+      color: #718096;
+      margin-top: 0.35rem;
+      line-height: 1.5;
+    }
+
+    select {
+      width: 100%;
+      background: #0f1117;
+      border: 1px solid #2d3748;
+      border-radius: 6px;
+      color: #e2e8f0;
+      font-size: 0.9rem;
+      padding: 0.6rem 0.75rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    select:focus { border-color: #63b3ed; }
+
+    /* --- Buttons --- */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 1.1rem;
+      border-radius: 6px;
+      border: 1px solid #2d3748;
+      background: #2d3748;
+      color: #e2e8f0;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .btn:hover { background: #3a4a5c; border-color: #4a5568; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn:disabled:hover { background: #2d3748; border-color: #2d3748; }
+
+    .btn-primary { background: #3182ce; border-color: #3182ce; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #2c72b8; border-color: #2c72b8; }
+
+    .btn-danger { background: #742a2a; border-color: #9b2c2c; color: #fed7d7; }
+    .btn-danger:hover:not(:disabled) { background: #9b2c2c; border-color: #9b2c2c; }
+
+    .btn-row {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .btn-row .spacer { flex: 1; }
+
+    /* --- Warning / error boxes --- */
+    .warn-box {
+      border: 1px solid #c59000;
+      background: rgba(197, 144, 0, 0.1);
+      color: #f6ad55;
+      padding: 0.9rem 1.1rem;
+      font-size: 0.82rem;
+      line-height: 1.7;
+      margin-bottom: 1.25rem;
+      border-radius: 6px;
+    }
+
+    .warn-box strong { display: block; margin-bottom: 0.3rem; color: #f6ad55; }
+
+    .error-box {
+      background: rgba(229, 62, 62, 0.1);
+      border: 1px solid #e53e3e;
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      color: #fc8181;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      margin-top: 0.75rem;
+      white-space: pre-wrap;
+      display: none;
+    }
+
+    /* --- Boot/reset instructions --- */
+    .boot-steps {
+      list-style: decimal;
+      margin: 0.75rem 0 0 1.25rem;
+      color: #cbd5e0;
+      font-size: 0.88rem;
+      line-height: 1.9;
+    }
+
+    /* --- Log terminal --- */
+    #log {
+      width: 100%;
+      background: #0f1117;
+      border: 1px solid #2d3748;
+      border-radius: 6px;
+      color: #a0aec0;
+      font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
+      font-size: 0.75rem;
+      line-height: 1.6;
+      padding: 0.75rem;
+      resize: vertical;
+      outline: none;
+    }
+
+    /* --- Progress --- */
+    .prog-wrap { margin: 1.2rem 0 0.4rem; }
+    .prog-label {
+      font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #718096;
+      margin-bottom: 0.6rem;
+    }
+    progress {
+      width: 100%;
+      height: 20px;
+      appearance: none;
+      -webkit-appearance: none;
+      border: 1px solid #2d3748;
+      background: #0f1117;
+      display: block;
+      border-radius: 4px;
+    }
+    progress::-webkit-progress-bar { background: #0f1117; border-radius: 4px; }
+    progress::-webkit-progress-value { background: #3182ce; border-radius: 4px; transition: width 0.3s ease; }
+    progress::-moz-progress-bar { background: #3182ce; }
+    .prog-pct {
+      font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+      color: #718096;
+      text-align: right;
+      margin-top: 0.35rem;
+    }
+
+    /* --- Success --- */
+    .success-box {
+      border: 1px solid #2d7a2d;
+      background: rgba(45, 122, 45, 0.1);
+      color: #68d391;
+      padding: 1.6rem;
+      text-align: center;
+      line-height: 2.1;
+      border-radius: 8px;
+    }
+    .success-box .icon { font-size: 2rem; display: block; }
+
+    /* --- Hidden / step visibility --- */
+    .hidden { display: none !important; }
+    .step-content { display: none; }
+    .step-content.active { display: block; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>Amidala Firmware Installer</h1>
+    <p>Build a firmware image for your exact hardware and flash it over USB — no toolchain required.</p>
+    <div id="release-line">Checking latest release…</div>
+  </header>
+
+  <div class="step-bar" id="step-bar">
+    <div class="step-item active" id="ind-1">
+      <div class="step-num">1</div>
+      <div class="step-label">Select Hardware</div>
+    </div>
+    <div class="step-connector"></div>
+    <div class="step-item" id="ind-2">
+      <div class="step-num">2</div>
+      <div class="step-label">Connect &amp; Flash</div>
+    </div>
+    <div class="step-connector"></div>
+    <div class="step-item" id="ind-3">
+      <div class="step-num">3</div>
+      <div class="step-label">Done</div>
+    </div>
+  </div>
+
+  <!-- ===== STEP 1: Select hardware ===== -->
+  <div id="step-1" class="step-content active">
+    <div class="card">
+      <h2>Tell us about your build</h2>
+      <p>These are compile-time hardware choices — pick the ones that match your droid. Everything else (WiFi, audio, buttons, gestures) is configured later through the web UI.</p>
+    </div>
+
+    <div class="card">
+      <div class="field">
+        <label for="sel-board">ESP32-S3 module</label>
+        <select id="sel-board">
+          <option value="n16r8">N16R8 — 16 MB Flash / 8 MB Octal PSRAM (default)</option>
+          <option value="n8r2">N8R2 — 8 MB Flash / 2 MB Quad PSRAM</option>
+        </select>
+        <div class="hint">Check the label on your ESP32-S3 module (or your PCB order) for "N8R2" or "N16R8" — this can't be changed later without reflashing.</div>
+      </div>
+
+      <div class="field">
+        <label for="sel-drive">Drive system</label>
+        <select id="sel-drive">
+          <option value="roboteq_pwm">RoboteQ — PWM control (default)</option>
+          <option value="pwm">PWM — basic RC-style ESC, controller mixes channels</option>
+          <option value="saber">Sabertooth — packet serial</option>
+          <option value="roboteq_serial">RoboteQ — serial control</option>
+          <option value="roboteq_pwm_serial">RoboteQ — PWM + serial</option>
+        </select>
+        <div class="hint">Whichever motor controller drives your legs.</div>
+      </div>
+
+      <div class="field">
+        <label for="sel-dome">Dome drive</label>
+        <select id="sel-dome">
+          <option value="roboclaw">RoboClaw (default)</option>
+          <option value="pwm">PWM — basic RC-style ESC</option>
+          <option value="saber">Sabertooth — packet serial</option>
+        </select>
+        <div class="hint">Whichever motor controller spins your dome.</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <div class="spacer"></div>
+      <button class="btn btn-primary" id="btn-step1-next">Continue →</button>
+    </div>
+  </div>
+
+  <!-- ===== STEP 2: Connect & flash ===== -->
+  <div id="step-2" class="step-content">
+    <div class="card">
+      <h2>Enter bootloader mode</h2>
+      <p>The ESP32-S3's USB port has no auto-reset circuitry, so you'll need to put it into bootloader mode by hand before connecting:</p>
+      <ol class="boot-steps">
+        <li>Plug the board in over USB, if it isn't already.</li>
+        <li>Hold the <strong>BOOT</strong> button.</li>
+        <li>Tap and release <strong>RESET</strong> (while still holding BOOT).</li>
+        <li>Release <strong>BOOT</strong>.</li>
+        <li>Click <strong>Connect</strong> below and select the board's serial port.</li>
+      </ol>
+    </div>
+
+    <div class="warn-box">
+      <strong>⚠ Before you flash</strong>
+      This installs fresh firmware and erases all saved settings on the board (WiFi credentials, config, calibration) — this is meant for first-time setup or a full reset, not an incremental update. Do not disconnect the board once flashing starts.
+    </div>
+
+    <div class="card">
+      <div class="btn-row" style="margin-top:0">
+        <button class="btn btn-primary" id="btn-connect">Connect</button>
+        <button class="btn btn-danger" id="btn-flash" disabled>Flash Firmware</button>
+        <div class="spacer"></div>
+        <span id="conn-status" style="font-size:0.82rem;color:#718096"></span>
+      </div>
+
+      <div class="prog-wrap hidden" id="prog-wrap">
+        <div class="prog-label" id="prog-label">Preparing…</div>
+        <progress id="prog" value="0" max="100"></progress>
+        <div class="prog-pct" id="prog-pct">0%</div>
+      </div>
+
+      <div id="log-wrap" class="hidden" style="margin-top:1.1rem">
+        <div class="prog-label">Log</div>
+        <textarea id="log" rows="10" readonly></textarea>
+      </div>
+
+      <div id="flash-error" class="error-box"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" id="btn-step2-back">← Back</button>
+    </div>
+  </div>
+
+  <!-- ===== STEP 3: Done ===== -->
+  <div id="step-3" class="step-content">
+    <div class="card">
+      <div class="success-box">
+        <span class="icon">&#10003;</span>
+        Flash complete — your board is rebooting into the new firmware.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Next steps</h2>
+      <p>Once the board reboots, it broadcasts its own WiFi access point — connect to it and open the web UI to finish setup (WiFi, audio, buttons, gestures, and more).</p>
+      <p style="margin-top:0.75rem">Migrating an existing Stealth RC or OG Amidala config? Use the <a href="../config-converter/" style="color:#63b3ed">Config Converter</a> to bring your old settings forward.</p>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" id="btn-restart">Flash Another Board</button>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script src="flasher.js"></script>
+<script>
+'use strict';
+
+const REPO = 'thePunderWoman/Amidala';
+
+let releaseTag = null;
+let releaseAssets = [];
+
+// ============================================================
+//  Step navigation
+// ============================================================
+
+function showStep(n) {
+  document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
+  document.getElementById('step-' + n).classList.add('active');
+  ['ind-1', 'ind-2', 'ind-3'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.classList.remove('active', 'done');
+    if (i + 1 < n) el.classList.add('done');
+    else if (i + 1 === n) el.classList.add('active');
+  });
+}
+
+document.getElementById('btn-step1-next').addEventListener('click', () => showStep(2));
+document.getElementById('btn-step2-back').addEventListener('click', () => showStep(1));
+document.getElementById('btn-restart').addEventListener('click', () => {
+  document.getElementById('btn-flash').disabled = true;
+  document.getElementById('conn-status').textContent = '';
+  document.getElementById('prog-wrap').classList.add('hidden');
+  document.getElementById('log-wrap').classList.add('hidden');
+  document.getElementById('log').value = '';
+  document.getElementById('flash-error').style.display = 'none';
+  connectedPort = null;
+  showStep(1);
+});
+
+// ============================================================
+//  Latest release lookup
+// ============================================================
+
+async function loadLatestRelease() {
+  const line = document.getElementById('release-line');
+  try {
+    const resp = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    releaseTag = data.tag_name;
+    releaseAssets = data.assets || [];
+    line.textContent = `Installing ${releaseTag}`;
+  } catch (e) {
+    line.textContent = 'Could not check the latest release — flashing will retry this later.';
+  }
+}
+loadLatestRelease();
+
+// ============================================================
+//  Step 2: connect + flash
+// ============================================================
+
+let connectedPort = null;
+
+function appendLog(msg) {
+  const log = document.getElementById('log');
+  log.value += (log.value ? '\n' : '') + msg;
+  log.scrollTop = log.scrollHeight;
+}
+
+function setStatus(msg) {
+  document.getElementById('conn-status').textContent = msg;
+}
+
+function setProgress(written, total) {
+  const wrap = document.getElementById('prog-wrap');
+  wrap.classList.remove('hidden');
+  const pct = total > 0 ? Math.round((written / total) * 100) : 0;
+  document.getElementById('prog').value = pct;
+  document.getElementById('prog-pct').textContent = pct + '%';
+}
+
+function showFlashError(msg) {
+  const el = document.getElementById('flash-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+document.getElementById('btn-connect').addEventListener('click', async () => {
+  const errEl = document.getElementById('flash-error');
+  errEl.style.display = 'none';
+
+  if (!('serial' in navigator)) {
+    showFlashError(
+      'Web Serial is not available in this browser. Use a Chromium-based browser ' +
+      '(Chrome, Edge, Opera) over HTTPS or localhost.'
+    );
+    return;
+  }
+
+  try {
+    connectedPort = await navigator.serial.requestPort();
+    setStatus('Port selected — ready to flash');
+    document.getElementById('btn-flash').disabled = false;
+  } catch (e) {
+    // User cancelled the port picker — not an error worth surfacing loudly.
+    if (e.name !== 'NotFoundError') showFlashError(`Could not open serial port: ${e.message}`);
+  }
+});
+
+document.getElementById('btn-flash').addEventListener('click', async () => {
+  const board = document.getElementById('sel-board').value;
+  const drive = document.getElementById('sel-drive').value;
+  const dome  = document.getElementById('sel-dome').value;
+
+  const btnFlash    = document.getElementById('btn-flash');
+  const btnConnect  = document.getElementById('btn-connect');
+  const errEl       = document.getElementById('flash-error');
+  const logWrap     = document.getElementById('log-wrap');
+
+  errEl.style.display = 'none';
+  logWrap.classList.remove('hidden');
+  document.getElementById('log').value = '';
+  btnFlash.disabled = true;
+  btnConnect.disabled = true;
+
+  try {
+    if (!releaseTag) await loadLatestRelease();
+    if (!releaseTag) throw new Error('Could not determine the latest release — check your connection and try again.');
+
+    const filename = `amidala-${board}-drive_${drive}-dome_${dome}.bin`;
+    appendLog(`Looking for ${filename} in ${releaseTag}…`);
+    const asset = releaseAssets.find(a => a.name === filename);
+    if (!asset) {
+      throw new Error(
+        `No prebuilt firmware found for this combination in ${releaseTag} (looked for "${filename}"). ` +
+        `This release may predate the installer wizard, or that exact combination hasn't been built yet.`
+      );
+    }
+
+    setStatus('Downloading firmware…');
+    appendLog(`Downloading ${asset.name} (${Math.round(asset.size / 1024)} KB)…`);
+    const fwResp = await fetch(asset.browser_download_url);
+    if (!fwResp.ok) throw new Error(`Download failed: HTTP ${fwResp.status}`);
+    const imageBuf = await fwResp.arrayBuffer();
+    appendLog('Download complete.');
+
+    await flashFirmware(connectedPort, board, imageBuf, {
+      onProgress: setProgress,
+      onLog: appendLog,
+      onStatus: setStatus,
+    });
+
+    showStep(3);
+  } catch (e) {
+    showFlashError(e.message || String(e));
+    setStatus('Failed');
+  } finally {
+    btnFlash.disabled = false;
+    btnConnect.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

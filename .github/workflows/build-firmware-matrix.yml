@@ -1,0 +1,94 @@
+name: Build Firmware Installer Matrix
+
+# Builds every DRIVE_SYSTEM x DOME_DRIVE x board combination and attaches the
+# resulting single-file flashable images (firmware.factory.bin, renamed per
+# combo) to the GitHub Release that triggered the run. The firmware installer
+# wizard (wizard/firmware-installer/) fetches these by filename to flash a
+# board over Web Serial — see wizard/firmware-installer/vendor/README.md.
+#
+# Intentionally does NOT run on push/PR — this is a 30-job matrix and would
+# be wasteful to run on every merge. It only runs when a release is actually
+# published (the existing manual release process), or on manual dispatch for
+# re-runs/backfills.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach binaries to (defaults to the latest release)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.board }} / drive=${{ matrix.drive.slug }} / dome=${{ matrix.dome.slug }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [esp32s3-n16r8, esp32s3-n8r2]
+        drive:
+          - { slug: pwm, value: 1 }
+          - { slug: saber, value: 2 }
+          - { slug: roboteq_pwm, value: 3 }
+          - { slug: roboteq_serial, value: 4 }
+          - { slug: roboteq_pwm_serial, value: 5 }
+        dome:
+          - { slug: saber, value: 2 }
+          - { slug: pwm, value: 3 }
+          - { slug: roboclaw, value: 4 }
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio-${{ matrix.board }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: ${{ runner.os }}-pio-
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Build firmware
+        env:
+          PLATFORMIO_BUILD_FLAGS: "-D DRIVE_SYSTEM=${{ matrix.drive.value }} -D DOME_DRIVE=${{ matrix.dome.value }}"
+        run: pio run -e ${{ matrix.board }}
+
+      - name: Rename combined image
+        id: rename
+        run: |
+          board_slug=$(echo "${{ matrix.board }}" | sed 's/^esp32s3-//')
+          name="amidala-${board_slug}-drive_${{ matrix.drive.slug }}-dome_${{ matrix.dome.slug }}.bin"
+          cp ".pio/build/${{ matrix.board }}/firmware.factory.bin" "$name"
+          echo "filename=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Determine release tag
+        id: tag
+        run: |
+          tag="${{ github.event.release.tag_name }}"
+          if [ -z "$tag" ]; then
+            tag="${{ inputs.tag }}"
+          fi
+          if [ -z "$tag" ]; then
+            tag=$(gh release view --json tagName -q .tagName)
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ steps.tag.outputs.tag }}" "${{ steps.rename.outputs.filename }}" --clobber

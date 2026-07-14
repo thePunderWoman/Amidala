@@ -15,9 +15,13 @@
 #define DRIVE_SYSTEM_ROBOTEQ_SERIAL     4
 #define DRIVE_SYSTEM_ROBOTEQ_PWM_SERIAL 5
 
-// Active selection (uncomment the one in use):
+// Active selection (uncomment the one in use). Guarded by #ifndef so a build
+// can also override it via `-D DRIVE_SYSTEM=<n>` (used by the firmware
+// installer wizard's CI matrix build) without editing this file.
 // #define DRIVE_SYSTEM DRIVE_SYSTEM_ROBOTEQ_PWM_SERIAL
+#ifndef DRIVE_SYSTEM
 #define DRIVE_SYSTEM DRIVE_SYSTEM_ROBOTEQ_PWM
+#endif
 
 // ---- Dome drive type constants -----------------------------------------------
 
@@ -25,10 +29,14 @@
 #define DOME_DRIVE_PWM      3
 #define DOME_DRIVE_ROBOCLAW 4
 
-// Active selection (uncomment the one in use):
+// Active selection (uncomment the one in use). Guarded by #ifndef so a build
+// can also override it via `-D DOME_DRIVE=<n>` (used by the firmware
+// installer wizard's CI matrix build) without editing this file.
 // #define DOME_DRIVE DOME_DRIVE_PWM
 // #define DOME_DRIVE DOME_DRIVE_SABER
+#ifndef DOME_DRIVE
 #define DOME_DRIVE DOME_DRIVE_ROBOCLAW
+#endif
 
 // ---- Speed and acceleration parameters --------------------------------------
 
@@ -140,18 +148,31 @@
 
 // ---- Drive system resolution (derived — do not edit) ------------------------
 
+// Drive/dome serial links use AUX_SERIAL (UART2, GPIO21/38 — see
+// pin_config.h) rather than Serial0, which is reserved for the WCB
+// downstream output.
 #if DRIVE_SYSTEM == DRIVE_SYSTEM_SABER
-#define DRIVE_SERIAL      Serial0   // UART0, GPIO43/44
-#define DOME_DRIVE_SERIAL DRIVE_SERIAL
+#define DRIVE_SERIAL      AUX_SERIAL
+#define DRIVE_BAUD_RATE   9600      // Sabertooth packet-serial default
+// Do NOT also define DOME_DRIVE_SERIAL here: AmidalaFirmware.ino's
+// Serial0.begin() already prefers DRIVE_SERIAL over DOME_DRIVE_SERIAL, so
+// this was never needed for that call — and defining it unconditionally
+// (regardless of DOME_DRIVE) leaked into pin_config.h's
+// `#if !defined(DOME_DRIVE_SERIAL)` guard, silently disabling the SERIAL
+// macro (WCB downstream output) for any Sabertooth-drive build with a
+// non-Sabertooth dome. The block below already sets DOME_DRIVE_SERIAL
+// correctly when the dome itself is Sabertooth.
 #define CHANNEL_MIXING    true  // premix channels before sending commands
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_PWM
 #define CHANNEL_MIXING    false // motor controller will mix the channels
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM
 #define CHANNEL_MIXING    false // motor controller will mix the channels
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_SERIAL
+#define DRIVE_SERIAL      AUX_SERIAL
 #define DRIVE_BAUD_RATE   115200
 #define CHANNEL_MIXING    false // motor controller will mix the channels
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM_SERIAL
+#define DRIVE_SERIAL      AUX_SERIAL
 #define DRIVE_BAUD_RATE   115200
 #define CHANNEL_MIXING    false // motor controller will mix the channels
 #else
@@ -165,7 +186,7 @@
 #endif
 
 #if !defined(DOME_DRIVE_SERIAL) && DOME_DRIVE == DOME_DRIVE_SABER
-#define DOME_DRIVE_SERIAL Serial0
+#define DOME_DRIVE_SERIAL AUX_SERIAL
 #endif
 
 #if defined(DOME_DRIVE) && DOME_DRIVE != DOME_DRIVE_SABER && \
