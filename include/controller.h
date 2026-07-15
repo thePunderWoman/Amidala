@@ -46,6 +46,7 @@
 #include <EEPROM.h>
 #include "ppm_decoder.h"
 #include "i2c_utils.h"
+#include "wcb_client_controller.h"
 
 // Forward-declare AmidalaController before the headers that use it as a pointer.
 class AmidalaController;
@@ -151,6 +152,7 @@ public:
   AmidalaAudio fAudio;
   AmidalaConfig fConfig;
   AmidalaWiFiAP fWiFiAP;
+  WCBClientController fWCB;
 #ifdef VMUSIC_SERIAL
   VMusic fVMusic;
 #else
@@ -372,13 +374,19 @@ public:
 #endif
   }
 
-  void (*fSerialTxLog)(const char*) = nullptr;
+  // Second arg: true if the command actually went out over the mesh, false
+  // if it went out UART0 (either because that's the selected destination,
+  // or because WCB was selected but the fail-safe fallback kicked in) — the
+  // monitor tap uses this to tag the line "MESH: " vs "S0: " correctly.
+  void (*fSerialTxLog)(const char*, bool) = nullptr;
 
   void writeEol() { writeEolTo(SERIAL, params.serialeol); }
 
   void sendSerialString(const char *str) {
-    if (fSerialTxLog) fSerialTxLog(str);
-    sendSerialStringTo(SERIAL, str, params.serialdelim, params.serialeol);
+    bool wentToMesh = fWCB.routeOutbound(str, params.outboundserial == 1);
+    if (!wentToMesh)
+      sendSerialStringTo(SERIAL, str, params.serialdelim, params.serialeol);
+    if (fSerialTxLog) fSerialTxLog(str, wentToMesh);
   }
 
   // Defined in src/controller.cpp — references servoDispatch, panservo,

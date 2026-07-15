@@ -1145,6 +1145,24 @@ static void handleApiConfigPost() {
             gBTGamepad.disable();
         }
     }
+    // WCB Client: construct+join live on first enable — safe, since
+    // construction only ever happens once (WCB_Client has no reconfigure
+    // API). Editing an identity field after the client already exists can't
+    // be applied live either way, so it's persisted above but flagged for a
+    // reboot instead of attempted immediately. outboundserial is NOT an
+    // identity field — it's applied live every animate() tick by
+    // WCBClientController::poll(), no reboot needed.
+    if (key == "wcbenable") {
+#ifndef VMUSIC_SERIAL
+        if (sCtrl->params.wcbenable && !sCtrl->fWCB.isRunning()) {
+            sCtrl->fWCB.begin(sCtrl->params, sCtrl->fHCR, sCtrl->fConsole);
+        }
+#endif
+    } else if ((key == "wcboct2" || key == "wcboct3" || key == "wcbpassword" ||
+                key == "wcbquantity" || key == "wcbid") &&
+               sCtrl->fWCB.isRunning()) {
+        sCtrl->fWCB.flagRebootRequired();
+    }
     sServer.send(200, "text/plain", "OK");
 }
 
@@ -1365,6 +1383,14 @@ static void handleApiBtStatus() {
     sServer.send(200, "application/json", json);
 }
 
+static void handleApiWcbStatus() {
+    if (!sCtrl) {
+        sServer.send(200, "application/json", buildWCBStatusJson(false, false, false, false, 0, 0, 0, false));
+        return;
+    }
+    sServer.send(200, "application/json", sCtrl->fWCB.statusJson(sCtrl->params));
+}
+
 static void handleApiBtScan() {
     if (!sCtrl || !sCtrl->params.btcontrolleron) {
         sServer.send(400, "text/plain", "Bluetooth controller is disabled");
@@ -1463,9 +1489,9 @@ static void onWiFiApStaEvent(arduino_event_id_t event, arduino_event_info_t info
 
 void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaController* ctrl) {
     sCtrl = ctrl;
-    sCtrl->fSerialTxLog = [](const char* s) {
+    sCtrl->fSerialTxLog = [](const char* s, bool wentToMesh) {
         char buf[MON_LINE_LEN];
-        snprintf(buf, sizeof(buf), "S0: %s", s);
+        snprintf(buf, sizeof(buf), "%s %s", wentToMesh ? "MESH:" : "S0:", s);
         monAppend(buf, 't');
     };
     loadGadgetConfig();
@@ -1476,7 +1502,11 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     WiFi.onEvent(onWiFiApStaEvent, ARDUINO_EVENT_WIFI_AP_STACONNECTED);
     WiFi.onEvent(onWiFiApStaEvent, ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
 
-    WiFi.mode(WIFI_AP);
+    // AP_STA (not plain AP): lets WCB Client's begin() (called later in
+    // setup(), after this) detect the already-active SoftAP and ride its
+    // radio channel via ESP-NOW instead of forcing pure STA and dropping
+    // the AP. Harmless when WCB Client is disabled -- STA just sits idle.
+    WiFi.mode(WIFI_AP_STA);
     // Modem power-save timing on the AP interface can miss/mistime the WPA2
     // 4-way handshake, intermittently making a correct password appear to be
     // rejected (a long-standing arduino-esp32 quirk, not password-related --
@@ -1546,6 +1576,7 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/api/bt/results",        HTTP_GET,  handleApiBtResults);
     sServer.on("/api/bt/pair",           HTTP_POST, handleApiBtPair);
     sServer.on("/api/bt/forget",         HTTP_POST, handleApiBtForget);
+    sServer.on("/api/wcb/status",        HTTP_GET,  handleApiWcbStatus);
 
     sServer.onNotFound([]() { sServer.send(404, "text/plain", "Not found"); });
 
