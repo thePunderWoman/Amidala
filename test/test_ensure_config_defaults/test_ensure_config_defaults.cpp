@@ -138,8 +138,8 @@ void test_appends_all_when_file_has_none_of_the_keys() {
     TEST_ASSERT_TRUE(got.find("btcontrolleron=y") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("btaddr=AA:BB:CC:DD:EE:FF") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("wcbenable=y") != std::string::npos);
-    TEST_ASSERT_TRUE(got.find("wcboct2=10") != std::string::npos);
-    TEST_ASSERT_TRUE(got.find("wcboct3=20") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("wcboct2=0A") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("wcboct3=14") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("wcbpassword=hunter2mesh") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("wcbquantity=8") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("wcbid=3") != std::string::npos);

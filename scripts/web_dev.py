@@ -20,6 +20,12 @@ _PROJECT_DIR = os.path.dirname(_HERE)
 _WEB_DIR     = os.path.join(_PROJECT_DIR, "web")
 _PORT        = 8080
 
+# Hex-string config keys ("4A", "00000000") that must never be coerced to int
+# by the generic /api/config save fallback below -- an all-digit hex value
+# like "00" or "42" would otherwise parse as a base-10 int and come back from
+# a later GET /api/config without its leading zero / hex meaning intact.
+_HEX_KEYS = {"xbr", "xbl", "wcboct2", "wcboct3"}
+
 
 # ---------------------------------------------------------------------------
 # example_config.txt parser
@@ -116,8 +122,8 @@ def parse_example_config(path):
         "btcontrolleron": "n",
         "btaddr":      "",
         "wcbenable":     "n",
-        "wcboct2":       0,
-        "wcboct3":       0,
+        "wcboct2":       "00",
+        "wcboct3":       "00",
         "wcbpassword":   "",
         "wcbquantity":   0,
         "wcbid":         0,
@@ -140,11 +146,12 @@ def parse_example_config(path):
                   "altbtn", "mutebutton", "altdomestick",
                   "startupem", "startuplvl", "ackem", "acklvl",
                   "volumeChA", "volumeChB", "volumewheel", "altvolumewheel",
-                  "wcboct2", "wcboct3", "wcbquantity", "wcbid", "outboundserial"}
+                  "wcbquantity", "wcbid", "outboundserial"}
     _str_keys  = {"startup", "rndon", "ackon", "goslow", "mix12", "auto",
                   "wifion", "wifissid", "wifipassword", "xbr", "xbl",
                   "audiohw", "domeflip", "domeimu", "domech6",
-                  "btcontrolleron", "btaddr", "wcbenable", "wcbpassword"}
+                  "btcontrolleron", "btaddr", "wcbenable", "wcbpassword",
+                  "wcboct2", "wcboct3"}
 
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
@@ -708,10 +715,13 @@ class _Handler(SimpleHTTPRequestHandler):
             if 0 <= idx < len(_config["resume_cmds"]) and value:
                 _config["resume_cmds"][idx] = value
         elif key in _config:
-            try:
-                _config[key] = int(value)
-            except ValueError:
+            if key in _HEX_KEYS:
                 _config[key] = value
+            else:
+                try:
+                    _config[key] = int(value)
+                except ValueError:
+                    _config[key] = value
         else:
             print(f"           (unknown key — not stored)")
 

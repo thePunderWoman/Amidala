@@ -100,6 +100,11 @@ inline bool ensureConfigDefaults(const AmidalaParameters& params) {
         String value;
     };
     auto fmtBool = [](bool b) { return String(b ? "y" : "n"); };
+    auto fmtHex2 = [](uint8_t v) {
+        char buf[3];
+        snprintf(buf, sizeof(buf), "%02X", v);
+        return String(buf);
+    };
     const DefaultableConfigKey keys[] = {
         {"volumeChA=",      String(params.volumeChA)},
         {"volumeChB=",      String(params.volumeChB)},
@@ -112,8 +117,8 @@ inline bool ensureConfigDefaults(const AmidalaParameters& params) {
         {"btcontrolleron=", fmtBool(params.btcontrolleron)},
         {"btaddr=",         String(params.btaddr)},
         {"wcbenable=",      fmtBool(params.wcbenable)},
-        {"wcboct2=",        String(params.wcboct2)},
-        {"wcboct3=",        String(params.wcboct3)},
+        {"wcboct2=",        fmtHex2(params.wcboct2)},
+        {"wcboct3=",        fmtHex2(params.wcboct3)},
         {"wcbpassword=",    String(params.wcbpassword)},
         {"wcbquantity=",    String(params.wcbquantity)},
         {"wcbid=",          String(params.wcbid)},

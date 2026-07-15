@@ -379,8 +379,8 @@ void test_full_config_json_wcb_identity_stored_correctly() {
     String json = buildFullConfigJson(p);
     const char* s = json.c_str();
     TEST_ASSERT_TRUE(contains(s, "\"wcbenable\":\"y\""));
-    TEST_ASSERT_TRUE(contains(s, "\"wcboct2\":10"));
-    TEST_ASSERT_TRUE(contains(s, "\"wcboct3\":20"));
+    TEST_ASSERT_TRUE(contains(s, "\"wcboct2\":\"0A\""));
+    TEST_ASSERT_TRUE(contains(s, "\"wcboct3\":\"14\""));
     TEST_ASSERT_TRUE(contains(s, "\"wcbpassword\":\"hunter2mesh\""));
     TEST_ASSERT_TRUE(contains(s, "\"wcbquantity\":8"));
     TEST_ASSERT_TRUE(contains(s, "\"wcbid\":3"));

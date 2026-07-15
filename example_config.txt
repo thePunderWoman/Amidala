@@ -148,9 +148,10 @@ btcontrolleron=n
 # identity fields below to be fully configured, or the board will skip
 # attempting to join and log a boot warning).
 wcbenable=n
-# 2nd/3rd octet of the shared WCB MAC addressing scheme (0-255 each).
-wcboct2=0
-wcboct3=0
+# 2nd/3rd octet of the shared WCB MAC addressing scheme, as 2-digit hex
+# (00-FF each) -- matches the values shown by the WCB configuration wizard.
+wcboct2=00
+wcboct3=00
 # Mesh password (max 39 chars).
 # wcbpassword=
 # Total number of WCBs in the mesh (0-19).

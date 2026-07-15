@@ -234,6 +234,9 @@ struct AmidalaParameters {
   // wcbenable: join the WCB mesh network at runtime (default false — opt-in,
   // requires the identity fields below to be fully configured).
   // wcboct2/wcboct3: 2nd/3rd octet of the shared WCB MAC addressing scheme.
+  // Stored as a plain byte, but parsed/displayed as 2-digit hex (config.txt,
+  // web UI, JSON API) to match the WCB configuration wizard's own convention
+  // -- same treatment as xbr/xbl below.
   // wcbpassword: mesh password (max 39 chars, per the WCB_Client library's
   // own constructor contract).
   // wcbquantity: total number of WCBs in the mesh.

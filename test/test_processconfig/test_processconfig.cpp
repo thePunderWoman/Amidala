@@ -813,20 +813,38 @@ void test_wcbenable_defaults_to_false() {
     TEST_ASSERT_FALSE(p.wcbenable);
 }
 
-void test_wcboct2_intparam_parses_and_clamps() {
-    AmidalaParameters p;
-    memset(&p, 0, sizeof(p));
-    bool ok = intparam("wcboct2=200", "wcboct2=", p.wcboct2, 0, 255);
-    TEST_ASSERT_TRUE(ok);
-    TEST_ASSERT_EQUAL(200, p.wcboct2);
+// wcboct2/wcboct3 parse as hex (matches xbr/xbl and the WCB configuration
+// wizard's own convention), not decimal -- mirrors config.cpp's
+// startswith()+strtoul(...,16) logic directly since there's no reusable
+// intparam()-style helper for hex fields.
+static bool parse_wcboct2_line(const char* line, AmidalaParameters& p) {
+    const char* cmd = line;
+    if (!startswith(cmd, "wcboct2=")) return false;
+    p.wcboct2 = (uint8_t)strtoul(cmd, NULL, 16);
+    return true;
 }
 
-void test_wcboct3_intparam_parses() {
+static bool parse_wcboct3_line(const char* line, AmidalaParameters& p) {
+    const char* cmd = line;
+    if (!startswith(cmd, "wcboct3=")) return false;
+    p.wcboct3 = (uint8_t)strtoul(cmd, NULL, 16);
+    return true;
+}
+
+void test_wcboct2_parses_hex_uppercase() {
     AmidalaParameters p;
     memset(&p, 0, sizeof(p));
-    bool ok = intparam("wcboct3=42", "wcboct3=", p.wcboct3, 0, 255);
+    bool ok = parse_wcboct2_line("wcboct2=4A", p);
     TEST_ASSERT_TRUE(ok);
-    TEST_ASSERT_EQUAL(42, p.wcboct3);
+    TEST_ASSERT_EQUAL(0x4A, p.wcboct2);
+}
+
+void test_wcboct3_parses_hex_lowercase() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = parse_wcboct3_line("wcboct3=ff", p);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(0xFF, p.wcboct3);
 }
 
 void test_wcbquantity_intparam_parses() {
@@ -984,8 +1002,8 @@ int main(int argc, char **argv) {
     RUN_TEST(test_wcbenable_boolparam_parses_y);
     RUN_TEST(test_wcbenable_boolparam_parses_n);
     RUN_TEST(test_wcbenable_defaults_to_false);
-    RUN_TEST(test_wcboct2_intparam_parses_and_clamps);
-    RUN_TEST(test_wcboct3_intparam_parses);
+    RUN_TEST(test_wcboct2_parses_hex_uppercase);
+    RUN_TEST(test_wcboct3_parses_hex_lowercase);
     RUN_TEST(test_wcbquantity_intparam_parses);
     RUN_TEST(test_wcbid_intparam_accepts_special_slot);
     RUN_TEST(test_outboundserial_intparam_parses);

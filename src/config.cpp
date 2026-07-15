@@ -774,9 +774,11 @@ bool AmidalaConfig::processConfig(const char *cmd) {
     return true;
   } else if (boolparam(cmd, "wcbenable=", params.wcbenable)) {
     return true;
-  } else if (intparam(cmd, "wcboct2=", params.wcboct2, 0, 255)) {
+  } else if (startswith(cmd, "wcboct2=")) {
+    params.wcboct2 = (uint8_t)strtoul(cmd, NULL, 16);
     return true;
-  } else if (intparam(cmd, "wcboct3=", params.wcboct3, 0, 255)) {
+  } else if (startswith(cmd, "wcboct3=")) {
+    params.wcboct3 = (uint8_t)strtoul(cmd, NULL, 16);
     return true;
   } else if (startswith(cmd, "wcbpassword=")) {
     strncpy(params.wcbpassword, cmd, sizeof(params.wcbpassword) - 1);
