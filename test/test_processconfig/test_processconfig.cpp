@@ -787,6 +787,114 @@ void test_btcontrolleron_defaults_to_false() {
     TEST_ASSERT_FALSE(p.btcontrolleron);
 }
 
+// ---- WCB Client: wcbenable / identity fields / outboundserial ---------------
+
+void test_wcbenable_boolparam_parses_y() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = boolparam("wcbenable=y", "wcbenable=", p.wcbenable);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_TRUE(p.wcbenable);
+}
+
+void test_wcbenable_boolparam_parses_n() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    p.wcbenable = true;
+    bool ok = boolparam("wcbenable=n", "wcbenable=", p.wcbenable);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_FALSE(p.wcbenable);
+}
+
+void test_wcbenable_defaults_to_false() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    p.init(true);
+    TEST_ASSERT_FALSE(p.wcbenable);
+}
+
+void test_wcboct2_intparam_parses_and_clamps() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = intparam("wcboct2=200", "wcboct2=", p.wcboct2, 0, 255);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(200, p.wcboct2);
+}
+
+void test_wcboct3_intparam_parses() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = intparam("wcboct3=42", "wcboct3=", p.wcboct3, 0, 255);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(42, p.wcboct3);
+}
+
+void test_wcbquantity_intparam_parses() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = intparam("wcbquantity=8", "wcbquantity=", p.wcbquantity, 0, 19);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(8, p.wcbquantity);
+}
+
+void test_wcbid_intparam_accepts_special_slot() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = intparam("wcbid=20", "wcbid=", p.wcbid, 0, 20);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(20, p.wcbid);
+}
+
+void test_outboundserial_intparam_parses() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = intparam("outboundserial=1", "outboundserial=", p.outboundserial, 0, 1);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(1, p.outboundserial);
+}
+
+void test_outboundserial_defaults_to_uart0() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    p.init(true);
+    TEST_ASSERT_EQUAL(0, p.outboundserial);
+}
+
+// Mirror of the wcbpassword= parsing logic in config.cpp.
+static bool parse_wcbpassword_line(const char* line, AmidalaParameters& p) {
+    const char* cmd = line;
+    if (!startswith(cmd, "wcbpassword=")) return false;
+    strncpy(p.wcbpassword, cmd, sizeof(p.wcbpassword) - 1);
+    p.wcbpassword[sizeof(p.wcbpassword) - 1] = '\0';
+    return true;
+}
+
+void test_wcbpassword_parse_stores_value() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = parse_wcbpassword_line("wcbpassword=hunter2", p);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_STRING("hunter2", p.wcbpassword);
+}
+
+void test_wcbpassword_parse_truncates_to_39_chars() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    // 45 'a' chars -- longer than the 39-char buffer capacity.
+    const char *longPassword =
+        "wcbpassword=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    bool ok = parse_wcbpassword_line(longPassword, p);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(39, strlen(p.wcbpassword));
+}
+
+void test_wcbpassword_defaults_to_empty_string() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    p.init(true);
+    TEST_ASSERT_EQUAL_STRING("", p.wcbpassword);
+}
+
 // ---- main -------------------------------------------------------------------
 
 int main(int argc, char **argv) {
@@ -873,6 +981,18 @@ int main(int argc, char **argv) {
     RUN_TEST(test_btcontrolleron_boolparam_parses_y);
     RUN_TEST(test_btcontrolleron_boolparam_parses_n);
     RUN_TEST(test_btcontrolleron_defaults_to_false);
+    RUN_TEST(test_wcbenable_boolparam_parses_y);
+    RUN_TEST(test_wcbenable_boolparam_parses_n);
+    RUN_TEST(test_wcbenable_defaults_to_false);
+    RUN_TEST(test_wcboct2_intparam_parses_and_clamps);
+    RUN_TEST(test_wcboct3_intparam_parses);
+    RUN_TEST(test_wcbquantity_intparam_parses);
+    RUN_TEST(test_wcbid_intparam_accepts_special_slot);
+    RUN_TEST(test_outboundserial_intparam_parses);
+    RUN_TEST(test_outboundserial_defaults_to_uart0);
+    RUN_TEST(test_wcbpassword_parse_stores_value);
+    RUN_TEST(test_wcbpassword_parse_truncates_to_39_chars);
+    RUN_TEST(test_wcbpassword_defaults_to_empty_string);
 
     return UNITY_END();
 }

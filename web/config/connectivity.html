@@ -20,24 +20,48 @@
 </main>
 <script src="/assets/edit.js"></script>
 <script>
+function wifiOn(d) { return d.wifion === 'y'; }
+function wcbOn(d)  { return d.wcbenable === 'y'; }
+
 var SCHEMA = [
   {section:'XBee Remotes'},
   {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address'},
   {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address'},
   {section:'WiFi Access Point'},
   {key:'wifion',       label:'Enable WiFi AP', type:'bool'},
-  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars'},
-  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars'},
+  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', when:wifiOn},
+  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars',  when:wifiOn},
   {section:'Bluetooth Controller'},
-  {key:'btcontrolleron', label:'Enable Bluetooth Controller', type:'bool'}
+  {key:'btcontrolleron', label:'Enable Bluetooth Controller', type:'bool'},
+  {section:'WCB Client (Mesh Network)'},
+  {key:'wcbenable', label:'Enable WCB Client', type:'bool'},
+  {key:'wcboct2', label:'MAC Octet 2', type:'number', min:0, max:255, when:wcbOn},
+  {key:'wcboct3', label:'MAC Octet 3', type:'number', min:0, max:255, when:wcbOn},
+  {key:'wcbpassword', label:'Mesh Password', type:'password', maxlength:39, note:'max 39 chars', when:wcbOn},
+  {key:'wcbquantity', label:'WCB Quantity', type:'number', min:0, max:19, when:wcbOn},
+  {key:'wcbid', label:'This Device ID', type:'number', min:0, max:20, note:'1-19, or 20 for the special slot', when:wcbOn},
+  {key:'outboundserial', label:'Outbound Destination', type:'select', when:wcbOn,
+    options:[{v:'0', l:'UART0 (wired)'}, {v:'1', l:'WCB Mesh'}]}
 ];
 
 buildPage(SCHEMA, '/api/config', function() {
-  // buildPage replaces main's innerHTML; inject the BT panel after it.
+  // buildPage replaces main's innerHTML. Anchor each status panel right
+  // after its section's toggle row rather than appending at the end of
+  // <main>, so it reads as part of that section instead of trailing below
+  // an unrelated one.
   var panel = document.createElement('div');
   panel.id = 'bt-panel';
-  document.querySelector('main').appendChild(panel);
+  var btRow = document.querySelector('[data-key="btcontrolleron"]');
+  if (btRow) btRow.insertAdjacentElement('afterend', panel);
+  else document.querySelector('main').appendChild(panel);
   refreshBTStatus();
+
+  var wcbPanel = document.createElement('div');
+  wcbPanel.id = 'wcb-panel';
+  var wcbRow = document.querySelector('[data-key="outboundserial"]');
+  if (wcbRow) wcbRow.insertAdjacentElement('afterend', wcbPanel);
+  else document.querySelector('main').appendChild(wcbPanel);
+  refreshWCBStatus();
 });
 
 // ---- Bluetooth panel -------------------------------------------------------
@@ -156,6 +180,52 @@ function pairWith(addr) {
 function forgetDevice() {
   if (!confirm('Forget the paired Bluetooth controller?')) return;
   fetch('/api/bt/forget', {method:'POST'}).then(function() { refreshBTStatus(); });
+}
+
+// ---- WCB Client panel -------------------------------------------------------
+
+function refreshWCBStatus() {
+  fetch('/api/wcb/status').then(function(r) {
+    if (!r.ok) return;
+    return r.json();
+  }).then(function(d) {
+    if (!d) return;
+    var panel = document.getElementById('wcb-panel');
+    if (!panel) return;
+
+    if (!d.enabled) {
+      panel.innerHTML = '<div class="row"><div class="row-label" style="color:var(--muted)">'
+        + 'Enable above to join the WCB mesh network.</div></div>';
+      return;
+    }
+
+    var html = '';
+
+    if (d.reboot_required) {
+      html += '<div class="info-banner">Mesh identity settings changed — reboot to apply.</div>';
+    }
+
+    var statusText = !d.configured
+      ? 'Not configured — check the fields above'
+      : !d.running
+        ? 'Not running'
+        : d.joined
+          ? d.neighbor_count + ' neighbor' + (d.neighbor_count === 1 ? '' : 's') + ' online'
+          : 'Running — no neighbors seen';
+
+    html += '<div class="row"><div class="row-label">Mesh</div>';
+    html += '<div class="rv">' + escHtml(statusText) + '</div></div>';
+
+    if (d.configured) {
+      html += '<div class="row"><div class="row-label">Device ID</div>'
+            + '<div class="rv">' + d.device_id + ' of ' + d.quantity + '</div></div>';
+    }
+
+    panel.innerHTML = html;
+  }).catch(function() {
+    var panel = document.getElementById('wcb-panel');
+    if (panel) panel.innerHTML = '';
+  });
 }
 </script>
 </body>

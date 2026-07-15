@@ -124,6 +124,15 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     json += "\"btcontrolleron\":\"" + String(p.btcontrolleron ? "y" : "n") + "\",";
     json += "\"btaddr\":\"" + String(p.btaddr) + "\",";
 
+    // WCB Client
+    json += "\"wcbenable\":\"" + String(p.wcbenable ? "y" : "n") + "\",";
+    json += "\"wcboct2\":" + String(p.wcboct2) + ",";
+    json += "\"wcboct3\":" + String(p.wcboct3) + ",";
+    json += "\"wcbpassword\":\"" + String(p.wcbpassword) + "\",";
+    json += "\"wcbquantity\":" + String(p.wcbquantity) + ",";
+    json += "\"wcbid\":" + String(p.wcbid) + ",";
+    json += "\"outboundserial\":" + String(p.outboundserial) + ",";
+
     // Audio
     json += "\"audiohw\":\""      + String(hw)                        + "\",";
     json += "\"volumeChA\":"      + String(p.volumeChA)               + ",";

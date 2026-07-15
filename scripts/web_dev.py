@@ -113,7 +113,15 @@ def parse_example_config(path):
         "sstr_cats":   [],  # list of {name, idx: [...]} category objects
         "estop_cmds":  [],
         "resume_cmds": [],
+        "btcontrolleron": "n",
         "btaddr":      "",
+        "wcbenable":     "n",
+        "wcboct2":       0,
+        "wcboct3":       0,
+        "wcbpassword":   "",
+        "wcbquantity":   0,
+        "wcbid":         0,
+        "outboundserial":0,
         "buttons":  [_make_button() for _ in range(9)],
         "gestures": [],
         "gadgets_cfg": [{"type": 0, "sstr": []} for _ in range(7)],
@@ -131,10 +139,12 @@ def parse_example_config(path):
                   "domefront", "domestall", "minpulse", "maxpulse",
                   "altbtn", "mutebutton", "altdomestick",
                   "startupem", "startuplvl", "ackem", "acklvl",
-                  "volumeChA", "volumeChB", "volumewheel", "altvolumewheel"}
+                  "volumeChA", "volumeChB", "volumewheel", "altvolumewheel",
+                  "wcboct2", "wcboct3", "wcbquantity", "wcbid", "outboundserial"}
     _str_keys  = {"startup", "rndon", "ackon", "goslow", "mix12", "auto",
                   "wifion", "wifissid", "wifipassword", "xbr", "xbl",
-                  "audiohw", "domeflip", "domeimu", "domech6", "btaddr"}
+                  "audiohw", "domeflip", "domeimu", "domech6",
+                  "btcontrolleron", "btaddr", "wcbenable", "wcbpassword"}
 
     try:
         with open(path, encoding="utf-8", errors="replace") as f:

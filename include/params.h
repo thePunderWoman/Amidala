@@ -230,6 +230,26 @@ struct AmidalaParameters {
   bool btcontrolleron;
   char btaddr[18];
 
+  // ---- WCB Client (ESP-NOW mesh) --------------------------------------------
+  // wcbenable: join the WCB mesh network at runtime (default false — opt-in,
+  // requires the identity fields below to be fully configured).
+  // wcboct2/wcboct3: 2nd/3rd octet of the shared WCB MAC addressing scheme.
+  // wcbpassword: mesh password (max 39 chars, per the WCB_Client library's
+  // own constructor contract).
+  // wcbquantity: total number of WCBs in the mesh.
+  // wcbid: this device's ID, 1-19, or 20 for the special/out-of-band slot.
+  // outboundserial: where outbound serial-string/HCR commands go —
+  // 0 = uart0 (wired, default), 1 = wcb (mesh-only; the UART0 write is
+  // skipped). Only takes effect when wcbenable is also on and the mesh is
+  // actually joined — otherwise outbound always falls back to uart0.
+  bool    wcbenable;
+  uint8_t wcboct2;
+  uint8_t wcboct3;
+  char    wcbpassword[40];
+  uint8_t wcbquantity;
+  uint8_t wcbid;
+  uint8_t outboundserial;
+
   // ---- WiFi access point -----------------------------------------------
   // wifion: enable the on-board WiFi soft-AP (default true).
   // wifiSSID: network name broadcast by the AP (max 32 chars).
@@ -321,6 +341,13 @@ struct AmidalaParameters {
       dbtimeout = 300;
       auxserial3 = false;
       btcontrolleron = false;
+      wcbenable = false;
+      wcboct2 = 0;
+      wcboct3 = 0;
+      wcbpassword[0] = '\0';
+      wcbquantity = 0;
+      wcbid = 0;
+      outboundserial = 0;
       wifion = true;
       strncpy(wifiSSID, "amidala", sizeof(wifiSSID));
       strncpy(wifiPassword, "Astromech", sizeof(wifiPassword));

@@ -99,6 +99,16 @@ void test_connectivity_page_has_all_sections() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/bt/status"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/bt/scan"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/bt/pair"));
+    // WCB Client section
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "WCB Client"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wcbenable'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wcboct2'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wcboct3'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wcbpassword'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wcbquantity'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wcbid'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'outboundserial'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/wcb/status"));
 }
 
 void test_audio_page_uses_config_endpoint() {
@@ -349,6 +359,32 @@ void test_full_config_json_btcontrolleron_true() {
     p.btcontrolleron = true;
     String json = buildFullConfigJson(p);
     TEST_ASSERT_TRUE(contains(json.c_str(), "\"btcontrolleron\":\"y\""));
+}
+
+void test_full_config_json_wcbenable_false_by_default() {
+    AmidalaParameters p = makeParams(); // wcbenable left zeroed = false
+    String json = buildFullConfigJson(p);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"wcbenable\":\"n\""));
+}
+
+void test_full_config_json_wcb_identity_stored_correctly() {
+    AmidalaParameters p = makeParams();
+    p.wcbenable = true;
+    p.wcboct2 = 10;
+    p.wcboct3 = 20;
+    strncpy(p.wcbpassword, "hunter2mesh", sizeof(p.wcbpassword));
+    p.wcbquantity = 8;
+    p.wcbid = 3;
+    p.outboundserial = 1;
+    String json = buildFullConfigJson(p);
+    const char* s = json.c_str();
+    TEST_ASSERT_TRUE(contains(s, "\"wcbenable\":\"y\""));
+    TEST_ASSERT_TRUE(contains(s, "\"wcboct2\":10"));
+    TEST_ASSERT_TRUE(contains(s, "\"wcboct3\":20"));
+    TEST_ASSERT_TRUE(contains(s, "\"wcbpassword\":\"hunter2mesh\""));
+    TEST_ASSERT_TRUE(contains(s, "\"wcbquantity\":8"));
+    TEST_ASSERT_TRUE(contains(s, "\"wcbid\":3"));
+    TEST_ASSERT_TRUE(contains(s, "\"outboundserial\":1"));
 }
 
 void test_full_config_json_audio_keys() {
@@ -837,6 +873,8 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_full_config_json_btaddr_stored_correctly);
     RUN_TEST(test_full_config_json_btcontrolleron_false_by_default);
     RUN_TEST(test_full_config_json_btcontrolleron_true);
+    RUN_TEST(test_full_config_json_wcbenable_false_by_default);
+    RUN_TEST(test_full_config_json_wcb_identity_stored_correctly);
     RUN_TEST(test_full_config_json_audio_keys);
     RUN_TEST(test_full_config_json_rc_radio_keys);
     RUN_TEST(test_full_config_json_dome_keys);

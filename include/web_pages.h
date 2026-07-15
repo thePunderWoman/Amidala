@@ -619,20 +619,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -649,7 +657,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -661,7 +668,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -746,9 +765,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -757,12 +777,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -834,23 +854,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -859,6 +892,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -1221,20 +1266,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -1251,7 +1304,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -1263,7 +1315,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -1348,9 +1412,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -1359,12 +1424,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -1436,23 +1501,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -1462,26 +1540,62 @@ function buildPage(SCHEMA, endpoint, callback) {
       if (el) el.textContent = 'Failed to load settings.';
     });
 }
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
+}
 </script>
 <script>
+function wifiOn(d) { return d.wifion === 'y'; }
+function wcbOn(d)  { return d.wcbenable === 'y'; }
+
 var SCHEMA = [
   {section:'XBee Remotes'},
   {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address'},
   {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address'},
   {section:'WiFi Access Point'},
   {key:'wifion',       label:'Enable WiFi AP', type:'bool'},
-  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars'},
-  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars'},
+  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', when:wifiOn},
+  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars',  when:wifiOn},
   {section:'Bluetooth Controller'},
-  {key:'btcontrolleron', label:'Enable Bluetooth Controller', type:'bool'}
+  {key:'btcontrolleron', label:'Enable Bluetooth Controller', type:'bool'},
+  {section:'WCB Client (Mesh Network)'},
+  {key:'wcbenable', label:'Enable WCB Client', type:'bool'},
+  {key:'wcboct2', label:'MAC Octet 2', type:'number', min:0, max:255, when:wcbOn},
+  {key:'wcboct3', label:'MAC Octet 3', type:'number', min:0, max:255, when:wcbOn},
+  {key:'wcbpassword', label:'Mesh Password', type:'password', maxlength:39, note:'max 39 chars', when:wcbOn},
+  {key:'wcbquantity', label:'WCB Quantity', type:'number', min:0, max:19, when:wcbOn},
+  {key:'wcbid', label:'This Device ID', type:'number', min:0, max:20, note:'1-19, or 20 for the special slot', when:wcbOn},
+  {key:'outboundserial', label:'Outbound Destination', type:'select', when:wcbOn,
+    options:[{v:'0', l:'UART0 (wired)'}, {v:'1', l:'WCB Mesh'}]}
 ];
 
 buildPage(SCHEMA, '/api/config', function() {
-  // buildPage replaces main's innerHTML; inject the BT panel after it.
+  // buildPage replaces main's innerHTML. Anchor each status panel right
+  // after its section's toggle row rather than appending at the end of
+  // <main>, so it reads as part of that section instead of trailing below
+  // an unrelated one.
   var panel = document.createElement('div');
   panel.id = 'bt-panel';
-  document.querySelector('main').appendChild(panel);
+  var btRow = document.querySelector('[data-key="btcontrolleron"]');
+  if (btRow) btRow.insertAdjacentElement('afterend', panel);
+  else document.querySelector('main').appendChild(panel);
   refreshBTStatus();
+
+  var wcbPanel = document.createElement('div');
+  wcbPanel.id = 'wcb-panel';
+  var wcbRow = document.querySelector('[data-key="outboundserial"]');
+  if (wcbRow) wcbRow.insertAdjacentElement('afterend', wcbPanel);
+  else document.querySelector('main').appendChild(wcbPanel);
+  refreshWCBStatus();
 });
 
 // ---- Bluetooth panel -------------------------------------------------------
@@ -1600,6 +1714,52 @@ function pairWith(addr) {
 function forgetDevice() {
   if (!confirm('Forget the paired Bluetooth controller?')) return;
   fetch('/api/bt/forget', {method:'POST'}).then(function() { refreshBTStatus(); });
+}
+
+// ---- WCB Client panel -------------------------------------------------------
+
+function refreshWCBStatus() {
+  fetch('/api/wcb/status').then(function(r) {
+    if (!r.ok) return;
+    return r.json();
+  }).then(function(d) {
+    if (!d) return;
+    var panel = document.getElementById('wcb-panel');
+    if (!panel) return;
+
+    if (!d.enabled) {
+      panel.innerHTML = '<div class="row"><div class="row-label" style="color:var(--muted)">'
+        + 'Enable above to join the WCB mesh network.</div></div>';
+      return;
+    }
+
+    var html = '';
+
+    if (d.reboot_required) {
+      html += '<div class="info-banner">Mesh identity settings changed — reboot to apply.</div>';
+    }
+
+    var statusText = !d.configured
+      ? 'Not configured — check the fields above'
+      : !d.running
+        ? 'Not running'
+        : d.joined
+          ? d.neighbor_count + ' neighbor' + (d.neighbor_count === 1 ? '' : 's') + ' online'
+          : 'Running — no neighbors seen';
+
+    html += '<div class="row"><div class="row-label">Mesh</div>';
+    html += '<div class="rv">' + escHtml(statusText) + '</div></div>';
+
+    if (d.configured) {
+      html += '<div class="row"><div class="row-label">Device ID</div>'
+            + '<div class="rv">' + d.device_id + ' of ' + d.quantity + '</div></div>';
+    }
+
+    panel.innerHTML = html;
+  }).catch(function() {
+    var panel = document.getElementById('wcb-panel');
+    if (panel) panel.innerHTML = '';
+  });
 }
 </script>
 </body>
@@ -1942,20 +2102,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -1972,7 +2140,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -1984,7 +2151,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -2069,9 +2248,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -2080,12 +2260,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -2157,23 +2337,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -2182,6 +2375,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -2533,20 +2738,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -2563,7 +2776,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -2575,7 +2787,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -2660,9 +2884,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -2671,12 +2896,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -2748,23 +2973,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -2773,6 +3011,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -3135,20 +3385,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -3165,7 +3423,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -3177,7 +3434,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -3262,9 +3531,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -3273,12 +3543,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -3350,23 +3620,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -3375,6 +3658,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -3832,20 +4127,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -3862,7 +4165,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -3874,7 +4176,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -3959,9 +4273,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -3970,12 +4285,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -4047,23 +4362,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -4072,6 +4400,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -4443,20 +4783,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -4473,7 +4821,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -4485,7 +4832,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -4570,9 +4929,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -4581,12 +4941,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -4658,23 +5018,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -4683,6 +5056,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -5101,20 +5486,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -5131,7 +5524,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -5143,7 +5535,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -5228,9 +5632,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -5239,12 +5644,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -5316,23 +5721,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -5341,6 +5759,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -6014,20 +6444,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -6044,7 +6482,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -6056,7 +6493,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -6141,9 +6590,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -6152,12 +6602,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -6229,23 +6679,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -6254,6 +6717,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -6838,20 +7313,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -6868,7 +7351,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -6880,7 +7362,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -6965,9 +7459,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -6976,12 +7471,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -7053,23 +7548,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -7078,6 +7586,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -7537,20 +8057,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -7567,7 +8095,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -7579,7 +8106,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -7664,9 +8203,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -7675,12 +8215,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -7752,23 +8292,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -7777,6 +8330,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -8450,20 +9015,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -8480,7 +9053,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -8492,7 +9064,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -8577,9 +9161,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -8588,12 +9173,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -8665,23 +9250,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -8690,6 +9288,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -9432,20 +10042,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -9462,7 +10080,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -9474,7 +10091,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -9559,9 +10188,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -9570,12 +10200,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -9647,23 +10277,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -9672,6 +10315,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -10239,20 +10894,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -10269,7 +10932,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -10281,7 +10943,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -10366,9 +11040,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -10377,12 +11052,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -10454,23 +11129,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -10479,6 +11167,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -10975,20 +11675,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -11005,7 +11713,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -11017,7 +11724,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -11102,9 +11821,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -11113,12 +11833,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -11190,23 +11910,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -11215,6 +11948,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -11965,20 +12710,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -11995,7 +12748,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -12007,7 +12759,19 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -12092,9 +12856,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -12103,12 +12868,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -12180,23 +12945,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -12205,6 +12983,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>

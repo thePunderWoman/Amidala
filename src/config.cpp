@@ -213,6 +213,10 @@ void AmidalaConfig::showCurrentConfiguration() {
     fOutput->println();
     fOutput->print(F("Bluetooth Controller: "));
     fOutput->println(params.btcontrolleron ? F("On") : F("Off"));
+    fOutput->print(F("WCB Client: "));
+    fOutput->println(params.wcbenable ? F("On") : F("Off"));
+    fOutput->print(F("WCB Outbound: "));
+    fOutput->println(params.outboundserial == 1 ? F("WCB Mesh") : F("UART0"));
     fOutput->print(F("WiFi AP: "));
     fOutput->println(params.wifion ? F("On") : F("Off"));
     fOutput->print(F("WiFi SSID: "));
@@ -767,6 +771,22 @@ bool AmidalaConfig::processConfig(const char *cmd) {
   } else if (startswith(cmd, "btaddr=")) {
     strncpy(params.btaddr, cmd, sizeof(params.btaddr) - 1);
     params.btaddr[sizeof(params.btaddr) - 1] = '\0';
+    return true;
+  } else if (boolparam(cmd, "wcbenable=", params.wcbenable)) {
+    return true;
+  } else if (intparam(cmd, "wcboct2=", params.wcboct2, 0, 255)) {
+    return true;
+  } else if (intparam(cmd, "wcboct3=", params.wcboct3, 0, 255)) {
+    return true;
+  } else if (startswith(cmd, "wcbpassword=")) {
+    strncpy(params.wcbpassword, cmd, sizeof(params.wcbpassword) - 1);
+    params.wcbpassword[sizeof(params.wcbpassword) - 1] = '\0';
+    return true;
+  } else if (intparam(cmd, "wcbquantity=", params.wcbquantity, 0, 19)) {
+    return true;
+  } else if (intparam(cmd, "wcbid=", params.wcbid, 0, 20)) {
+    return true;
+  } else if (intparam(cmd, "outboundserial=", params.outboundserial, 0, 1)) {
     return true;
   } else if (boolparam(cmd, "wifion=", params.wifion)) {
     return true;

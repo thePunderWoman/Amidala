@@ -37,6 +37,13 @@ static AmidalaParameters makeParams() {
     strncpy(p.wifiPassword, "hunter2pass", sizeof(p.wifiPassword));
     p.btcontrolleron = true;
     strncpy(p.btaddr, "AA:BB:CC:DD:EE:FF", sizeof(p.btaddr));
+    p.wcbenable = true;
+    p.wcboct2 = 10;
+    p.wcboct3 = 20;
+    strncpy(p.wcbpassword, "hunter2mesh", sizeof(p.wcbpassword));
+    p.wcbquantity = 8;
+    p.wcbid = 3;
+    p.outboundserial = 1;
     p.mutebutton = 4;
     p.b9 = 's';
     p.dbtimeout = 275;
@@ -58,7 +65,10 @@ void test_no_change_when_all_keys_present() {
     const char* full =
         "volumeChA=1\nvolumeChB=2\nauxserial3=n\ndomedecelzone=5\ndomeimu=y\n"
         "wifion=n\nwifissid=other\nwifipassword=otherpass\n"
-        "btcontrolleron=n\nbtaddr=\nmutebutton=0\nb9=n\ndbtimeout=300\n";
+        "btcontrolleron=n\nbtaddr=\n"
+        "wcbenable=n\nwcboct2=0\nwcboct3=0\nwcbpassword=\nwcbquantity=0\n"
+        "wcbid=0\noutboundserial=0\n"
+        "mutebutton=0\nb9=n\ndbtimeout=300\n";
     seedFile(full);
     AmidalaParameters p = makeParams();
     TEST_ASSERT_TRUE(ensureConfigDefaults(p));
@@ -127,6 +137,13 @@ void test_appends_all_when_file_has_none_of_the_keys() {
     TEST_ASSERT_TRUE(got.find("wifipassword=hunter2pass") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("btcontrolleron=y") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("btaddr=AA:BB:CC:DD:EE:FF") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("wcbenable=y") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("wcboct2=10") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("wcboct3=20") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("wcbpassword=hunter2mesh") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("wcbquantity=8") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("wcbid=3") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("outboundserial=1") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("mutebutton=4") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("b9=s") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("dbtimeout=275") != std::string::npos);

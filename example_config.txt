@@ -143,6 +143,25 @@ btcontrolleron=n
 # Leave blank/omitted to connect to any BLE HID device found during scan.
 # btaddr=AA:BB:CC:DD:EE:FF
 
+# --- WCB Client (ESP-NOW mesh) ---
+# Join the WCB mesh network at runtime (default n — opt-in; requires the
+# identity fields below to be fully configured, or the board will skip
+# attempting to join and log a boot warning).
+wcbenable=n
+# 2nd/3rd octet of the shared WCB MAC addressing scheme (0-255 each).
+wcboct2=0
+wcboct3=0
+# Mesh password (max 39 chars).
+# wcbpassword=
+# Total number of WCBs in the mesh (0-19).
+wcbquantity=0
+# This device's ID: 1-19, or 20 for the special/out-of-band slot.
+wcbid=0
+# Where outbound serial-string/HCR commands go: 0 = UART0 (wired, default),
+# 1 = WCB mesh only (the UART0 write is skipped). Falls back to UART0
+# automatically if the mesh isn't actually joined, regardless of this value.
+outboundserial=0
+
 # --- Gestures for Special Toggles ---
 # These set which stick gesture string toggles which mode (default values)
 rnd=3
