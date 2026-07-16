@@ -227,6 +227,18 @@ void test_monitor_page_has_wcb_filter_gated_on_status() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "/api/wcb/status"));
 }
 
+// Regression coverage for the log-clears-itself bug: poll() used to rebuild
+// the entire DOM from scratch every 1.5s (logEl.innerHTML = '' then
+// re-render), resetting scroll position on every tick and making the log
+// look like it cleared itself while scrolled up to read something. Fixed
+// by accumulating a growing client-side history and only appending new
+// lines each poll -- assert the page actually ships that fix, not the old
+// wholesale-replace behavior.
+void test_monitor_page_appends_instead_of_rebuilding_on_poll() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "appendEntries"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "MAX_CLIENT_LINES"));
+}
+
 void test_servos_page_uses_config_endpoint() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_SERVOS, "/api/config"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_SERVOS, "href=\"/\""));
@@ -844,6 +856,7 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_monitor_page_uses_monitor_api);
     RUN_TEST(test_monitor_page_has_send_and_pause_ui);
     RUN_TEST(test_monitor_page_has_wcb_filter_gated_on_status);
+    RUN_TEST(test_monitor_page_appends_instead_of_rebuilding_on_poll);
     RUN_TEST(test_servos_page_uses_config_endpoint);
     RUN_TEST(test_servos_page_has_edit_ui);
     RUN_TEST(test_serial_strings_page_uses_config_endpoint);

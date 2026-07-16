@@ -1949,11 +1949,14 @@ function refreshWCBStatus() {
       : !d.running
         ? 'Not running'
         : d.joined
-          ? d.neighbor_count + ' neighbor' + (d.neighbor_count === 1 ? '' : 's') + ' online'
+          ? 'Connected'
           : 'Running — no neighbors seen';
+    var dot = d.joined
+      ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#3a3;margin-right:6px;vertical-align:middle"></span>'
+      : '';
 
     html += '<div class="row"><div class="row-label">Mesh</div>';
-    html += '<div class="rv">' + escHtml(statusText) + '</div></div>';
+    html += '<div class="rv">' + dot + escHtml(statusText) + '</div></div>';
 
     if (d.configured) {
       html += '<div class="row"><div class="row-label">Device ID</div>'
@@ -12618,12 +12621,41 @@ function addLine(text, cls) {
   if (_autoScroll) logEl.scrollTop = logEl.scrollHeight;
 }
 
+// Full rebuild -- used for the initial load and whenever a filter toggle
+// changes which of the already-accumulated _entries should be visible.
+// NOT used for routine polling (see appendEntries()): tearing down and
+// rebuilding the whole log every 1.5s reset scroll position on every poll,
+// making the log look like it was clearing itself while scrolled up to
+// read something, even though the data was still there.
 function renderLog() {
   logEl.innerHTML = '';
   for (var i = 0; i < _entries.length; i++) {
     if (shouldShow(_entries[i])) addLine(_entries[i].t, _entries[i].c);
   }
   if (_autoScroll) logEl.scrollTop = logEl.scrollHeight;
+}
+
+// Appends only newly-arrived entries to the existing DOM/_entries, instead
+// of rebuilding everything -- preserves scroll position, and lets the
+// client accumulate a growing history for the life of the page view, well
+// beyond the server's fixed-size (256-line) ring buffer.
+var MAX_CLIENT_LINES = 4000;
+function appendEntries(lines) {
+  for (var i = 0; i < lines.length; i++) {
+    _entries.push(lines[i]);
+    if (shouldShow(lines[i])) addLine(lines[i].t, lines[i].c);
+  }
+  if (_entries.length > MAX_CLIENT_LINES) {
+    // Trimming _entries alone would leave stale DOM nodes behind forever --
+    // filtered-out entries never got a DOM node in the first place, so
+    // there's no simple 1:1 count to remove from the front of #log. This
+    // only fires after MAX_CLIENT_LINES have accumulated (a long-running
+    // view under heavy traffic), so the one-time rebuild/scroll-reset here
+    // is an acceptable rare cost, unlike the every-1.5s rebuild this whole
+    // change was meant to get rid of.
+    _entries = _entries.slice(_entries.length - MAX_CLIENT_LINES);
+    renderLog();
+  }
 }
 
 function toggleFilter(key) {
@@ -12638,11 +12670,29 @@ function poll() {
   fetch('/api/monitor').then(function(r){ return r.json(); }).then(function(d){
     dotEl.className = 'dot ok';
     connEl.textContent = 'Connected';
-    if (d.seq !== _seq) {
-      _entries = d.lines || [];
-      _seq = d.seq;
-      renderLog();
+    if (d.seq === _seq) return;
+    var lines = d.lines || [];
+    if (_seq === -1) {
+      // First load: the server's current buffer is our starting history.
+      _entries = [];
+      appendEntries(lines);
+    } else {
+      // seq increments once per monAppend() call server-side, so the delta
+      // is exactly how many new lines have been appended since our last
+      // poll -- lets us append just the new tail instead of guessing from
+      // array length, which stops changing once the 256-line server buffer
+      // is full and just slides (evict oldest, add newest).
+      var delta = d.seq - _seq;
+      var numNew = Math.min(delta, lines.length);
+      if (delta > lines.length) {
+        // More lines were appended server-side than the buffer could still
+        // hold by the time we polled -- some history was evicted before we
+        // ever saw it. Note the gap instead of silently skipping it.
+        appendEntries([{t: '--- ' + (delta - lines.length) + ' line(s) lost (server buffer overflow between polls) ---', c: 'info'}]);
+      }
+      if (numNew > 0) appendEntries(lines.slice(lines.length - numNew));
     }
+    _seq = d.seq;
   }).catch(function(){
     dotEl.className = 'dot';
     connEl.textContent = 'Disconnected — retrying…';

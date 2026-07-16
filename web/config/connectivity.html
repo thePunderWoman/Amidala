@@ -219,11 +219,14 @@ function refreshWCBStatus() {
       : !d.running
         ? 'Not running'
         : d.joined
-          ? d.neighbor_count + ' neighbor' + (d.neighbor_count === 1 ? '' : 's') + ' online'
+          ? 'Connected'
           : 'Running — no neighbors seen';
+    var dot = d.joined
+      ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#3a3;margin-right:6px;vertical-align:middle"></span>'
+      : '';
 
     html += '<div class="row"><div class="row-label">Mesh</div>';
-    html += '<div class="rv">' + escHtml(statusText) + '</div></div>';
+    html += '<div class="rv">' + dot + escHtml(statusText) + '</div></div>';
 
     if (d.configured) {
       html += '<div class="row"><div class="row-label">Device ID</div>'
