@@ -138,7 +138,9 @@ wifipassword=Astromech
 # what you're doing. AP and STA share one radio channel on the ESP32, so
 # this is also the channel WCB Client's ESP-NOW mesh rides when it's
 # enabled; it must match whatever channel the rest of the WCB mesh is
-# actually on (implicitly channel 1 today) or this board won't hear it.
+# actually on (default 1, or whatever's set via ?WCBCH on the WCBs) or this
+# board won't hear it. WCB Client's mesh channel range is 1-11 only --
+# 12/13 are valid WiFi channels but not valid mesh channels.
 wifichannel=1
 
 # --- Bluetooth Controller ---

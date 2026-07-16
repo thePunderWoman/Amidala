@@ -260,9 +260,13 @@ struct AmidalaParameters {
   // wifichannel: 2.4GHz channel 1-13 (default 1). AP and STA share a single
   // radio channel on the ESP32, so this is also the channel WCB Client's
   // ESP-NOW mesh rides when it's enabled -- must match whatever channel the
-  // rest of the WCB mesh is actually on (implicitly channel 1 today, since
-  // WCB_Client has no way yet to be told otherwise) or this board simply
-  // won't hear it. Only change this if you know what you're doing.
+  // rest of the WCB mesh is actually on (default 1, or whatever's set via
+  // ?WCBCH on the WCBs themselves) or this board won't hear it. Passed to
+  // WCB_Client::setMeshChannel() (WCBClientController::begin()), which only
+  // accepts 1-11 -- 12/13 are valid WiFi channels but not valid mesh
+  // channels, so using either while WCB Client is enabled logs a mismatch
+  // warning and the mesh won't be reachable. Only change this if you know
+  // what you're doing.
   bool    wifion;
   char    wifiSSID[33];
   char    wifiPassword[65];

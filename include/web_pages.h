@@ -1762,7 +1762,7 @@ var SCHEMA = [
   {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', when:wifiOn, restart:true},
   {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars',  when:wifiOn, restart:true},
   {key:'wifichannel',  label:'Channel',        type:'number', min:1, max:13, when:wifiOn,
-    note:'optional — must match the WCB mesh channel if WCB Client is used', restart:true},
+    note:'optional — must match the WCB mesh channel if WCB Client is used (mesh channels are 1-11 only)', restart:true},
   {section:'Bluetooth Controller'},
   {key:'btcontrolleron', label:'Enable Bluetooth Controller', type:'bool'},
   {section:'WCB Client (Mesh Network)'},
@@ -2699,7 +2699,7 @@ var SCHEMA = [
   {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', restart:true},
   {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars', restart:true},
   {key:'wifichannel',  label:'Channel',        type:'number', min:1, max:13,
-    note:'optional — must match the WCB mesh channel if WCB Client is used', restart:true}
+    note:'optional — must match the WCB mesh channel if WCB Client is used (mesh channels are 1-11 only)', restart:true}
 ];
 buildPage(SCHEMA, '/api/config');
 </script>

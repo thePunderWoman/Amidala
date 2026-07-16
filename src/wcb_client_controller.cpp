@@ -32,6 +32,17 @@ void WCBClientController::begin(const AmidalaParameters &params, HCRVocalizer &h
     fClient = new WCB_Client(params.wcboct2, params.wcboct3, params.wcbpassword,
                               params.wcbquantity, params.wcbid,
                               &WCBClientController::onCommandBridge);
+    // Tell WCB_Client what channel the mesh should be on -- since Amidala's
+    // SoftAP always comes up before this (see AmidalaController::setup()),
+    // pinning the shared radio to params.wifichannel, this is the exact
+    // channel the AP already established. With a SoftAP active WCB_Client
+    // never force-moves the radio (the AP owns the channel); it only warns
+    // (rate-limited, on begin() and every heartbeat) if the two ever
+    // disagree -- turning today's implicit "both happen to default the
+    // same way" into an explicit, continuously-verified match. Range is
+    // 1-11 (WCB_MESH_CHANNEL); out-of-range values are ignored by the
+    // library with just a log line, not a hard error.
+    fClient->setMeshChannel(params.wifichannel);
     if (!fClient->begin()) {
         out.println(F("WCB Client: begin() failed -- mesh join unsuccessful."));
         delete fClient;
