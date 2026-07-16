@@ -10,7 +10,7 @@
 
 // Plain C string literals — usable in web_api.h and anywhere F() can't be used
 #define FIRMWARE_VERSION   "1.1.1"
-#define BOARD_REV          "1.1"
+#define BOARD_REV          "1.2"
 #define MCU_VARIANT        "ESP32-S3 N16R8"
 
 // Flash-string versions for Arduino serial output (saves RAM)

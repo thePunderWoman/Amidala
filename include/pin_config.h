@@ -3,7 +3,7 @@
 // All physical I/O pin numbers and serial port aliases are defined here so
 // that wiring changes require edits in exactly one place.
 //
-// Target: ESP32-S3 WROOM1 N16R8 — Amidala custom PCB v1.1.
+// Target: ESP32-S3 WROOM1 N16R8 — Amidala custom PCB v1.2.
 //
 // Note: RDH_SERIAL (see rdh_serial.h) must be resolved before this header is
 // included — it shares Serial0's RX/TX pins with the SERIAL macro below.
@@ -19,7 +19,7 @@
 #define SERVO4_PIN  6
 
 // ---- Digital output pins ----------------------------------------------------
-// 4 channels on this PCB (v1.1).
+// 4 channels on this PCB (v1.2).
 // DRIVE_ACTIVE / DOME_ACTIVE are not wired; setDigitalPin() treats a 0 entry
 // as absent.
 

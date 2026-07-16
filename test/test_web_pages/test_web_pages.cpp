@@ -643,7 +643,7 @@ void test_info_json_contains_version_key() {
 
 void test_info_json_contains_board_rev_and_mcu() {
     String json = buildInfoJson("roboteq-pwm", "roboclaw", "hcr", "amidala", "192.168.4.1");
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"board_rev\":\"1.1\""));
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"board_rev\":\"1.2\""));
     TEST_ASSERT_TRUE(contains(json.c_str(), "\"mcu\":\"ESP32-S3 N16R8\""));
 }
 

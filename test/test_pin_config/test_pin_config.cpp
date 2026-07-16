@@ -11,7 +11,7 @@
 void setUp(void) {}
 void tearDown(void) {}
 
-// ---- Servo output pins (4 channels on the Amidala custom PCB v1.1) -----------
+// ---- Servo output pins (4 channels on the Amidala custom PCB v1.2) -----------
 
 void test_servo_pins() {
     TEST_ASSERT_EQUAL(3, SERVO1_PIN);
@@ -20,7 +20,7 @@ void test_servo_pins() {
     TEST_ASSERT_EQUAL(6, SERVO4_PIN);
 }
 
-// ---- Digital output pins (4 channels, v1.1) ----------------------------------
+// ---- Digital output pins (4 channels, v1.2) ----------------------------------
 
 void test_dout_pins() {
     TEST_ASSERT_EQUAL(39, DOUT1_PIN);
