@@ -12137,10 +12137,10 @@ main{flex:1;display:flex;flex-direction:column;min-height:0;max-width:none;margi
     <button class="tbtn on" id="f-tx" onclick="toggleFilter('tx')" title="Show TX (outgoing)">TX</button>
     <button class="tbtn"    id="f-rx" onclick="toggleFilter('rx')" title="Show RX (incoming)">RX</button>
     <span class="tsep"></span>
-    <button class="tbtn on" id="f-S0" onclick="toggleFilter('S0')" title="S0 — WCB serial">S0</button>
+    <button class="tbtn on" id="f-S0" onclick="toggleFilter('S0')" title="S0 — WCB/body controller serial. Also a Send destination.">S0</button>
     <button class="tbtn on" id="f-S1" onclick="toggleFilter('S1')" title="S1 — auxiliary">S1</button>
-    <button class="tbtn on" id="f-S2" onclick="toggleFilter('S2')" title="S2 — auxiliary">S2</button>
-    <button class="tbtn on" id="f-WCB" onclick="toggleFilter('WCB')" title="WCB — mesh network" hidden>WCB</button>
+    <button class="tbtn on" id="f-S2" onclick="toggleFilter('S2')" title="S2 — auxiliary serial. Also a Send destination." hidden>S2</button>
+    <button class="tbtn on" id="f-WCB" onclick="toggleFilter('WCB')" title="WCB — mesh network. Also a Send destination." hidden>WCB</button>
     <span class="tsep"></span>
     <button class="tbtn" id="pbtn" onclick="togglePause()">Pause</button>
     <button class="tbtn" onclick="clearLog()">Clear</button>
@@ -12567,6 +12567,14 @@ var _paused   = false;
 var _autoScroll = true;
 var _entries  = [];   // all received entries: [{t: text, c: cls}, ...]
 var _filters  = { tx: true, rx: false, S0: true, S1: true, S2: true, WCB: true };
+// Which toggled-on ports Send actually transmits to. S0 is always eligible
+// (the WCB/body controller UART -- always live). S1 is the RoboClaw dome
+// drive's own binary packet-serial link when that dome variant is built --
+// writing arbitrary text into it could corrupt a motor command mid-packet,
+// so it's excluded unless /api/info confirms a non-RoboClaw dome (or none).
+// S2/WCB are already hidden entirely unless enabled (see checks below), so
+// they don't need a separate eligibility flag here.
+var _sendEligible = { S0: true, S1: false };
 
 var logEl  = document.getElementById('log');
 var dotEl  = document.getElementById('dot');
@@ -12637,15 +12645,24 @@ function poll() {
   });
 }
 
+// Send targets whichever of S0/S1/S2/WCB are currently toggled on in the
+// toolbar -- those buttons double as both "show this port's traffic" and
+// "send to this port" controls. Independent of the tx/rx display filters,
+// which only affect what's shown, not what gets sent.
 function sendCmd() {
   var inp = document.getElementById('cmd');
   var cmd = inp.value.trim();
   if (!cmd) return;
   inp.value = '';
+  var body = 'cmd=' + encodeURIComponent(cmd)
+    + '&s0=' + ((_sendEligible.S0 && _filters.S0) ? '1' : '0')
+    + '&s1=' + ((_sendEligible.S1 && _filters.S1) ? '1' : '0')
+    + '&s2=' + (_filters.S2 ? '1' : '0')
+    + '&wcb=' + (_filters.WCB ? '1' : '0');
   fetch('/api/monitor', {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-    body: 'cmd=' + encodeURIComponent(cmd)
+    body: body
   }).then(function(r){
     if (!r.ok) addLine('! Server error ' + r.status, 'info');
     else poll();
@@ -12669,6 +12686,26 @@ fetch('/api/wcb/status').then(function(r) { return r.ok ? r.json() : null; }).th
   if (d && d.enabled) {
     var btn = document.getElementById('f-WCB');
     if (btn) btn.hidden = false;
+  }
+}).catch(function() {});
+
+// S2 (AUX_SERIAL) is a runtime-optional port -- only show/send to it once
+// auxserial3 is actually enabled in General settings, same reasoning as WCB.
+fetch('/api/config').then(function(r) { return r.ok ? r.json() : null; }).then(function(d) {
+  if (d && d.auxserial3 === 'y') {
+    var btn = document.getElementById('f-S2');
+    if (btn) btn.hidden = false;
+  }
+}).catch(function() {});
+
+// S1 is only safe to Send to when it isn't the RoboClaw dome drive's own
+// binary packet-serial link on this build -- /api/info's "dome" field
+// reflects the compiled-in DOME_DRIVE variant.
+fetch('/api/info').then(function(r) { return r.ok ? r.json() : null; }).then(function(d) {
+  if (d && d.dome !== 'roboclaw') {
+    _sendEligible.S1 = true;
+    var btn = document.getElementById('f-S1');
+    if (btn) btn.title = 'S1 — auxiliary. Also a Send destination.';
   }
 }).catch(function() {});
 

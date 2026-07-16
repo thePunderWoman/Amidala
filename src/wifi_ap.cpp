@@ -1307,6 +1307,39 @@ static void handleApiMonitorPost() {
     if (!sCtrl->fConfig.processConfig(cmd.c_str()))
         monAppend("  (unknown command)", 'i');
 
+    // Also transmit to whichever physical/mesh channels the monitor's S0/S1/
+    // S2/WCB toggle buttons had selected when Send was pressed -- independent
+    // of the local processConfig() interpretation above, this is a manual
+    // multicast to actual hardware, e.g. to replay/test a gadget command
+    // exactly as sendSerialString()/routeOutbound() would send it.
+    AmidalaParameters &params = sCtrl->params;
+    if (sServer.arg("s0") == "1") {
+        sendSerialStringTo(SERIAL, cmd.c_str(), params.serialdelim, params.serialeol);
+        monAppend(("S0: " + cmd).c_str(), 't');
+    }
+#ifndef ROBOCLAW_SERIAL
+    // Only compiled in when Serial1 isn't claimed by the RoboClaw dome
+    // drive's own binary packet-serial protocol -- writing arbitrary text
+    // into that link could corrupt a motor command mid-packet. See
+    // monDrainSerial()'s matching #ifndef guard on the read side above.
+    if (sServer.arg("s1") == "1") {
+        sendSerialStringTo(Serial1, cmd.c_str(), params.serialdelim, params.serialeol);
+        monAppend(("S1: " + cmd).c_str(), 't');
+    }
+#endif
+    if (params.auxserial3 && sServer.arg("s2") == "1") {
+        sendSerialStringTo(AUX_SERIAL, cmd.c_str(), params.serialdelim, params.serialeol);
+        monAppend(("S2: " + cmd).c_str(), 't');
+    }
+    if (sServer.arg("wcb") == "1") {
+        // Explicit manual selection -- always attempt the mesh regardless of
+        // outboundserial (that setting only governs the *automatic* gadget/
+        // HCR routing choice). Silently no-ops if the mesh isn't live, same
+        // as an unavailable S1/S2 above -- no log line, nothing was sent.
+        if (sCtrl->fWCB.routeOutbound(cmd.c_str(), true, params.serialdelim))
+            monAppend(("MESH: " + cmd).c_str(), 't');
+    }
+
     sServer.send(200, "text/plain", "OK");
 }
 
