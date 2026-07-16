@@ -383,7 +383,7 @@ public:
   void writeEol() { writeEolTo(SERIAL, params.serialeol); }
 
   void sendSerialString(const char *str) {
-    bool wentToMesh = fWCB.routeOutbound(str, params.outboundserial == 1);
+    bool wentToMesh = fWCB.routeOutbound(str, params.outboundserial == 1, params.serialdelim);
     if (!wentToMesh)
       sendSerialStringTo(SERIAL, str, params.serialdelim, params.serialeol);
     if (fSerialTxLog) fSerialTxLog(str, wentToMesh);

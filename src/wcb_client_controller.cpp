@@ -79,10 +79,24 @@ void WCBClientController::poll(const AmidalaParameters &params) {
     }
 }
 
-bool WCBClientController::routeOutbound(const char *cmd, bool wantMesh) {
+bool WCBClientController::routeOutbound(const char *cmd, bool wantMesh, uint8_t delim) {
     if (!wantMesh) return false;
     if (!fClient) return false; // not live -- fail-safe fallback to UART0
-    return fClient->broadcast(cmd);
+
+    // Segment size/count mirror WCB_RX_CMD_LEN (wcb_rx_queue.h) and
+    // WCB_Client's own ~199-char single-broadcast-command ceiling -- any
+    // one delimited piece longer than that would already be rejected by
+    // the library itself, so there's no point sizing larger.
+    static const uint8_t kMaxSegments = 4;
+    static const uint8_t kSegLen      = 200;
+    char segments[kMaxSegments][kSegLen];
+    uint8_t n = splitOnDelimiter(cmd, delim, &segments[0][0], kSegLen, kMaxSegments);
+    if (n == 0) return false; // empty/all-delimiter input -- nothing sent, fall back to UART0
+
+    bool ok = true;
+    for (uint8_t i = 0; i < n; i++)
+        ok = fClient->broadcast(segments[i]) && ok;
+    return ok;
 }
 
 String WCBClientController::statusJson(const AmidalaParameters &params) const {

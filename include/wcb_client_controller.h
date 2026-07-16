@@ -29,6 +29,7 @@
 #include <WString.h>
 
 #include "params.h"
+#include "serial_output.h"
 #include "wcb_config_validator.h"
 #include "wcb_hcr_transport.h"
 #include "wcb_rx_queue.h"
@@ -66,7 +67,16 @@ public:
     // fail-safe fallback: if WCB is selected but isn't actually live
     // (disabled, failed validation, or the broadcast call itself failed),
     // this returns false so the command is never silently dropped.
-    bool routeOutbound(const char *cmd, bool wantMesh);
+    //
+    // cmd may be a compound, delim-delimited string (e.g. a single sstr/
+    // gadget entry like "DM:ALARM|:PL4:PP100:PR30:PW20:PH", the same
+    // convention sendSerialStringTo() splits into separate UART0 lines) --
+    // WCB_Client::broadcast() has no delimiter handling of its own and
+    // sends one complete command per call, so each delimited piece is
+    // broadcast individually rather than shipping the whole compound
+    // string as one unsplit blob (which would desync both halves' intended
+    // receivers -- see the regression this fixed).
+    bool routeOutbound(const char *cmd, bool wantMesh, uint8_t delim);
 
     // Live status for /api/wcb/status.
     String statusJson(const AmidalaParameters &params) const;
