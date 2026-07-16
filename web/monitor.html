@@ -68,6 +68,7 @@ main{flex:1;display:flex;flex-direction:column;min-height:0;max-width:none;margi
     <button class="tbtn on" id="f-S0" onclick="toggleFilter('S0')" title="S0 — WCB serial">S0</button>
     <button class="tbtn on" id="f-S1" onclick="toggleFilter('S1')" title="S1 — auxiliary">S1</button>
     <button class="tbtn on" id="f-S2" onclick="toggleFilter('S2')" title="S2 — auxiliary">S2</button>
+    <button class="tbtn on" id="f-WCB" onclick="toggleFilter('WCB')" title="WCB — mesh network" hidden>WCB</button>
     <span class="tsep"></span>
     <button class="tbtn" id="pbtn" onclick="togglePause()">Pause</button>
     <button class="tbtn" onclick="clearLog()">Clear</button>
@@ -87,7 +88,7 @@ var _seq      = -1;
 var _paused   = false;
 var _autoScroll = true;
 var _entries  = [];   // all received entries: [{t: text, c: cls}, ...]
-var _filters  = { tx: true, rx: false, S0: true, S1: true, S2: true };
+var _filters  = { tx: true, rx: false, S0: true, S1: true, S2: true, WCB: true };
 
 var logEl  = document.getElementById('log');
 var dotEl  = document.getElementById('dot');
@@ -99,8 +100,14 @@ logEl.addEventListener('scroll', function() {
 });
 
 function portOf(text) {
-  var m = text.match(/^(S\d)/);
-  return m ? m[1] : null;
+  // Mesh traffic is tagged "MESH: ..." at the source (controller.h's TX log,
+  // WCBClientController::poll()'s RX tag) -- mapped to the "WCB" filter key
+  // here rather than renaming the wire-level tag, so it reads distinctly
+  // from S0/S1/S2 in the log itself while still getting its own toolbar
+  // toggle, gated by the same tx/rx checks as every other port below.
+  var m = text.match(/^(S\d|MESH)/);
+  if (!m) return null;
+  return m[1] === 'MESH' ? 'WCB' : m[1];
 }
 
 function shouldShow(entry) {
@@ -175,6 +182,17 @@ function togglePause() {
   pbtn.className   = 'tbtn' + (_paused ? ' on' : '');
   if (!_paused) poll();
 }
+
+// The WCB filter button only makes sense (and only ever gets traffic) when
+// WCB Client is enabled -- checked once on load, same one-shot pattern
+// connectivity.html's WCB panel already uses, rather than polling
+// /api/wcb/status alongside /api/monitor on every tick.
+fetch('/api/wcb/status').then(function(r) { return r.ok ? r.json() : null; }).then(function(d) {
+  if (d && d.enabled) {
+    var btn = document.getElementById('f-WCB');
+    if (btn) btn.hidden = false;
+  }
+}).catch(function() {});
 
 poll();
 setInterval(poll, 1500);

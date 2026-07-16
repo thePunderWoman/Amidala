@@ -358,6 +358,26 @@ class _Handler(SimpleHTTPRequestHandler):
         if path == "/api/periscope/seqs":
             self._json(_config.get("periscope_seqs", {}))
             return
+        if path == "/api/wcb/status":
+            enabled    = _config.get("wcbenable") == "y"
+            configured = enabled and bool(_config.get("wcbpassword")) \
+                         and _config.get("wcbquantity", 0) > 0 \
+                         and 1 <= _config.get("wcbid", 0) <= 20
+            # Mock server has no real mesh -- simulate a clean join once
+            # configured, purely so the UI has something to preview locally.
+            running = configured
+            joined  = configured
+            self._json({
+                "enabled": enabled,
+                "configured": configured,
+                "running": running,
+                "joined": joined,
+                "neighbor_count": 1 if joined else 0,
+                "device_id": _config.get("wcbid", 0),
+                "quantity": _config.get("wcbquantity", 0),
+                "reboot_required": False,
+            })
+            return
 
         # Map extension-less paths to .html (e.g. /config/general → general.html)
         local = os.path.join(_WEB_DIR, path.lstrip("/"))

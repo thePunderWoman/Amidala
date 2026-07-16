@@ -220,6 +220,11 @@ void test_monitor_page_has_send_and_pause_ui() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "clearLog"));
 }
 
+void test_monitor_page_has_wcb_filter_gated_on_status() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "id=\"f-WCB\""));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "/api/wcb/status"));
+}
+
 void test_servos_page_uses_config_endpoint() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_SERVOS, "/api/config"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_SERVOS, "href=\"/\""));
@@ -834,6 +839,7 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_dome_page_schema_keys);
     RUN_TEST(test_monitor_page_uses_monitor_api);
     RUN_TEST(test_monitor_page_has_send_and_pause_ui);
+    RUN_TEST(test_monitor_page_has_wcb_filter_gated_on_status);
     RUN_TEST(test_servos_page_uses_config_endpoint);
     RUN_TEST(test_servos_page_has_edit_ui);
     RUN_TEST(test_serial_strings_page_uses_config_endpoint);
