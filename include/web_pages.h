@@ -489,6 +489,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -674,6 +690,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -782,7 +806,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -823,6 +847,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -913,14 +1011,14 @@ var SCHEMA = [
   {key:'mix12',      label:'Channel Mixing',                 type:'bool'},
   {key:'auto',       label:'Autocorrect Gestures',           type:'bool'},
   {section:'Serial'},
-  {key:'serialbaud', label:'Baud Rate',                      type:'number', min:300, max:115200},
+  {key:'serialbaud', label:'Baud Rate',                      type:'number', min:300, max:115200, restart:true},
   {key:'serialdelim',label:'Delimiter',                      type:'ascii-char'},
   {key:'serialeol',  label:'End of Line',                    type:'select', options:[
     {v:'10', l:'LF (\\n)'},
     {v:'13', l:'CR (\\r)'},
     {v:'0',  l:'CRLF (\\r\\n)'}
   ]},
-  {key:'auxserial3', label:'Aux Serial 3 (Software Serial)', type:'bool'},
+  {key:'auxserial3', label:'Aux Serial 3 (Software Serial)', type:'bool', restart:true},
   {section:'I²C'},
   {key:'myi2c',      label:"This Board's Address",           type:'number', min:0, max:100}
 ];
@@ -1136,6 +1234,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -1321,6 +1435,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -1429,7 +1551,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -1470,6 +1592,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -1559,12 +1755,12 @@ function wcbOn(d)  { return d.wcbenable === 'y'; }
 
 var SCHEMA = [
   {section:'XBee Remotes'},
-  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address'},
-  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address'},
+  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address', restart:true},
+  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address', restart:true},
   {section:'WiFi Access Point'},
-  {key:'wifion',       label:'Enable WiFi AP', type:'bool'},
-  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', when:wifiOn},
-  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars',  when:wifiOn},
+  {key:'wifion',       label:'Enable WiFi AP', type:'bool', restart:true},
+  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', when:wifiOn, restart:true},
+  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars',  when:wifiOn, restart:true},
   {section:'Bluetooth Controller'},
   {key:'btcontrolleron', label:'Enable Bluetooth Controller', type:'bool'},
   {section:'WCB Client (Mesh Network)'},
@@ -1577,6 +1773,15 @@ var SCHEMA = [
   {key:'outboundserial', label:'Outbound Destination', type:'select', when:wcbOn,
     options:[{v:'0', l:'UART0 (wired)'}, {v:'1', l:'WCB Mesh'}]}
 ];
+
+// refreshWCBStatus() only runs once, when buildPage()'s callback fires on
+// initial load -- doSave() has no reason to know about page-specific status
+// panels, so without this hook a WCB identity-field edit that flips the
+// server's reboot_required flag would never be reflected until the next
+// full page load. See edit.js's doSave() for where this is called.
+function _onConfigSaved(key) {
+  if (key.indexOf('wcb') === 0 || key === 'outboundserial') refreshWCBStatus();
+}
 
 buildPage(SCHEMA, '/api/config', function() {
   // buildPage replaces main's innerHTML. Anchor each status panel right
@@ -1735,9 +1940,7 @@ function refreshWCBStatus() {
 
     var html = '';
 
-    if (d.reboot_required) {
-      html += '<div class="info-banner">Mesh identity settings changed — reboot to apply.</div>';
-    }
+    if (d.reboot_required) _flagRestartRequired();
 
     var statusText = !d.configured
       ? 'Not configured — check the fields above'
@@ -1972,6 +2175,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -2157,6 +2376,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -2265,7 +2492,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -2306,6 +2533,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -2392,9 +2693,9 @@ function _applyWhenVisibility() {
 <script>
 var SCHEMA = [
   {section:'Access Point'},
-  {key:'wifion',       label:'Enable WiFi AP', type:'bool'},
-  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars'},
-  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars'}
+  {key:'wifion',       label:'Enable WiFi AP', type:'bool', restart:true},
+  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', restart:true},
+  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars', restart:true}
 ];
 buildPage(SCHEMA, '/api/config');
 </script>
@@ -2608,6 +2909,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -2793,6 +3110,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -2901,7 +3226,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -2942,6 +3267,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -3028,8 +3427,8 @@ function _applyWhenVisibility() {
 <script>
 var SCHEMA = [
   {section:'Remote Addresses (32-bit hex)'},
-  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address'},
-  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address'}
+  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address', restart:true},
+  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address', restart:true}
 ];
 buildPage(SCHEMA, '/api/config');
 </script>
@@ -3243,6 +3642,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -3440,6 +3855,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -3548,7 +3971,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -3589,6 +4012,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -3684,22 +4181,22 @@ var SCHEMA = [
   {section:'Hardware'},
   {key:'audiohw',        label:'Audio Board',        readOnly:true},
   {section:'Volume'},
-  {key:'volume',         label:'R2 Sounds Volume',   type:'number', min:0, max:100},
-  {key:'volumeChA',      label:'Channel A Volume',   type:'number', min:0, max:100, when:HCR},
-  {key:'volumeChB',      label:'Channel B Volume',   type:'number', min:0, max:100, when:HCR},
+  {key:'volume',         label:'R2 Sounds Volume',   type:'number', min:0, max:100, restart:true},
+  {key:'volumeChA',      label:'Channel A Volume',   type:'number', min:0, max:100, when:HCR, restart:true},
+  {key:'volumeChB',      label:'Channel B Volume',   type:'number', min:0, max:100, when:HCR, restart:true},
   {key:'volumewheel',    label:'Volume Wheel',       type:'select', options:_whl,   when:HCR},
   {key:'altvolumewheel', label:'Alt+Wheel',          type:'select', options:_awl,   when:HCR},
   {section:'Startup Emote', when:HCR},
-  {key:'startupem',  label:'Emotion', type:'select', options:_emo},
-  {key:'startuplvl', label:'Level',   type:'select', options:_lvl},
+  {key:'startupem',  label:'Emotion', type:'select', options:_emo, restart:true},
+  {key:'startuplvl', label:'Level',   type:'select', options:_lvl, restart:true},
   {section:'Ack Emote', when:HCR},
   {key:'ackem',  label:'Emotion', type:'select', options:_emo},
   {key:'acklvl', label:'Level',   type:'select', options:_lvl},
   {section:'Sound Playback'},
-  {key:'startup',  label:'Startup Sound',    type:'bool'},
-  {key:'rndon',    label:'Random Sounds',    type:'bool'},
-  {key:'mindelay', label:'Random Min Delay', type:'number', min:0, max:1000, note:'seconds'},
-  {key:'maxdelay', label:'Random Max Delay', type:'number', min:0, max:1000, note:'seconds'},
+  {key:'startup',  label:'Startup Sound',    type:'bool', restart:true},
+  {key:'rndon',    label:'Random Sounds',    type:'bool', restart:true},
+  {key:'mindelay', label:'Random Min Delay', type:'number', min:0, max:1000, note:'seconds', restart:true},
+  {key:'maxdelay', label:'Random Max Delay', type:'number', min:0, max:1000, note:'seconds', restart:true},
   {key:'ackon',    label:'Ack Sounds',       type:'bool'},
   {section:'Sound Banks', when:VMUSIC}
 ];
@@ -3997,6 +4494,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -4182,6 +4695,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -4290,7 +4811,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -4331,6 +4852,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -4653,6 +5248,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -4838,6 +5449,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -4946,7 +5565,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -4987,6 +5606,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -5314,6 +6007,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -5541,6 +6250,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -5649,7 +6366,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -5690,6 +6407,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -6287,6 +7078,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -6499,6 +7306,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -6607,7 +7422,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -6648,6 +7463,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -7166,6 +8055,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -7368,6 +8273,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -7476,7 +8389,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -7517,6 +8430,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -7613,8 +8600,8 @@ function load() {
     var maxpulse = d.maxpulse !== undefined ? String(d.maxpulse) : '2000';
     pa.innerHTML =
       '<div class="section-label" style="margin-top:.8rem">Global Pulse Limits</div>' +
-      buildRow({key:'minpulse', label:'Min Pulse Width', type:'number', min:500, max:1500, note:'µs'}, minpulse) +
-      buildRow({key:'maxpulse', label:'Max Pulse Width', type:'number', min:1500, max:2500, note:'µs'}, maxpulse);
+      buildRow({key:'minpulse', label:'Min Pulse Width', type:'number', min:500, max:1500, note:'µs', restart:true}, minpulse) +
+      buildRow({key:'maxpulse', label:'Max Pulse Width', type:'number', min:1500, max:2500, note:'µs', restart:true}, maxpulse);
   }).catch(function(){
     document.getElementById('tbl-area').innerHTML='<div id="status">Failed to load</div>';
   });
@@ -7897,6 +8884,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -8112,6 +9115,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -8220,7 +9231,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -8261,6 +9272,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -8833,6 +9918,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -9070,6 +10171,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -9178,7 +10287,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -9219,6 +10328,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -9894,6 +11077,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -10097,6 +11296,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -10205,7 +11412,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -10246,6 +11453,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -10701,6 +11982,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -10949,6 +12246,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -11057,7 +12362,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -11098,6 +12403,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -11488,6 +12867,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -11730,6 +13125,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -11838,7 +13241,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -11879,6 +13282,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -12263,6 +13740,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -12568,6 +14061,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -12765,6 +14274,14 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
       // The saved value must stick: update dataset.orig to it (so a future
       // Cancel reverts to this, not the pre-edit value) and close the edit
       // UI directly -- NOT via doCancel(), which would revert inp.value
@@ -12873,7 +14390,7 @@ function buildRow(s, val, hidden) {
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -12914,6 +14431,80 @@ function buildRow(s, val, hidden) {
 
   if (hdr) hdr.appendChild(rg);
   else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
 })();
 
 // --------------------------------------------------------------- footer -------
@@ -13015,7 +14606,11 @@ function connLed(ok) {
 }
 
 function buildUI() {
-  var html = '<div class="section-label">Connectivity</div>';
+  var html = '<div class="section-label">Device</div>';
+  html += '<div class="row"><div class="row-label">Restart Droid</div>'
+        + '<button class="be-action" onclick="_doRestart(this)">Restart</button></div>';
+
+  html += '<div class="section-label">Connectivity</div>';
   html += '<div class="row"><div class="row-label">XBee Drive</div>'
         + '<div class="pin-led low" id="conn-xd-led">&#9679;</div>'
         + '<div class="pin-state low" id="conn-xd-st">OFFLINE</div></div>';

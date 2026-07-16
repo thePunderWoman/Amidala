@@ -25,12 +25,12 @@ function wcbOn(d)  { return d.wcbenable === 'y'; }
 
 var SCHEMA = [
   {section:'XBee Remotes'},
-  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address'},
-  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address'},
+  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address', restart:true},
+  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address', restart:true},
   {section:'WiFi Access Point'},
-  {key:'wifion',       label:'Enable WiFi AP', type:'bool'},
-  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', when:wifiOn},
-  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars',  when:wifiOn},
+  {key:'wifion',       label:'Enable WiFi AP', type:'bool', restart:true},
+  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', when:wifiOn, restart:true},
+  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars',  when:wifiOn, restart:true},
   {section:'Bluetooth Controller'},
   {key:'btcontrolleron', label:'Enable Bluetooth Controller', type:'bool'},
   {section:'WCB Client (Mesh Network)'},
@@ -43,6 +43,15 @@ var SCHEMA = [
   {key:'outboundserial', label:'Outbound Destination', type:'select', when:wcbOn,
     options:[{v:'0', l:'UART0 (wired)'}, {v:'1', l:'WCB Mesh'}]}
 ];
+
+// refreshWCBStatus() only runs once, when buildPage()'s callback fires on
+// initial load -- doSave() has no reason to know about page-specific status
+// panels, so without this hook a WCB identity-field edit that flips the
+// server's reboot_required flag would never be reflected until the next
+// full page load. See edit.js's doSave() for where this is called.
+function _onConfigSaved(key) {
+  if (key.indexOf('wcb') === 0 || key === 'outboundserial') refreshWCBStatus();
+}
 
 buildPage(SCHEMA, '/api/config', function() {
   // buildPage replaces main's innerHTML. Anchor each status panel right
@@ -201,9 +210,7 @@ function refreshWCBStatus() {
 
     var html = '';
 
-    if (d.reboot_required) {
-      html += '<div class="info-banner">Mesh identity settings changed — reboot to apply.</div>';
-    }
+    if (d.reboot_required) _flagRestartRequired();
 
     var statusText = !d.configured
       ? 'Not configured — check the fields above'

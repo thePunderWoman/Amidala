@@ -740,6 +740,44 @@ void test_setEnable_false_blocks_joystick_drive() {
     sTestStick.state.analog.stick.rx = 0;
 }
 
+// ---- setMaxSpeedPct() / setAddress() / setChannel() — live-apply setters ----
+// Regression coverage for two bugs found while auditing which config.cpp
+// live-apply call sites actually work:
+//   1. domespeed= called setMaxSpeed(raw 0-100 UI value) instead of
+//      setMaxSpeedPct(value/100.0f) -- setMaxSpeed() expects a 0.0-1.0
+//      fraction, so any live edit >=1 clamped to full speed.
+//   2. domercaddr=/domercchan= were parsed into params but never applied to
+//      the live DomeDriveRoboClaw at all, live or after reboot -- the
+//      constructor only ever used compile-time macro defaults.
+
+void test_setMaxSpeedPct_converts_fraction_correctly() {
+    auto drive = make_drive();
+    drive.setMaxSpeedPct(0.5f);
+    TEST_ASSERT_EQUAL_FLOAT(0.5f, drive.getMaxSpeed());
+}
+
+void test_setMaxSpeedPct_clamps_above_one() {
+    // Mirrors what config.cpp now does for domespeed=100: 100/100.0f = 1.0,
+    // not the pre-fix bug's raw 100 (which setMaxSpeed() would have clamped
+    // to 1.0 anyway for -- but any value 1-99 previously misbehaved the
+    // same way; this just confirms the pct wrapper itself clamps correctly).
+    auto drive = make_drive();
+    drive.setMaxSpeedPct(1.5f);
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, drive.getMaxSpeed());
+}
+
+void test_setAddress_updates_field() {
+    auto drive = make_drive();
+    drive.setAddress(130);
+    TEST_ASSERT_EQUAL_UINT8(130, drive.getAddressForTest());
+}
+
+void test_setChannel_updates_field() {
+    auto drive = make_drive();
+    drive.setChannel(2);
+    TEST_ASSERT_EQUAL_UINT8(2, drive.getChannelForTest());
+}
+
 // ---- setAltDomeStick() — fallback when primary stick is disconnected ---------
 
 static JoystickController sAltStick;
@@ -1043,6 +1081,12 @@ int main(int argc, char **argv) {
     RUN_TEST(test_stop_preserves_kStateHomed);
     RUN_TEST(test_stop_zeros_motor_command);
     RUN_TEST(test_setEnable_false_blocks_joystick_drive);
+
+    RUN_TEST(test_setMaxSpeedPct_converts_fraction_correctly);
+    RUN_TEST(test_setMaxSpeedPct_clamps_above_one);
+    RUN_TEST(test_setAddress_updates_field);
+    RUN_TEST(test_setChannel_updates_field);
+
     RUN_TEST(test_alt_stick_used_when_primary_disconnected);
     RUN_TEST(test_primary_stick_takes_priority_over_alt);
     RUN_TEST(test_alt_stick_idle_when_primary_disconnected_and_alt_centred);

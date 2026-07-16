@@ -1188,6 +1188,20 @@ static void handleApiResume() {
     sServer.send(200, "text/plain", "OK");
 }
 
+// Dedicated restart trigger for the web UI's "Restart Now" button. The only
+// other way to reboot from the browser was piggybacking on /api/monitor's
+// cmd=reboot passthrough, which hits config.cpp's null-function-pointer
+// crash trick with no response flush first. This mirrors the OTA update
+// path's clean restart instead (see handleUpdatePost() above): flush a 200
+// with Connection: close, give it a moment to actually go out, then restart.
+static void handleApiReboot() {
+    monAppend("RESTART requested via web UI", 'i');
+    sServer.sendHeader("Connection", "close");
+    sServer.send(200, "text/plain", "OK");
+    delay(200);
+    ESP.restart();
+}
+
 static void handleApiDome() {
     if (!sCtrl) { sServer.send(500, "text/plain", "no controller"); return; }
     String cmd = sServer.arg("cmd");
@@ -1561,6 +1575,7 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/api/info",   HTTP_GET,  handleApiInfo);
     sServer.on("/api/estop",  HTTP_POST, handleApiEstop);
     sServer.on("/api/resume", HTTP_POST, handleApiResume);
+    sServer.on("/api/reboot", HTTP_POST, handleApiReboot);
     sServer.on("/api/dome",   HTTP_POST, handleApiDome);
     sServer.on("/api/gadget-cmd", HTTP_POST, handleApiGadgetCmd);
     sServer.on("/api/serial",     HTTP_POST, handleApiSerial);

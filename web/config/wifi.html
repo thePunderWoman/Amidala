@@ -22,9 +22,9 @@
 <script>
 var SCHEMA = [
   {section:'Access Point'},
-  {key:'wifion',       label:'Enable WiFi AP', type:'bool'},
-  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars'},
-  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars'}
+  {key:'wifion',       label:'Enable WiFi AP', type:'bool', restart:true},
+  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', restart:true},
+  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars', restart:true}
 ];
 buildPage(SCHEMA, '/api/config');
 </script>

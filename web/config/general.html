@@ -26,14 +26,14 @@ var SCHEMA = [
   {key:'mix12',      label:'Channel Mixing',                 type:'bool'},
   {key:'auto',       label:'Autocorrect Gestures',           type:'bool'},
   {section:'Serial'},
-  {key:'serialbaud', label:'Baud Rate',                      type:'number', min:300, max:115200},
+  {key:'serialbaud', label:'Baud Rate',                      type:'number', min:300, max:115200, restart:true},
   {key:'serialdelim',label:'Delimiter',                      type:'ascii-char'},
   {key:'serialeol',  label:'End of Line',                    type:'select', options:[
     {v:'10', l:'LF (\\n)'},
     {v:'13', l:'CR (\\r)'},
     {v:'0',  l:'CRLF (\\r\\n)'}
   ]},
-  {key:'auxserial3', label:'Aux Serial 3 (Software Serial)', type:'bool'},
+  {key:'auxserial3', label:'Aux Serial 3 (Software Serial)', type:'bool', restart:true},
   {section:'I²C'},
   {key:'myi2c',      label:"This Board's Address",           type:'number', min:0, max:100}
 ];

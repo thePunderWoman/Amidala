@@ -193,6 +193,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;

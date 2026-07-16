@@ -198,6 +198,8 @@ void AmidalaController::setup() {
   fDomeDrive.setThrottleDecelerationScale(DEFAULT_DOME_DECELERATION_SCALE);
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
   // Apply runtime-configurable RoboClaw parameters from the loaded config.
+  fDomeDrive.setAddress(params.domercaddr);
+  fDomeDrive.setChannel(params.domercchan);
   fDomeDrive.setFrontOffset(params.domefront);
   fDomeDrive.setQPPS(params.domercqpps);
   fDomeDrive.setStallTimeout(params.domestall);

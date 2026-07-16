@@ -215,6 +215,13 @@ public:
     /** Update the stall-detection timeout (ms). */
     void setStallTimeout(uint16_t ms) { fStallTimeoutMs = ms; }
 
+    /** Update the RoboClaw packet-serial address. Applied immediately --
+     *  takes effect on the next command sent. */
+    void setAddress(uint8_t address) { fAddress = address; }
+
+    /** Update the motor channel (1 = M1, 2 = M2). Applied immediately. */
+    void setChannel(uint8_t channel) { fChannel = channel; }
+
     /** Configure auto-mode timing and speed params from loaded config. */
     void applyDomePositionParams(uint8_t seekMinDelay, uint8_t seekMaxDelay,
                                  uint8_t seekLeft,     uint8_t seekRight,
@@ -441,6 +448,9 @@ public:
     void    setTicksPerRevForTest(int32_t t) { fTicksPerDomeRev = t; }
     /// Read back the target set by the most recent goToAngle() call.
     int     getGoToTargetForTest()     const { return fGoToTargetDegrees; }
+    /// Read back the RoboClaw packet address/channel for setAddress()/setChannel() tests.
+    uint8_t getAddressForTest() const { return fAddress; }
+    uint8_t getChannelForTest() const { return fChannel; }
 private:
     int32_t fMockEncoderSpeed = 0;
 #endif

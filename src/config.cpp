@@ -678,7 +678,15 @@ bool AmidalaConfig::processConfig(const char *cmd) {
     domeDrive->setInverted(params.domeflip);
     return true;
   } else if (intparam(cmd, "domespeed=", params.domespeed, 0, 100)) {
-    domeDrive->setMaxSpeed(params.domespeed);
+    // setMaxSpeed()/setMaxSpeedPct() expect a 0.0-1.0 fraction, not the raw
+    // 0-100 UI value -- matches what boot-time setup() already does
+    // (src/controller.cpp). setMaxSpeedPct() is a RoboClaw-only convenience
+    // wrapper; other dome-drive variants only have the base setMaxSpeed().
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+    static_cast<DomeDriveRoboClaw*>(domeDrive)->setMaxSpeedPct(float(params.domespeed) / 100.0f);
+#else
+    domeDrive->setMaxSpeed(float(params.domespeed) / 100.0f);
+#endif
     return true;
   } else if (sintparam(cmd, "domepos=", sintarg)) {
 #ifdef RDH_SERIAL
@@ -738,8 +746,14 @@ bool AmidalaConfig::processConfig(const char *cmd) {
   // ---- RoboClaw dome drive parameters (parsed regardless of active dome
   //      drive so config.txt is portable between builds) ---------------------
   } else if (intparam(cmd, "domercaddr=", params.domercaddr, 128, 135)) {
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+    static_cast<DomeDriveRoboClaw*>(domeDrive)->setAddress(params.domercaddr);
+#endif
     return true;
   } else if (intparam(cmd, "domercchan=", params.domercchan, 1, 2)) {
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+    static_cast<DomeDriveRoboClaw*>(domeDrive)->setChannel(params.domercchan);
+#endif
     return true;
   } else if (intparam(cmd, "domercqpps=", params.domercqpps, 1, 65535)) {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW

@@ -385,6 +385,12 @@ class _Handler(SimpleHTTPRequestHandler):
             _monitor["seq"] += 1
             self._text("OK")
             return
+        if path == "/api/reboot":
+            print("  REBOOT (simulated -- dev server stays up)")
+            _monitor["lines"].append({"t": "RESTART requested via web UI", "c": "info"})
+            _monitor["seq"] += 1
+            self._text("OK")
+            return
         if path == "/api/estop":
             print("  ESTOP!")
             _monitor["lines"].append({"t": "! EMERGENCY STOP", "c": "info"})
