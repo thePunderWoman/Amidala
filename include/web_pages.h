@@ -1761,6 +1761,8 @@ var SCHEMA = [
   {key:'wifion',       label:'Enable WiFi AP', type:'bool', restart:true},
   {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', when:wifiOn, restart:true},
   {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars',  when:wifiOn, restart:true},
+  {key:'wifichannel',  label:'Channel',        type:'number', min:1, max:13, when:wifiOn,
+    note:'optional — must match the WCB mesh channel if WCB Client is used', restart:true},
   {section:'Bluetooth Controller'},
   {key:'btcontrolleron', label:'Enable Bluetooth Controller', type:'bool'},
   {section:'WCB Client (Mesh Network)'},
@@ -2695,7 +2697,9 @@ var SCHEMA = [
   {section:'Access Point'},
   {key:'wifion',       label:'Enable WiFi AP', type:'bool', restart:true},
   {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', restart:true},
-  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars', restart:true}
+  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars', restart:true},
+  {key:'wifichannel',  label:'Channel',        type:'number', min:1, max:13,
+    note:'optional — must match the WCB mesh channel if WCB Client is used', restart:true}
 ];
 buildPage(SCHEMA, '/api/config');
 </script>

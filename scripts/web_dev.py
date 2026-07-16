@@ -67,6 +67,7 @@ def parse_example_config(path):
         "wifion":        "y",
         "wifissid":      "amidala",
         "wifipassword":  "Astromech",
+        "wifichannel":   1,
         "xbr":           "00000000",
         "xbl":           "00000000",
         "audiohw":       "hcr",
@@ -146,7 +147,7 @@ def parse_example_config(path):
                   "altbtn", "mutebutton", "altdomestick",
                   "startupem", "startuplvl", "ackem", "acklvl",
                   "volumeChA", "volumeChB", "volumewheel", "altvolumewheel",
-                  "wcbquantity", "wcbid", "outboundserial"}
+                  "wcbquantity", "wcbid", "outboundserial", "wifichannel"}
     _str_keys  = {"startup", "rndon", "ackon", "goslow", "mix12", "auto",
                   "wifion", "wifissid", "wifipassword", "xbr", "xbl",
                   "audiohw", "domeflip", "domeimu", "domech6",

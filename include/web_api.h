@@ -121,6 +121,7 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     json += "\"wifion\":\""       + String(p.wifion ? "y" : "n")      + "\",";
     json += "\"wifissid\":\""     + String(p.wifiSSID)                 + "\",";
     json += "\"wifipassword\":\"" + String(p.wifiPassword)             + "\",";
+    json += "\"wifichannel\":"    + String(p.wifichannel)              + ",";
 
     // XBee
     json += "\"xbr\":\"" + hexStr(p.xbr) + "\",";

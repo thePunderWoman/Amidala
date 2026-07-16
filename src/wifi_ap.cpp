@@ -1561,19 +1561,19 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     // enough for WiFi power-save to be worth that tradeoff.
     esp_wifi_set_ps(WIFI_PS_NONE);
     // WCB_Client has no way to be told which WiFi channel to use yet (that's
-    // planned for a future WCBClient release, once it lands this should pass
-    // WCB_MESH_WIFI_CHANNEL through explicitly instead of relying on this
-    // coincidence) -- until then, every other board on the mesh with no
-    // SoftAP of its own lands on whatever the ESP-NOW/WiFi stack defaults to
-    // with no channel specified, which is channel 1. Since ESP-NOW rides
-    // whatever channel this AP starts on, it has to match that exactly or
-    // this board simply won't hear the rest of the mesh -- pin it explicitly
-    // rather than relying on WiFi.softAP()'s own default parameter (currently
-    // also 1, but an implicit library default silently matching another
-    // library's implicit default is exactly the kind of thing that stops
-    // matching the moment either one changes).
-    static const int WCB_MESH_WIFI_CHANNEL = 1;
-    bool apOk = WiFi.softAP(ssid, password, WCB_MESH_WIFI_CHANNEL);
+    // planned for a future WCBClient release) -- until then, every other
+    // board on the mesh with no SoftAP of its own lands on whatever the
+    // ESP-NOW/WiFi stack defaults to with no channel specified, which is
+    // channel 1. Since ESP-NOW rides whatever channel this AP starts on, it
+    // has to match that exactly or this board simply won't hear the rest of
+    // the mesh. params.wifichannel defaults to 1 (see AmidalaParameters::init())
+    // to match that, and is user-configurable (1-13) for the rare case where
+    // WiFi interference matters more than mesh compatibility -- passed
+    // explicitly rather than relying on WiFi.softAP()'s own default
+    // parameter, which is also 1 today but is exactly the kind of implicit
+    // cross-library coincidence that stops matching the moment either
+    // library's default changes.
+    bool apOk = WiFi.softAP(ssid, password, sCtrl->params.wifichannel);
     IPAddress ip = WiFi.softAPIP();
     Serial.print(F("[WiFi] AP \""));
     Serial.print(ssid);

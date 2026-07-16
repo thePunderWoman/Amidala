@@ -878,6 +878,51 @@ void test_outboundserial_defaults_to_uart0() {
     TEST_ASSERT_EQUAL(0, p.outboundserial);
 }
 
+// wifichannel's default (1) is covered in test_params.cpp's
+// test_default_wifichannel via the long-lived gDefaultParams -- p.init(true)
+// on a fresh local struct here is unreliable for non-zero defaults, since
+// AmidalaParameters::init() gates its default-assignment block behind a
+// function-local `static bool sRAMInited` shared across every instance in
+// the process: once any earlier test in this binary has already initialized
+// any AmidalaParameters instance, that flag stays latched true, so
+// p.init(true) on a *fresh* local struct here silently skips re-applying
+// defaults. Every other *_defaults_to_* test in this file happens to check
+// a value that's already 0/false after memset(), which masks this; 1 is not.
+
+void test_wifichannel_intparam_parses() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = intparam("wifichannel=6", "wifichannel=", p.wifichannel, 1, 13);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(6, p.wifichannel);
+}
+
+void test_wifichannel_clamps_below_minimum() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    // 0 < 1 → clamped to 1.
+    bool ok = intparam("wifichannel=0", "wifichannel=", p.wifichannel, 1, 13);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(1, p.wifichannel);
+}
+
+void test_wifichannel_clamps_above_maximum() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    // 14 > 13 → clamped to 13.
+    bool ok = intparam("wifichannel=14", "wifichannel=", p.wifichannel, 1, 13);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(13, p.wifichannel);
+}
+
+void test_wifichannel_accepts_boundary_13() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = intparam("wifichannel=13", "wifichannel=", p.wifichannel, 1, 13);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(13, p.wifichannel);
+}
+
 // Mirror of the wcbpassword= parsing logic in config.cpp.
 static bool parse_wcbpassword_line(const char* line, AmidalaParameters& p) {
     const char* cmd = line;
@@ -1008,6 +1053,10 @@ int main(int argc, char **argv) {
     RUN_TEST(test_wcbid_intparam_accepts_special_slot);
     RUN_TEST(test_outboundserial_intparam_parses);
     RUN_TEST(test_outboundserial_defaults_to_uart0);
+    RUN_TEST(test_wifichannel_intparam_parses);
+    RUN_TEST(test_wifichannel_clamps_below_minimum);
+    RUN_TEST(test_wifichannel_clamps_above_maximum);
+    RUN_TEST(test_wifichannel_accepts_boundary_13);
     RUN_TEST(test_wcbpassword_parse_stores_value);
     RUN_TEST(test_wcbpassword_parse_truncates_to_39_chars);
     RUN_TEST(test_wcbpassword_defaults_to_empty_string);

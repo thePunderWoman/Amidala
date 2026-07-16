@@ -134,6 +134,12 @@ wifion=y
 wifissid=amidala
 # WPA2 passphrase (min 8, max 64 chars)
 wifipassword=Astromech
+# 2.4GHz channel (1-13, default 1). Optional -- only change this if you know
+# what you're doing. AP and STA share one radio channel on the ESP32, so
+# this is also the channel WCB Client's ESP-NOW mesh rides when it's
+# enabled; it must match whatever channel the rest of the WCB mesh is
+# actually on (implicitly channel 1 today) or this board won't hear it.
+wifichannel=1
 
 # --- Bluetooth Controller ---
 # Enable the BLE HID gamepad at runtime (default n — opt-in since it

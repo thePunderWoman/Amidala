@@ -814,6 +814,8 @@ bool AmidalaConfig::processConfig(const char *cmd) {
     strncpy(params.wifiPassword, cmd, sizeof(params.wifiPassword) - 1);
     params.wifiPassword[sizeof(params.wifiPassword) - 1] = '\0';
     return true;
+  } else if (intparam(cmd, "wifichannel=", params.wifichannel, 1, 13)) {
+    return true;
   } else if (strcmp(cmd, "reboot") == 0) {
     void (*resetArduino)() = NULL;
     resetArduino();

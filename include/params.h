@@ -257,9 +257,16 @@ struct AmidalaParameters {
   // wifion: enable the on-board WiFi soft-AP (default true).
   // wifiSSID: network name broadcast by the AP (max 32 chars).
   // wifiPassword: WPA2 passphrase (min 8, max 64 chars).
+  // wifichannel: 2.4GHz channel 1-13 (default 1). AP and STA share a single
+  // radio channel on the ESP32, so this is also the channel WCB Client's
+  // ESP-NOW mesh rides when it's enabled -- must match whatever channel the
+  // rest of the WCB mesh is actually on (implicitly channel 1 today, since
+  // WCB_Client has no way yet to be told otherwise) or this board simply
+  // won't hear it. Only change this if you know what you're doing.
   bool    wifion;
   char    wifiSSID[33];
   char    wifiPassword[65];
+  uint8_t wifichannel;
 
   constexpr unsigned getSoundBankCount() {
     return sizeof(SB) / sizeof(SB[0]);
@@ -354,6 +361,7 @@ struct AmidalaParameters {
       wifion = true;
       strncpy(wifiSSID, "amidala", sizeof(wifiSSID));
       strncpy(wifiPassword, "Astromech", sizeof(wifiPassword));
+      wifichannel = 1;
       minpulse = DEFAULT_DOME_MIN_PULSE;
       maxpulse = DEFAULT_DOME_MAX_PULSE;
       sRAMInited = true;

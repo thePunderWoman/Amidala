@@ -93,6 +93,7 @@ void test_connectivity_page_has_all_sections() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'xbl'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wifion'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wifissid'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wifichannel'"));
     // BT section uses standard section-label class (no custom bt-* styles needed)
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "Bluetooth Controller"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'btcontrolleron'"));
@@ -169,6 +170,7 @@ void test_wifi_page_schema_keys() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifion'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifissid'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifipassword'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifichannel'"));
 }
 
 void test_xbee_page_schema_keys() {
@@ -323,12 +325,14 @@ void test_full_config_json_general_keys() {
 void test_full_config_json_wifi_keys() {
     AmidalaParameters p = makeParams();
     strncpy(p.wifiSSID, "amidala", sizeof(p.wifiSSID));
+    p.wifichannel = 11;
     String json = buildFullConfigJson(p);
     const char* s = json.c_str();
     TEST_ASSERT_TRUE(contains(s, "\"wifion\""));
     TEST_ASSERT_TRUE(contains(s, "\"wifissid\""));
     TEST_ASSERT_TRUE(contains(s, "\"wifipassword\""));
     TEST_ASSERT_TRUE(contains(s, "\"wifissid\":\"amidala\""));
+    TEST_ASSERT_TRUE(contains(s, "\"wifichannel\":11"));
 }
 
 void test_full_config_json_xbee_hex_format() {
