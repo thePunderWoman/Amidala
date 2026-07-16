@@ -1560,7 +1560,20 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     // see espressif/arduino-esp32#5806). This robot isn't power-constrained
     // enough for WiFi power-save to be worth that tradeoff.
     esp_wifi_set_ps(WIFI_PS_NONE);
-    bool apOk = WiFi.softAP(ssid, password);
+    // WCB_Client has no way to be told which WiFi channel to use yet (that's
+    // planned for a future WCBClient release, once it lands this should pass
+    // WCB_MESH_WIFI_CHANNEL through explicitly instead of relying on this
+    // coincidence) -- until then, every other board on the mesh with no
+    // SoftAP of its own lands on whatever the ESP-NOW/WiFi stack defaults to
+    // with no channel specified, which is channel 1. Since ESP-NOW rides
+    // whatever channel this AP starts on, it has to match that exactly or
+    // this board simply won't hear the rest of the mesh -- pin it explicitly
+    // rather than relying on WiFi.softAP()'s own default parameter (currently
+    // also 1, but an implicit library default silently matching another
+    // library's implicit default is exactly the kind of thing that stops
+    // matching the moment either one changes).
+    static const int WCB_MESH_WIFI_CHANNEL = 1;
+    bool apOk = WiFi.softAP(ssid, password, WCB_MESH_WIFI_CHANNEL);
     IPAddress ip = WiFi.softAPIP();
     Serial.print(F("[WiFi] AP \""));
     Serial.print(ssid);
