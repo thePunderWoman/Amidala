@@ -72,23 +72,35 @@ public:
     }
   }
 
-  bool matches(const char *str) {
+  // autocorrect=true tolerates stray/missing '5' (center) characters, which
+  // a human performing a real joystick gesture routinely introduces or drops
+  // when passing back through center between direction changes.
+  bool matches(const char *str, bool autocorrect = false) {
     if (fGesture == 0 && *str == '\0')
       return true;
     if (fGesture == 0)
       return false;
-    const char *s = str;
-    unsigned cnt = 0;
-    uint32_t quotient = fGesture;
-    while (quotient != 0 && cnt < MAX_GESTURE_LENGTH) {
-      uint8_t val[] = {'\0', '1', '2', '3', '4', '5', '6',
-                       '7',  '8', '9', 'A', 'B', 'C', 'D'};
-      uint32_t remainder = quotient % 14;
-      if (*s++ != val[remainder])
-        return false;
-      quotient = quotient / 14;
+    if (!autocorrect) {
+      const char *s = str;
+      unsigned cnt = 0;
+      uint32_t quotient = fGesture;
+      while (quotient != 0 && cnt < MAX_GESTURE_LENGTH) {
+        uint8_t val[] = {'\0', '1', '2', '3', '4', '5', '6',
+                         '7',  '8', '9', 'A', 'B', 'C', 'D'};
+        uint32_t remainder = quotient % 14;
+        if (*s++ != val[remainder])
+          return false;
+        quotient = quotient / 14;
+      }
+      return (*s == '\0');
     }
-    return (*s == '\0');
+    char expected[MAX_GESTURE_LENGTH + 1];
+    char strippedExpected[MAX_GESTURE_LENGTH + 1];
+    char strippedInput[MAX_GESTURE_LENGTH + 1];
+    getGestureString(expected);
+    stripCenter(expected, strippedExpected);
+    stripCenter(str, strippedInput);
+    return strcmp(strippedExpected, strippedInput) == 0;
   }
 
   char *getGestureString(char *str) const {
@@ -118,6 +130,17 @@ public:
   }
 
 private:
+  // Copies in to out, dropping '5' (center) characters. out must be at least
+  // as large as in.
+  static void stripCenter(const char *in, char *out) {
+    while (*in) {
+      if (*in != '5')
+        *out++ = *in;
+      in++;
+    }
+    *out = '\0';
+  }
+
   uint32_t fGesture;
 };
 

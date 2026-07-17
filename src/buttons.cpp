@@ -84,7 +84,7 @@ void AmidalaConsole::processGesture(const char *gesture) {
   print("GESTURE: ");
   println(gesture);
   for (unsigned i = 0; i < params.getGestureCount(); i++) {
-    if (params.G[i].gesture.matches(gesture)) {
+    if (params.G[i].gesture.matches(gesture, params.autocorrect)) {
       process(params.G[i].action);
     }
   }
