@@ -51,14 +51,15 @@ The correct workflow for any UI change:
 
 ## Build verification
 
-CI only runs the native unit tests (`pio test -e native`).
-**Always verify the firmware build locally before pushing:**
+CI (`ci.yml`) runs the native unit tests (`pio test -e native`) and compiles the real firmware for both board environments (default `DRIVE_SYSTEM`/`DOME_DRIVE` config only — not the full release matrix) on every push/PR. **Still always verify locally before pushing too** — CI catching it is a safety net, not a substitute for finding out before you open the PR:
 
 ```
 pio run
 ```
 
 If the firmware build is broken, fix it before opening or merging a PR.
+
+The full 30-combination `DRIVE_SYSTEM` x `DOME_DRIVE` x board matrix (`build-firmware-matrix.yml`) only runs on release/manual dispatch, not every push — it's too expensive for routine CI. That workflow has its own manual `HumanCyborgRelationsAPI` install step (the `esp32s3-*` environments use a local `lib/` copy, not a `lib_deps` URL) that must be kept in sync by hand with `platformio.ini`'s `env:native` `lib_deps` pin — a mismatch here compiles fine locally (if you have a lib/ copy already in place) and in `env:native`, but breaks every job in the release matrix. `ci.yml`'s `build-firmware` job has the same manual install step for the same reason, and exists specifically because this class of bug (HCR pinned to 1.0.3 in `platformio.ini` but the release workflow still cloning 1.0.2) previously shipped all the way to a published release before anyone noticed.
 
 ## Running tests
 
