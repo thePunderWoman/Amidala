@@ -24,6 +24,7 @@
 - **XBee wireless control** — secure, long-range, low-latency control via XBee 3 modules
 - **Multiple Controller Support** — works with classic stealth controllers, Amidala controllers, standard Bluetooth gamepads, and analog RC (PPM) input.
 - **Wi-Fi configuration UI** — browser-based interface for fully configuring your droid without needing to pull the SD card.
+- **WCB mesh networking** — join a [WCB](https://github.com/greghulette/WCBClient) ESP-NOW mesh to coordinate commands across multiple boards (e.g. a separate body controller) with no extra wiring.
 - **Native HCR support** — full Human Cyborg Relations vocalizer integration.
 - **Advanced Dome Drive** — Built-in support for auto dome drive with a Pololu encoder motor and hall sensor, or any other basic PWM dome drive.
 - **Flexible drive systems** — PWM, Sabertooth serial, or RoboteQ (PWM, serial, or hybrid)
