@@ -9,8 +9,8 @@ on:
 jobs:
   # ── Native unit tests ─────────────────────────────────────────────────────
   # Runs on macOS so the -isysroot path in platformio.ini matches CI and local
-  # development without modification.
-  # Firmware build is verified locally before pushing (see CLAUDE.md).
+  # development without modification. Real firmware compilation is verified
+  # by the build-firmware job below.
   test:
     name: Native Unit Tests
     runs-on: macos-latest
@@ -36,3 +36,53 @@ jobs:
 
       - name: Run unit tests
         run: pio test -e native
+
+  # ── Firmware build verification ───────────────────────────────────────────
+  # Compiles the real ESP32-S3 firmware (default DRIVE_SYSTEM/DOME_DRIVE,
+  # i.e. exactly what `pio run` builds locally with no -D overrides) for both
+  # board variants on every push/PR. Deliberately just these two builds, not
+  # the full 30-combo DRIVE_SYSTEM x DOME_DRIVE matrix in
+  # build-firmware-matrix.yml — that one's reserved for releases since it's
+  # too expensive to run on every push. This job exists because a dependency
+  # version mismatch (HumanCyborgRelationsAPI pinned to 1.0.3 in
+  # platformio.ini but this repo's release workflow still cloning 1.0.2)
+  # shipped all the way to a published release before anyone noticed —
+  # `pio run` is supposed to be verified locally before every push per
+  # CLAUDE.md, but nothing enforced that. Runs on ubuntu-latest, matching
+  # build-firmware-matrix.yml (unlike the native job above, cross-compiling
+  # for ESP32-S3 doesn't depend on the host OS's sysroot).
+  build-firmware:
+    name: Firmware Build (${{ matrix.board }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [esp32s3-n16r8, esp32s3-n8r2]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio-${{ matrix.board }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: ${{ runner.os }}-pio-
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      # See the matching step/comment in build-firmware-matrix.yml — same
+      # local-copy requirement, same pin, kept in sync by hand with
+      # platformio.ini's env:native lib_deps entry.
+      - name: Install HumanCyborgRelationsAPI
+        run: git clone --branch 1.0.3 --depth 1 https://github.com/thePunderWoman/HumanCyborgRelationsAPI lib/HumanCyborgRelationsAPI
+
+      - name: Build firmware
+        run: pio run -e ${{ matrix.board }}
