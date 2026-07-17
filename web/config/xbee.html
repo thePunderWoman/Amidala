@@ -22,8 +22,8 @@
 <script>
 var SCHEMA = [
   {section:'Remote Addresses (32-bit hex)'},
-  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address'},
-  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address'}
+  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address', restart:true},
+  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address', restart:true}
 ];
 buildPage(SCHEMA, '/api/config');
 </script>

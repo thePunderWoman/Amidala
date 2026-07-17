@@ -93,12 +93,23 @@ void test_connectivity_page_has_all_sections() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'xbl'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wifion'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wifissid'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wifichannel'"));
     // BT section uses standard section-label class (no custom bt-* styles needed)
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "Bluetooth Controller"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'btcontrolleron'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/bt/status"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/bt/scan"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/bt/pair"));
+    // WCB Client section
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "WCB Client"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wcbenable'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wcboct2'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wcboct3'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wcbpassword'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wcbquantity'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wcbid'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'outboundserial'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/wcb/status"));
 }
 
 void test_audio_page_uses_config_endpoint() {
@@ -159,6 +170,7 @@ void test_wifi_page_schema_keys() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifion'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifissid'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifipassword'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifichannel'"));
 }
 
 void test_xbee_page_schema_keys() {
@@ -208,6 +220,68 @@ void test_monitor_page_has_send_and_pause_ui() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "sendCmd"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "togglePause"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "clearLog"));
+}
+
+// Regression: Clear used to reset _seq to -1, which poll() treats as "first
+// load, show the server's entire current buffer" -- so the very next poll
+// after Clear immediately re-populated everything that had just been wiped.
+// clearLog() must leave _seq alone so only genuinely new lines reappear.
+void test_monitor_page_clear_does_not_replay_history() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "function clearLog() { logEl.innerHTML = ''; _entries = []; }"));
+}
+
+// Regression: Resume used to call a plain poll(), which appends every line
+// that arrived on the server while paused -- a surprising "catch-up dump"
+// for a control most users expect to mean "stop watching". Resume must
+// silently resync to the server's current seq instead of replaying it.
+void test_monitor_page_resume_does_not_replay_paused_traffic() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "poll(_seq !== -1)"));
+}
+
+void test_monitor_page_has_wcb_filter_gated_on_status() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "id=\"f-WCB\""));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "/api/wcb/status"));
+}
+
+// Regression: the S1 filter button used to be shown unconditionally even
+// though wifi_ap.cpp compiles out S1's RX tap entirely when the RoboClaw
+// dome drive is active (ROBOCLAW_SERIAL), so the button sat there and never
+// showed any traffic. It must start hidden like S2/WCB and only be
+// unhidden once /api/info confirms a non-RoboClaw dome.
+void test_monitor_page_s1_filter_gated_on_dome_variant() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "id=\"f-S1\" onclick=\"toggleFilter('S1')\" title=\"S1 — auxiliary\" hidden"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "d.dome !== 'roboclaw'"));
+}
+
+// Amidala's own console output (boot banner, config dumps, command replies --
+// see console.cpp's teeConsoleToMonitor()) is teed into the monitor labeled
+// "LOG: ". It must have its own always-visible filter button (unlike
+// S1/S2/WCB, it isn't gated on any runtime-optional feature -- the console
+// always exists) and be recognized by portOf() so it gets its own toggle
+// instead of falling through to "always show, no filter".
+void test_monitor_page_has_log_filter_for_console_output() {
+    // No "hidden" attribute -- unlike S1/S2/WCB, LOG isn't gated on any
+    // runtime-optional feature, so the tag must close right after title.
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR,
+        "id=\"f-LOG\" onclick=\"toggleFilter('LOG')\" title=\"LOG — Amidala's own console output (boot, config dumps, command replies)\">LOG</button>"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "S\\d|MESH|LOG"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "LOG: true"));
+}
+
+// Regression coverage for the log-clears-itself bug: poll() used to rebuild
+// the entire DOM from scratch every 1.5s (logEl.innerHTML = '' then
+// re-render), resetting scroll position on every tick and making the log
+// look like it cleared itself while scrolled up to read something. Fixed
+// by accumulating a growing client-side history and only appending new
+// lines each poll -- assert the page actually ships that fix, not the old
+// wholesale-replace behavior. A later cap that trimmed old entries/DOM
+// nodes once the client history grew large was removed on request -- nodes
+// must persist for the life of the page view, so also assert there's no
+// trim/slice of _entries left in appendEntries().
+void test_monitor_page_appends_instead_of_rebuilding_on_poll() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "appendEntries"));
+    TEST_ASSERT_FALSE(contains(WEB_PAGE_MONITOR, "MAX_CLIENT_LINES"));
+    TEST_ASSERT_FALSE(contains(WEB_PAGE_MONITOR, "_entries.slice"));
 }
 
 void test_servos_page_uses_config_endpoint() {
@@ -308,12 +382,14 @@ void test_full_config_json_general_keys() {
 void test_full_config_json_wifi_keys() {
     AmidalaParameters p = makeParams();
     strncpy(p.wifiSSID, "amidala", sizeof(p.wifiSSID));
+    p.wifichannel = 11;
     String json = buildFullConfigJson(p);
     const char* s = json.c_str();
     TEST_ASSERT_TRUE(contains(s, "\"wifion\""));
     TEST_ASSERT_TRUE(contains(s, "\"wifissid\""));
     TEST_ASSERT_TRUE(contains(s, "\"wifipassword\""));
     TEST_ASSERT_TRUE(contains(s, "\"wifissid\":\"amidala\""));
+    TEST_ASSERT_TRUE(contains(s, "\"wifichannel\":11"));
 }
 
 void test_full_config_json_xbee_hex_format() {
@@ -349,6 +425,32 @@ void test_full_config_json_btcontrolleron_true() {
     p.btcontrolleron = true;
     String json = buildFullConfigJson(p);
     TEST_ASSERT_TRUE(contains(json.c_str(), "\"btcontrolleron\":\"y\""));
+}
+
+void test_full_config_json_wcbenable_false_by_default() {
+    AmidalaParameters p = makeParams(); // wcbenable left zeroed = false
+    String json = buildFullConfigJson(p);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"wcbenable\":\"n\""));
+}
+
+void test_full_config_json_wcb_identity_stored_correctly() {
+    AmidalaParameters p = makeParams();
+    p.wcbenable = true;
+    p.wcboct2 = 10;
+    p.wcboct3 = 20;
+    strncpy(p.wcbpassword, "hunter2mesh", sizeof(p.wcbpassword));
+    p.wcbquantity = 8;
+    p.wcbid = 3;
+    p.outboundserial = 1;
+    String json = buildFullConfigJson(p);
+    const char* s = json.c_str();
+    TEST_ASSERT_TRUE(contains(s, "\"wcbenable\":\"y\""));
+    TEST_ASSERT_TRUE(contains(s, "\"wcboct2\":\"0A\""));
+    TEST_ASSERT_TRUE(contains(s, "\"wcboct3\":\"14\""));
+    TEST_ASSERT_TRUE(contains(s, "\"wcbpassword\":\"hunter2mesh\""));
+    TEST_ASSERT_TRUE(contains(s, "\"wcbquantity\":8"));
+    TEST_ASSERT_TRUE(contains(s, "\"wcbid\":3"));
+    TEST_ASSERT_TRUE(contains(s, "\"outboundserial\":1"));
 }
 
 void test_full_config_json_audio_keys() {
@@ -602,7 +704,7 @@ void test_info_json_contains_version_key() {
 
 void test_info_json_contains_board_rev_and_mcu() {
     String json = buildInfoJson("roboteq-pwm", "roboclaw", "hcr", "amidala", "192.168.4.1");
-    TEST_ASSERT_TRUE(contains(json.c_str(), "\"board_rev\":\"1.1\""));
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"board_rev\":\"1.2\""));
     TEST_ASSERT_TRUE(contains(json.c_str(), "\"mcu\":\"ESP32-S3 N16R8\""));
 }
 
@@ -798,6 +900,12 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_dome_page_schema_keys);
     RUN_TEST(test_monitor_page_uses_monitor_api);
     RUN_TEST(test_monitor_page_has_send_and_pause_ui);
+    RUN_TEST(test_monitor_page_clear_does_not_replay_history);
+    RUN_TEST(test_monitor_page_resume_does_not_replay_paused_traffic);
+    RUN_TEST(test_monitor_page_has_wcb_filter_gated_on_status);
+    RUN_TEST(test_monitor_page_s1_filter_gated_on_dome_variant);
+    RUN_TEST(test_monitor_page_has_log_filter_for_console_output);
+    RUN_TEST(test_monitor_page_appends_instead_of_rebuilding_on_poll);
     RUN_TEST(test_servos_page_uses_config_endpoint);
     RUN_TEST(test_servos_page_has_edit_ui);
     RUN_TEST(test_serial_strings_page_uses_config_endpoint);
@@ -837,6 +945,8 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_full_config_json_btaddr_stored_correctly);
     RUN_TEST(test_full_config_json_btcontrolleron_false_by_default);
     RUN_TEST(test_full_config_json_btcontrolleron_true);
+    RUN_TEST(test_full_config_json_wcbenable_false_by_default);
+    RUN_TEST(test_full_config_json_wcb_identity_stored_correctly);
     RUN_TEST(test_full_config_json_audio_keys);
     RUN_TEST(test_full_config_json_rc_radio_keys);
     RUN_TEST(test_full_config_json_dome_keys);

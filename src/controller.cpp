@@ -91,8 +91,18 @@ void AmidalaController::setup() {
 #endif
   fConfig.showCurrentConfiguration();
 
+  // WiFi AP must come up BEFORE WCB Client's begin() -- WCB_Client detects
+  // an already-active SoftAP and switches to WIFI_AP_STA instead of forcing
+  // WIFI_STA, so the mesh and the AP can coexist on the same radio channel.
+  // Calling it in the other order only "also works" per the library's own
+  // docs (Arduino's WiFi.mode() ORs in AP without dropping STA) -- AP-first
+  // is its clearly-primary documented pattern, so that's what this follows.
   if (params.wifion)
     fWiFiAP.begin(params.wifiSSID, params.wifiPassword, this);
+
+#ifndef VMUSIC_SERIAL
+  fWCB.begin(params, fHCR, fConsole);
+#endif
 
   // BT gamepad left stick drives when the primary XBee stick is absent.
   fTankDrive.setGuestStick(gBTGamepad);
@@ -188,6 +198,8 @@ void AmidalaController::setup() {
   fDomeDrive.setThrottleDecelerationScale(DEFAULT_DOME_DECELERATION_SCALE);
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
   // Apply runtime-configurable RoboClaw parameters from the loaded config.
+  fDomeDrive.setAddress(params.domercaddr);
+  fDomeDrive.setChannel(params.domercchan);
   fDomeDrive.setFrontOffset(params.domefront);
   fDomeDrive.setQPPS(params.domercqpps);
   fDomeDrive.setStallTimeout(params.domestall);
@@ -236,6 +248,7 @@ void AmidalaController::animate() {
   fDomeDrive.animate();
 #endif
   if (params.btcontrolleron) gBTGamepad.animate();
+  fWCB.poll(params);
   if (params.wifion)
     fWiFiAP.handle();
   checkDoublePressPending();

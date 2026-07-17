@@ -230,13 +230,47 @@ struct AmidalaParameters {
   bool btcontrolleron;
   char btaddr[18];
 
+  // ---- WCB Client (ESP-NOW mesh) --------------------------------------------
+  // wcbenable: join the WCB mesh network at runtime (default false — opt-in,
+  // requires the identity fields below to be fully configured).
+  // wcboct2/wcboct3: 2nd/3rd octet of the shared WCB MAC addressing scheme.
+  // Stored as a plain byte, but parsed/displayed as 2-digit hex (config.txt,
+  // web UI, JSON API) to match the WCB configuration wizard's own convention
+  // -- same treatment as xbr/xbl below.
+  // wcbpassword: mesh password (max 39 chars, per the WCB_Client library's
+  // own constructor contract).
+  // wcbquantity: total number of WCBs in the mesh.
+  // wcbid: this device's ID, 1-19, or 20 for the special/out-of-band slot.
+  // outboundserial: where outbound serial-string/HCR commands go —
+  // 0 = uart0 (wired, default), 1 = wcb (mesh-only; the UART0 write is
+  // skipped). Only takes effect when wcbenable is also on and the mesh is
+  // actually joined — otherwise outbound always falls back to uart0.
+  bool    wcbenable;
+  uint8_t wcboct2;
+  uint8_t wcboct3;
+  char    wcbpassword[40];
+  uint8_t wcbquantity;
+  uint8_t wcbid;
+  uint8_t outboundserial;
+
   // ---- WiFi access point -----------------------------------------------
   // wifion: enable the on-board WiFi soft-AP (default true).
   // wifiSSID: network name broadcast by the AP (max 32 chars).
   // wifiPassword: WPA2 passphrase (min 8, max 64 chars).
+  // wifichannel: 2.4GHz channel 1-13 (default 1). AP and STA share a single
+  // radio channel on the ESP32, so this is also the channel WCB Client's
+  // ESP-NOW mesh rides when it's enabled -- must match whatever channel the
+  // rest of the WCB mesh is actually on (default 1, or whatever's set via
+  // ?WCBCH on the WCBs themselves) or this board won't hear it. Passed to
+  // WCB_Client::setMeshChannel() (WCBClientController::begin()), which only
+  // accepts 1-11 -- 12/13 are valid WiFi channels but not valid mesh
+  // channels, so using either while WCB Client is enabled logs a mismatch
+  // warning and the mesh won't be reachable. Only change this if you know
+  // what you're doing.
   bool    wifion;
   char    wifiSSID[33];
   char    wifiPassword[65];
+  uint8_t wifichannel;
 
   constexpr unsigned getSoundBankCount() {
     return sizeof(SB) / sizeof(SB[0]);
@@ -321,9 +355,17 @@ struct AmidalaParameters {
       dbtimeout = 300;
       auxserial3 = false;
       btcontrolleron = false;
+      wcbenable = false;
+      wcboct2 = 0;
+      wcboct3 = 0;
+      wcbpassword[0] = '\0';
+      wcbquantity = 0;
+      wcbid = 0;
+      outboundserial = 0;
       wifion = true;
       strncpy(wifiSSID, "amidala", sizeof(wifiSSID));
       strncpy(wifiPassword, "Astromech", sizeof(wifiPassword));
+      wifichannel = 1;
       minpulse = DEFAULT_DOME_MIN_PULSE;
       maxpulse = DEFAULT_DOME_MAX_PULSE;
       sRAMInited = true;

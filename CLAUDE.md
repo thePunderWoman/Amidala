@@ -17,16 +17,25 @@ This firmware is intended to run on many different R2 builds with varying hardwa
 **Bug fixes and regression test**
 - Any time you fix a bug, that bugfix should be covered by a new regression test.
 
+**Restart-required settings**
+- Most subsystems are constructed once at boot from `params` and never look at it again — writing a new value via `/api/config` silently does nothing until the device reboots. Before adding a new setting, check whether its consumer actually re-reads `params` live (e.g. every `animate()` tick, or via a live setter called from `processConfig()`) or only at `setup()`/construction time.
+- Prefer making a setting apply live over flagging it as needing a restart — it's usually a small addition (add a setter to the subsystem, call it from both `setup()` and the relevant `processConfig()` branch; see `domercaddr`/`domercchan`/`domespeed` in `src/config.cpp` and `include/dome_drive_roboclaw.h` for the pattern). Don't leave a setting silently inert just because flagging it is easier.
+- If a setting genuinely can't apply until reboot (e.g. it's baked into an object's constructor), mark its SCHEMA row with `restart:true`:
+  ```js
+  {key:'wifissid', label:'SSID', type:'text', restart:true},
+  ```
+  `buildRow()`/`doSave()` in `web/assets/edit.js` pick this up automatically — saving that field shows the shared "restart required" banner with a "Restart Now" button (`POST /api/reboot`), on every page, no extra wiring needed. This also works for one-off `buildRow(s, val)` calls outside a `SCHEMA`/`buildPage()` page (see `servos.html`'s global pulse-limit rows).
+  - If a field's "needs restart" status is *stateful* rather than a fixed property of the key (e.g. only true once a subsystem is already running — see `WCBClientController::rebootRequired()` and `connectivity.html`'s WCB panel), don't use `restart:true`; instead compute it server-side and call the shared `_flagRestartRequired()` JS function directly when it's true.
+
 ## Git workflow
 
 **All changes must go through pull requests — never push directly to `main`.**
 
 1. Create a feature branch, make your changes, then open a PR.
-2. Always target **`github.com/thePunderWoman/AmidalaFirmware`** (the `thePunderWoman` remote), not the upstream fork.
-3. Push branches and create PRs with:
+2. Push branches and create PRs with:
    ```
    git push thePunderWoman <branch>
-   gh pr create --repo thePunderWoman/AmidalaFirmware ...
+   gh pr create ...
    ```
 
 ## Web UI development

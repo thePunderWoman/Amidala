@@ -787,6 +787,177 @@ void test_btcontrolleron_defaults_to_false() {
     TEST_ASSERT_FALSE(p.btcontrolleron);
 }
 
+// ---- WCB Client: wcbenable / identity fields / outboundserial ---------------
+
+void test_wcbenable_boolparam_parses_y() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = boolparam("wcbenable=y", "wcbenable=", p.wcbenable);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_TRUE(p.wcbenable);
+}
+
+void test_wcbenable_boolparam_parses_n() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    p.wcbenable = true;
+    bool ok = boolparam("wcbenable=n", "wcbenable=", p.wcbenable);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_FALSE(p.wcbenable);
+}
+
+void test_wcbenable_defaults_to_false() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    p.init(true);
+    TEST_ASSERT_FALSE(p.wcbenable);
+}
+
+// wcboct2/wcboct3 parse as hex (matches xbr/xbl and the WCB configuration
+// wizard's own convention), not decimal -- mirrors config.cpp's
+// startswith()+strtoul(...,16) logic directly since there's no reusable
+// intparam()-style helper for hex fields.
+static bool parse_wcboct2_line(const char* line, AmidalaParameters& p) {
+    const char* cmd = line;
+    if (!startswith(cmd, "wcboct2=")) return false;
+    p.wcboct2 = (uint8_t)strtoul(cmd, NULL, 16);
+    return true;
+}
+
+static bool parse_wcboct3_line(const char* line, AmidalaParameters& p) {
+    const char* cmd = line;
+    if (!startswith(cmd, "wcboct3=")) return false;
+    p.wcboct3 = (uint8_t)strtoul(cmd, NULL, 16);
+    return true;
+}
+
+void test_wcboct2_parses_hex_uppercase() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = parse_wcboct2_line("wcboct2=4A", p);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(0x4A, p.wcboct2);
+}
+
+void test_wcboct3_parses_hex_lowercase() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = parse_wcboct3_line("wcboct3=ff", p);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(0xFF, p.wcboct3);
+}
+
+void test_wcbquantity_intparam_parses() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = intparam("wcbquantity=8", "wcbquantity=", p.wcbquantity, 0, 19);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(8, p.wcbquantity);
+}
+
+void test_wcbid_intparam_accepts_special_slot() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = intparam("wcbid=20", "wcbid=", p.wcbid, 0, 20);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(20, p.wcbid);
+}
+
+void test_outboundserial_intparam_parses() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = intparam("outboundserial=1", "outboundserial=", p.outboundserial, 0, 1);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(1, p.outboundserial);
+}
+
+void test_outboundserial_defaults_to_uart0() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    p.init(true);
+    TEST_ASSERT_EQUAL(0, p.outboundserial);
+}
+
+// wifichannel's default (1) is covered in test_params.cpp's
+// test_default_wifichannel via the long-lived gDefaultParams -- p.init(true)
+// on a fresh local struct here is unreliable for non-zero defaults, since
+// AmidalaParameters::init() gates its default-assignment block behind a
+// function-local `static bool sRAMInited` shared across every instance in
+// the process: once any earlier test in this binary has already initialized
+// any AmidalaParameters instance, that flag stays latched true, so
+// p.init(true) on a *fresh* local struct here silently skips re-applying
+// defaults. Every other *_defaults_to_* test in this file happens to check
+// a value that's already 0/false after memset(), which masks this; 1 is not.
+
+void test_wifichannel_intparam_parses() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = intparam("wifichannel=6", "wifichannel=", p.wifichannel, 1, 13);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(6, p.wifichannel);
+}
+
+void test_wifichannel_clamps_below_minimum() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    // 0 < 1 → clamped to 1.
+    bool ok = intparam("wifichannel=0", "wifichannel=", p.wifichannel, 1, 13);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(1, p.wifichannel);
+}
+
+void test_wifichannel_clamps_above_maximum() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    // 14 > 13 → clamped to 13.
+    bool ok = intparam("wifichannel=14", "wifichannel=", p.wifichannel, 1, 13);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(13, p.wifichannel);
+}
+
+void test_wifichannel_accepts_boundary_13() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = intparam("wifichannel=13", "wifichannel=", p.wifichannel, 1, 13);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(13, p.wifichannel);
+}
+
+// Mirror of the wcbpassword= parsing logic in config.cpp.
+static bool parse_wcbpassword_line(const char* line, AmidalaParameters& p) {
+    const char* cmd = line;
+    if (!startswith(cmd, "wcbpassword=")) return false;
+    strncpy(p.wcbpassword, cmd, sizeof(p.wcbpassword) - 1);
+    p.wcbpassword[sizeof(p.wcbpassword) - 1] = '\0';
+    return true;
+}
+
+void test_wcbpassword_parse_stores_value() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = parse_wcbpassword_line("wcbpassword=hunter2", p);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_STRING("hunter2", p.wcbpassword);
+}
+
+void test_wcbpassword_parse_truncates_to_39_chars() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    // 45 'a' chars -- longer than the 39-char buffer capacity.
+    const char *longPassword =
+        "wcbpassword=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    bool ok = parse_wcbpassword_line(longPassword, p);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(39, strlen(p.wcbpassword));
+}
+
+void test_wcbpassword_defaults_to_empty_string() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    p.init(true);
+    TEST_ASSERT_EQUAL_STRING("", p.wcbpassword);
+}
+
 // ---- main -------------------------------------------------------------------
 
 int main(int argc, char **argv) {
@@ -873,6 +1044,22 @@ int main(int argc, char **argv) {
     RUN_TEST(test_btcontrolleron_boolparam_parses_y);
     RUN_TEST(test_btcontrolleron_boolparam_parses_n);
     RUN_TEST(test_btcontrolleron_defaults_to_false);
+    RUN_TEST(test_wcbenable_boolparam_parses_y);
+    RUN_TEST(test_wcbenable_boolparam_parses_n);
+    RUN_TEST(test_wcbenable_defaults_to_false);
+    RUN_TEST(test_wcboct2_parses_hex_uppercase);
+    RUN_TEST(test_wcboct3_parses_hex_lowercase);
+    RUN_TEST(test_wcbquantity_intparam_parses);
+    RUN_TEST(test_wcbid_intparam_accepts_special_slot);
+    RUN_TEST(test_outboundserial_intparam_parses);
+    RUN_TEST(test_outboundserial_defaults_to_uart0);
+    RUN_TEST(test_wifichannel_intparam_parses);
+    RUN_TEST(test_wifichannel_clamps_below_minimum);
+    RUN_TEST(test_wifichannel_clamps_above_maximum);
+    RUN_TEST(test_wifichannel_accepts_boundary_13);
+    RUN_TEST(test_wcbpassword_parse_stores_value);
+    RUN_TEST(test_wcbpassword_parse_truncates_to_39_chars);
+    RUN_TEST(test_wcbpassword_defaults_to_empty_string);
 
     return UNITY_END();
 }

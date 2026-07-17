@@ -29,6 +29,7 @@ static uint8_t            sUserSerialCount = 0;
 
 #define MONITOR_BUF_OWNER
 #include "monitor_buf.h"
+#include "monitor_drain.h"
 
 // ---------------------------------------------------------------------------
 // SD card config write-back
@@ -1145,6 +1146,24 @@ static void handleApiConfigPost() {
             gBTGamepad.disable();
         }
     }
+    // WCB Client: construct+join live on first enable — safe, since
+    // construction only ever happens once (WCB_Client has no reconfigure
+    // API). Editing an identity field after the client already exists can't
+    // be applied live either way, so it's persisted above but flagged for a
+    // reboot instead of attempted immediately. outboundserial is NOT an
+    // identity field — it's applied live every animate() tick by
+    // WCBClientController::poll(), no reboot needed.
+    if (key == "wcbenable") {
+#ifndef VMUSIC_SERIAL
+        if (sCtrl->params.wcbenable && !sCtrl->fWCB.isRunning()) {
+            sCtrl->fWCB.begin(sCtrl->params, sCtrl->fHCR, sCtrl->fConsole);
+        }
+#endif
+    } else if ((key == "wcboct2" || key == "wcboct3" || key == "wcbpassword" ||
+                key == "wcbquantity" || key == "wcbid") &&
+               sCtrl->fWCB.isRunning()) {
+        sCtrl->fWCB.flagRebootRequired();
+    }
     sServer.send(200, "text/plain", "OK");
 }
 
@@ -1168,6 +1187,20 @@ static void handleApiResume() {
             sCtrl->sendSerialString(sCtrl->params.ResumeCmds[i].str);
     }
     sServer.send(200, "text/plain", "OK");
+}
+
+// Dedicated restart trigger for the web UI's "Restart Now" button. The only
+// other way to reboot from the browser was piggybacking on /api/monitor's
+// cmd=reboot passthrough, which hits config.cpp's null-function-pointer
+// crash trick with no response flush first. This mirrors the OTA update
+// path's clean restart instead (see handleUpdatePost() above): flush a 200
+// with Connection: close, give it a moment to actually go out, then restart.
+static void handleApiReboot() {
+    monAppend("RESTART requested via web UI", 'i');
+    sServer.sendHeader("Connection", "close");
+    sServer.send(200, "text/plain", "OK");
+    delay(200);
+    ESP.restart();
 }
 
 static void handleApiDome() {
@@ -1248,10 +1281,7 @@ static void handleApiMonitorGet() {
         if (i > 0) json += ",";
         uint16_t idx = (start + i) % MON_LINES;
         json += "{\"t\":\"";
-        for (const char* p = sMonBuf[idx].text; *p; p++) {
-            if (*p == '"' || *p == '\\') json += '\\';
-            json += *p;
-        }
+        monJsonAppendEscaped(json, sMonBuf[idx].text);
         json += "\",\"c\":\"";
         switch (sMonBuf[idx].cls) {
             case 't': json += "tx"; break;
@@ -1274,6 +1304,39 @@ static void handleApiMonitorPost() {
 
     if (!sCtrl->fConfig.processConfig(cmd.c_str()))
         monAppend("  (unknown command)", 'i');
+
+    // Also transmit to whichever physical/mesh channels the monitor's S0/S1/
+    // S2/WCB toggle buttons had selected when Send was pressed -- independent
+    // of the local processConfig() interpretation above, this is a manual
+    // multicast to actual hardware, e.g. to replay/test a gadget command
+    // exactly as sendSerialString()/routeOutbound() would send it.
+    AmidalaParameters &params = sCtrl->params;
+    if (sServer.arg("s0") == "1") {
+        sendSerialStringTo(SERIAL, cmd.c_str(), params.serialdelim, params.serialeol);
+        monAppend(("S0: " + cmd).c_str(), 't');
+    }
+#ifndef ROBOCLAW_SERIAL
+    // Only compiled in when Serial1 isn't claimed by the RoboClaw dome
+    // drive's own binary packet-serial protocol -- writing arbitrary text
+    // into that link could corrupt a motor command mid-packet. See
+    // monDrainSerial()'s matching #ifndef guard on the read side above.
+    if (sServer.arg("s1") == "1") {
+        sendSerialStringTo(Serial1, cmd.c_str(), params.serialdelim, params.serialeol);
+        monAppend(("S1: " + cmd).c_str(), 't');
+    }
+#endif
+    if (params.auxserial3 && sServer.arg("s2") == "1") {
+        sendSerialStringTo(AUX_SERIAL, cmd.c_str(), params.serialdelim, params.serialeol);
+        monAppend(("S2: " + cmd).c_str(), 't');
+    }
+    if (sServer.arg("wcb") == "1") {
+        // Explicit manual selection -- always attempt the mesh regardless of
+        // outboundserial (that setting only governs the *automatic* gadget/
+        // HCR routing choice). Silently no-ops if the mesh isn't live, same
+        // as an unavailable S1/S2 above -- no log line, nothing was sent.
+        if (sCtrl->fWCB.routeOutbound(cmd.c_str(), true, params.serialdelim))
+            monAppend(("MESH: " + cmd).c_str(), 't');
+    }
 
     sServer.send(200, "text/plain", "OK");
 }
@@ -1363,6 +1426,14 @@ static void handleApiBtStatus() {
     json += enabled ? String(BLEDevice::getAddress().toString().c_str()) : String("");
     json += "\"}";
     sServer.send(200, "application/json", json);
+}
+
+static void handleApiWcbStatus() {
+    if (!sCtrl) {
+        sServer.send(200, "application/json", buildWCBStatusJson(false, false, false, false, 0, 0, 0, false));
+        return;
+    }
+    sServer.send(200, "application/json", sCtrl->fWCB.statusJson(sCtrl->params));
 }
 
 static void handleApiBtScan() {
@@ -1463,9 +1534,9 @@ static void onWiFiApStaEvent(arduino_event_id_t event, arduino_event_info_t info
 
 void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaController* ctrl) {
     sCtrl = ctrl;
-    sCtrl->fSerialTxLog = [](const char* s) {
+    sCtrl->fSerialTxLog = [](const char* s, bool wentToMesh) {
         char buf[MON_LINE_LEN];
-        snprintf(buf, sizeof(buf), "S0: %s", s);
+        snprintf(buf, sizeof(buf), "%s %s", wentToMesh ? "MESH:" : "S0:", s);
         monAppend(buf, 't');
     };
     loadGadgetConfig();
@@ -1476,14 +1547,31 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     WiFi.onEvent(onWiFiApStaEvent, ARDUINO_EVENT_WIFI_AP_STACONNECTED);
     WiFi.onEvent(onWiFiApStaEvent, ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
 
-    WiFi.mode(WIFI_AP);
+    // AP_STA (not plain AP): lets WCB Client's begin() (called later in
+    // setup(), after this) detect the already-active SoftAP and ride its
+    // radio channel via ESP-NOW instead of forcing pure STA and dropping
+    // the AP. Harmless when WCB Client is disabled -- STA just sits idle.
+    WiFi.mode(WIFI_AP_STA);
     // Modem power-save timing on the AP interface can miss/mistime the WPA2
     // 4-way handshake, intermittently making a correct password appear to be
     // rejected (a long-standing arduino-esp32 quirk, not password-related --
     // see espressif/arduino-esp32#5806). This robot isn't power-constrained
     // enough for WiFi power-save to be worth that tradeoff.
     esp_wifi_set_ps(WIFI_PS_NONE);
-    bool apOk = WiFi.softAP(ssid, password);
+    // WCB_Client has no way to be told which WiFi channel to use yet (that's
+    // planned for a future WCBClient release) -- until then, every other
+    // board on the mesh with no SoftAP of its own lands on whatever the
+    // ESP-NOW/WiFi stack defaults to with no channel specified, which is
+    // channel 1. Since ESP-NOW rides whatever channel this AP starts on, it
+    // has to match that exactly or this board simply won't hear the rest of
+    // the mesh. params.wifichannel defaults to 1 (see AmidalaParameters::init())
+    // to match that, and is user-configurable (1-13) for the rare case where
+    // WiFi interference matters more than mesh compatibility -- passed
+    // explicitly rather than relying on WiFi.softAP()'s own default
+    // parameter, which is also 1 today but is exactly the kind of implicit
+    // cross-library coincidence that stops matching the moment either
+    // library's default changes.
+    bool apOk = WiFi.softAP(ssid, password, sCtrl->params.wifichannel);
     IPAddress ip = WiFi.softAPIP();
     Serial.print(F("[WiFi] AP \""));
     Serial.print(ssid);
@@ -1531,6 +1619,7 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/api/info",   HTTP_GET,  handleApiInfo);
     sServer.on("/api/estop",  HTTP_POST, handleApiEstop);
     sServer.on("/api/resume", HTTP_POST, handleApiResume);
+    sServer.on("/api/reboot", HTTP_POST, handleApiReboot);
     sServer.on("/api/dome",   HTTP_POST, handleApiDome);
     sServer.on("/api/gadget-cmd", HTTP_POST, handleApiGadgetCmd);
     sServer.on("/api/serial",     HTTP_POST, handleApiSerial);
@@ -1546,6 +1635,7 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/api/bt/results",        HTTP_GET,  handleApiBtResults);
     sServer.on("/api/bt/pair",           HTTP_POST, handleApiBtPair);
     sServer.on("/api/bt/forget",         HTTP_POST, handleApiBtForget);
+    sServer.on("/api/wcb/status",        HTTP_GET,  handleApiWcbStatus);
 
     sServer.onNotFound([]() { sServer.send(404, "text/plain", "Not found"); });
 
@@ -1556,31 +1646,21 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
 // Drain one serial port into the monitor.  Accumulates printable bytes into a
 // line buffer and flushes on newline, when the buffer is full, or after 100 ms
 // of silence.  Non-printable bytes (other than \r/\n) are silently skipped.
+// The byte-level state machine lives in monitor_drain.h so it can be unit
+// tested without a real HardwareSerial.
 struct SerialMonPort {
     HardwareSerial* port;
-    const char      label[5]; // "S0: ", "S1: ", "S2: "
-    char            buf[MON_LINE_LEN];
-    uint8_t         pos;
-    uint32_t        lastMs;
+    MonDrainState   state;
 };
 
 static void monDrainSerial(SerialMonPort& p) {
+    monDrainSeedLabel(p.state);
     bool flushed = false;
     while (p.port->available()) {
         uint8_t b = (uint8_t)p.port->read();
-        p.lastMs = millis();
-        if (b == '\r' || b == '\n') {
-            if (p.pos > 0) { p.buf[p.pos] = '\0'; monAppend(p.buf, 'r'); p.pos = 0; flushed = true; }
-        } else if (b >= 0x20 && b < 0x7F) {
-            if (p.pos < MON_LINE_LEN - 1) p.buf[p.pos++] = (char)b;
-        }
-        // non-printable bytes silently skipped
-        if (p.pos >= MON_LINE_LEN - 1) { p.buf[p.pos] = '\0'; monAppend(p.buf, 'r'); p.pos = 0; flushed = true; }
+        if (monDrainByte(p.state, b, millis())) flushed = true;
     }
-    // Flush on 100 ms silence
-    if (!flushed && p.pos > 0 && (millis() - p.lastMs) > 100) {
-        p.buf[p.pos] = '\0'; monAppend(p.buf, 'r'); p.pos = 0;
-    }
+    if (!flushed) monDrainSilenceCheck(p.state, millis());
 }
 
 void AmidalaWiFiAP::handle() {
@@ -1588,29 +1668,29 @@ void AmidalaWiFiAP::handle() {
 
     // Serial RX monitoring.  ROBOCLAW_SERIAL is defined to Serial1 when the
     // RoboClaw dome drive is active — skip Serial1 in that case (binary protocol).
-    static SerialMonPort sPortWCB = { &Serial0, "S0: ", {}, 0, 0 };
+    static SerialMonPort sPortWCB = { &Serial0, {} };
 #ifndef ROBOCLAW_SERIAL
-    static SerialMonPort sPortS1  = { &Serial1, "S1: ", {}, 0, 0 };
+    static SerialMonPort sPortS1  = { &Serial1, {} };
 #endif
-    static SerialMonPort sPortAux = { &Serial2, "S2: ", {}, 0, 0 };
-    auto seedLabel = [](SerialMonPort& p) {
-        if (p.pos == 0) {
-            uint8_t len = (uint8_t)strlen(p.label);
-            memcpy(p.buf, p.label, len);
-            p.buf[len] = '\0';
-            p.pos = len;
-        }
-    };
-    seedLabel(sPortWCB);
+    static SerialMonPort sPortAux = { &Serial2, {} };
+    static bool sMonInit = false;
+    if (!sMonInit) {
+        monDrainInit(sPortWCB.state, "S0: ");
+#ifndef ROBOCLAW_SERIAL
+        monDrainInit(sPortS1.state, "S1: ");
+#endif
+        monDrainInit(sPortAux.state, "S2: ");
+        sMonInit = true;
+    }
+
     monDrainSerial(sPortWCB);
 #ifndef ROBOCLAW_SERIAL
-    seedLabel(sPortS1);
     monDrainSerial(sPortS1);
 #endif
     if (sCtrl && sCtrl->params.auxserial3) {
-        seedLabel(sPortAux);
         monDrainSerial(sPortAux);
     }
+    if (sCtrl) sCtrl->fConsole.tickMonitor();
 }
 
 #else  // UNIT_TEST

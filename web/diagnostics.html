@@ -49,7 +49,11 @@ function connLed(ok) {
 }
 
 function buildUI() {
-  var html = '<div class="section-label">Connectivity</div>';
+  var html = '<div class="section-label">Device</div>';
+  html += '<div class="row"><div class="row-label">Restart Droid</div>'
+        + '<button class="be-action" onclick="_doRestart(this)">Restart</button></div>';
+
+  html += '<div class="section-label">Connectivity</div>';
   html += '<div class="row"><div class="row-label">XBee Drive</div>'
         + '<div class="pin-led low" id="conn-xd-led">&#9679;</div>'
         + '<div class="pin-state low" id="conn-xd-st">OFFLINE</div></div>';

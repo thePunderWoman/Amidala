@@ -20,6 +20,12 @@ _PROJECT_DIR = os.path.dirname(_HERE)
 _WEB_DIR     = os.path.join(_PROJECT_DIR, "web")
 _PORT        = 8080
 
+# Hex-string config keys ("4A", "00000000") that must never be coerced to int
+# by the generic /api/config save fallback below -- an all-digit hex value
+# like "00" or "42" would otherwise parse as a base-10 int and come back from
+# a later GET /api/config without its leading zero / hex meaning intact.
+_HEX_KEYS = {"xbr", "xbl", "wcboct2", "wcboct3"}
+
 
 # ---------------------------------------------------------------------------
 # example_config.txt parser
@@ -61,6 +67,7 @@ def parse_example_config(path):
         "wifion":        "y",
         "wifissid":      "amidala",
         "wifipassword":  "Astromech",
+        "wifichannel":   1,
         "xbr":           "00000000",
         "xbl":           "00000000",
         "audiohw":       "hcr",
@@ -113,7 +120,15 @@ def parse_example_config(path):
         "sstr_cats":   [],  # list of {name, idx: [...]} category objects
         "estop_cmds":  [],
         "resume_cmds": [],
+        "btcontrolleron": "n",
         "btaddr":      "",
+        "wcbenable":     "n",
+        "wcboct2":       "00",
+        "wcboct3":       "00",
+        "wcbpassword":   "",
+        "wcbquantity":   0,
+        "wcbid":         0,
+        "outboundserial":0,
         "buttons":  [_make_button() for _ in range(9)],
         "gestures": [],
         "gadgets_cfg": [{"type": 0, "sstr": []} for _ in range(7)],
@@ -131,10 +146,13 @@ def parse_example_config(path):
                   "domefront", "domestall", "minpulse", "maxpulse",
                   "altbtn", "mutebutton", "altdomestick",
                   "startupem", "startuplvl", "ackem", "acklvl",
-                  "volumeChA", "volumeChB", "volumewheel", "altvolumewheel"}
+                  "volumeChA", "volumeChB", "volumewheel", "altvolumewheel",
+                  "wcbquantity", "wcbid", "outboundserial", "wifichannel"}
     _str_keys  = {"startup", "rndon", "ackon", "goslow", "mix12", "auto",
                   "wifion", "wifissid", "wifipassword", "xbr", "xbl",
-                  "audiohw", "domeflip", "domeimu", "domech6", "btaddr"}
+                  "audiohw", "domeflip", "domeimu", "domech6",
+                  "btcontrolleron", "btaddr", "wcbenable", "wcbpassword",
+                  "wcboct2", "wcboct3"}
 
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
@@ -341,6 +359,26 @@ class _Handler(SimpleHTTPRequestHandler):
         if path == "/api/periscope/seqs":
             self._json(_config.get("periscope_seqs", {}))
             return
+        if path == "/api/wcb/status":
+            enabled    = _config.get("wcbenable") == "y"
+            configured = enabled and bool(_config.get("wcbpassword")) \
+                         and _config.get("wcbquantity", 0) > 0 \
+                         and 1 <= _config.get("wcbid", 0) <= 20
+            # Mock server has no real mesh -- simulate a clean join once
+            # configured, purely so the UI has something to preview locally.
+            running = configured
+            joined  = configured
+            self._json({
+                "enabled": enabled,
+                "configured": configured,
+                "running": running,
+                "joined": joined,
+                "neighbor_count": 1 if joined else 0,
+                "device_id": _config.get("wcbid", 0),
+                "quantity": _config.get("wcbquantity", 0),
+                "reboot_required": False,
+            })
+            return
 
         # Map extension-less paths to .html (e.g. /config/general → general.html)
         local = os.path.join(_WEB_DIR, path.lstrip("/"))
@@ -365,6 +403,12 @@ class _Handler(SimpleHTTPRequestHandler):
             _info["version"] = "1.4"
             _info["date"]    = "Jun 19 2026"
             _monitor["lines"].append({"t": "OTA: flash complete (simulated)", "c": "info"})
+            _monitor["seq"] += 1
+            self._text("OK")
+            return
+        if path == "/api/reboot":
+            print("  REBOOT (simulated -- dev server stays up)")
+            _monitor["lines"].append({"t": "RESTART requested via web UI", "c": "info"})
             _monitor["seq"] += 1
             self._text("OK")
             return
@@ -698,10 +742,13 @@ class _Handler(SimpleHTTPRequestHandler):
             if 0 <= idx < len(_config["resume_cmds"]) and value:
                 _config["resume_cmds"][idx] = value
         elif key in _config:
-            try:
-                _config[key] = int(value)
-            except ValueError:
+            if key in _HEX_KEYS:
                 _config[key] = value
+            else:
+                try:
+                    _config[key] = int(value)
+                except ValueError:
+                    _config[key] = value
         else:
             print(f"           (unknown key — not stored)")
 

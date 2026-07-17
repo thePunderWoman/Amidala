@@ -100,6 +100,11 @@ inline bool ensureConfigDefaults(const AmidalaParameters& params) {
         String value;
     };
     auto fmtBool = [](bool b) { return String(b ? "y" : "n"); };
+    auto fmtHex2 = [](uint8_t v) {
+        char buf[3];
+        snprintf(buf, sizeof(buf), "%02X", v);
+        return String(buf);
+    };
     const DefaultableConfigKey keys[] = {
         {"volumeChA=",      String(params.volumeChA)},
         {"volumeChB=",      String(params.volumeChB)},
@@ -109,8 +114,16 @@ inline bool ensureConfigDefaults(const AmidalaParameters& params) {
         {"wifion=",         fmtBool(params.wifion)},
         {"wifissid=",       String(params.wifiSSID)},
         {"wifipassword=",   String(params.wifiPassword)},
+        {"wifichannel=",    String(params.wifichannel)},
         {"btcontrolleron=", fmtBool(params.btcontrolleron)},
         {"btaddr=",         String(params.btaddr)},
+        {"wcbenable=",      fmtBool(params.wcbenable)},
+        {"wcboct2=",        fmtHex2(params.wcboct2)},
+        {"wcboct3=",        fmtHex2(params.wcboct3)},
+        {"wcbpassword=",    String(params.wcbpassword)},
+        {"wcbquantity=",    String(params.wcbquantity)},
+        {"wcbid=",          String(params.wcbid)},
+        {"outboundserial=", String(params.outboundserial)},
         {"mutebutton=",     String(params.mutebutton)},
         {"b9=",             String(params.b9)},
         {"dbtimeout=",      String(params.dbtimeout)},

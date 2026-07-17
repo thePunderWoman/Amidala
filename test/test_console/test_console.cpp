@@ -34,6 +34,7 @@ void AmidalaConsole::printVersion() {}
 void AmidalaConsole::printHelp() {}
 void AmidalaConsole::monitorToggle() {}
 void AmidalaConsole::monitorOutput() {}
+void AmidalaConsole::tickMonitor() {}
 
 // -----------------------------------------------------------------------------
 

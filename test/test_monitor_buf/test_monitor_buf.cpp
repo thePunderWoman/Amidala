@@ -109,6 +109,65 @@ void test_read_order_after_wrap() {
     TEST_ASSERT_EQUAL_STRING("line256", sMonBuf[0].text);
 }
 
+// ---- JSON escaping (handleApiMonitorGet()'s serialization) ------------------
+//
+// Bug: only '"' and '\\' were escaped when serializing a monitor line into
+// the /api/monitor JSON response. monAppend() itself never filters its
+// input, and WCBClientController::poll() logs received mesh command text
+// straight through -- so a corrupted/unusual mesh packet could land a raw
+// control byte in the ring buffer. That byte then went into the JSON
+// response unescaped, which is invalid per ECMA-404; the browser's
+// response.json() throws on it, and since /api/monitor always returns the
+// *entire* current buffer, every single poll after that failed the same
+// way -- the serial monitor looked permanently "disconnected" even though
+// the device and its real traffic were completely fine.
+//
+// Fix: monJsonAppendEscaped() escapes '"', '\\', and every C0 control
+// character (0x00-0x1F), matching what JSON.parse actually requires.
+
+void test_json_escape_quote_and_backslash() {
+    String out;
+    monJsonAppendEscaped(out, "say \"hi\" C:\\path");
+    TEST_ASSERT_EQUAL_STRING("say \\\"hi\\\" C:\\\\path", out.c_str());
+}
+
+void test_json_escape_passes_through_plain_text() {
+    String out;
+    monJsonAppendEscaped(out, "S0: BD:FLUTTER");
+    TEST_ASSERT_EQUAL_STRING("S0: BD:FLUTTER", out.c_str());
+}
+
+void test_json_escape_named_control_chars() {
+    String out;
+    char text[] = {'a', '\n', 'b', '\r', 'c', '\t', 'd', '\0'};
+    monJsonAppendEscaped(out, text);
+    TEST_ASSERT_EQUAL_STRING("a\\nb\\rc\\td", out.c_str());
+}
+
+void test_json_escape_arbitrary_control_byte_uses_unicode_escape() {
+    // The exact regression scenario: a raw, unnamed control byte (e.g. from
+    // a corrupted mesh packet) must become a valid \\u00XX escape, not be
+    // emitted raw into the JSON string body.
+    String out;
+    char text[] = {'M', 'E', 'S', 'H', (char)0x01, 'X', '\0'};
+    monJsonAppendEscaped(out, text);
+    TEST_ASSERT_EQUAL_STRING("MESH\\u0001X", out.c_str());
+}
+
+void test_json_escape_result_is_parseable_json() {
+    // End-to-end sanity: wrap the escaped output the same way
+    // handleApiMonitorGet() does and confirm no raw control byte or
+    // unescaped quote survives into the string body.
+    String out;
+    char text[] = {'b', 'a', 'd', (char)0x07, '"', '\0'};
+    monJsonAppendEscaped(out, text);
+    for (size_t i = 0; i < out.length(); i++) {
+        uint8_t c = (uint8_t)out.c_str()[i];
+        TEST_ASSERT_TRUE(c >= 0x20 || c == '\0');
+    }
+    TEST_ASSERT_EQUAL_STRING("bad\\u0007\\\"", out.c_str());
+}
+
 // ---- main -------------------------------------------------------------------
 
 int main(int argc, char **argv) {
@@ -125,6 +184,11 @@ int main(int argc, char **argv) {
     RUN_TEST(test_head_wraps_after_MON_LINES_entries);
     RUN_TEST(test_oldest_entry_overwritten_when_full);
     RUN_TEST(test_read_order_after_wrap);
+    RUN_TEST(test_json_escape_quote_and_backslash);
+    RUN_TEST(test_json_escape_passes_through_plain_text);
+    RUN_TEST(test_json_escape_named_control_chars);
+    RUN_TEST(test_json_escape_arbitrary_control_byte_uses_unicode_escape);
+    RUN_TEST(test_json_escape_result_is_parseable_json);
 
     return UNITY_END();
 }

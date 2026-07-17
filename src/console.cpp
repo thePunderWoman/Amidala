@@ -1,4 +1,25 @@
 #include "controller.h"
+#include "monitor_buf.h"
+#include "monitor_drain.h"
+
+// Tees everything the console prints (boot banner, "d"/"c"/"v"/"h" command
+// output, config dumps, etc.) into the web serial monitor's ring buffer,
+// labeled "LOG: " so it gets its own filter toggle there -- see
+// web/monitor.html's f-LOG button. Skipped while the interactive ANSI
+// status monitor ("m" command, monitorOutput()) is active: that repaints
+// cursor-positioned fields on every AmidalaConsole::process() tick, and raw
+// escape sequences aren't meaningful outside a real terminal.
+static MonDrainState sConsoleMon;
+static bool          sConsoleMonReady = false;
+
+static void teeConsoleToMonitor(const uint8_t *buffer, size_t size) {
+  if (!sConsoleMonReady) {
+    monDrainInit(sConsoleMon, "LOG: ", 'i');
+    sConsoleMonReady = true;
+  }
+  monDrainSeedLabel(sConsoleMon);
+  for (size_t i = 0; i < size; i++) monDrainByte(sConsoleMon, buffer[i], millis());
+}
 
 // isdigit(const char*, int) and atoi(const char*, int) are file-scope helpers
 // used only by processCommand() for servo/digital-out command parsing.
@@ -28,7 +49,12 @@ size_t AmidalaConsole::write(const uint8_t *buffer, size_t size) {
     CONSOLE_SERIAL.println();
     fPrompt = false;
   }
+  if (!fMonitor) teeConsoleToMonitor(buffer, size);
   return CONSOLE_SERIAL.write(buffer, size);
+}
+
+void AmidalaConsole::tickMonitor() {
+  if (sConsoleMonReady) monDrainSilenceCheck(sConsoleMon, millis());
 }
 
 void AmidalaConsole::init(AmidalaController *controller) {

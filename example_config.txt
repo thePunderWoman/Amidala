@@ -134,6 +134,14 @@ wifion=y
 wifissid=amidala
 # WPA2 passphrase (min 8, max 64 chars)
 wifipassword=Astromech
+# 2.4GHz channel (1-13, default 1). Optional -- only change this if you know
+# what you're doing. AP and STA share one radio channel on the ESP32, so
+# this is also the channel WCB Client's ESP-NOW mesh rides when it's
+# enabled; it must match whatever channel the rest of the WCB mesh is
+# actually on (default 1, or whatever's set via ?WCBCH on the WCBs) or this
+# board won't hear it. WCB Client's mesh channel range is 1-11 only --
+# 12/13 are valid WiFi channels but not valid mesh channels.
+wifichannel=1
 
 # --- Bluetooth Controller ---
 # Enable the BLE HID gamepad at runtime (default n — opt-in since it
@@ -142,6 +150,26 @@ btcontrolleron=n
 # MAC address of a paired BLE HID gamepad (AA:BB:CC:DD:EE:FF format).
 # Leave blank/omitted to connect to any BLE HID device found during scan.
 # btaddr=AA:BB:CC:DD:EE:FF
+
+# --- WCB Client (ESP-NOW mesh) ---
+# Join the WCB mesh network at runtime (default n — opt-in; requires the
+# identity fields below to be fully configured, or the board will skip
+# attempting to join and log a boot warning).
+wcbenable=n
+# 2nd/3rd octet of the shared WCB MAC addressing scheme, as 2-digit hex
+# (00-FF each) -- matches the values shown by the WCB configuration wizard.
+wcboct2=00
+wcboct3=00
+# Mesh password (max 39 chars).
+# wcbpassword=
+# Total number of WCBs in the mesh (0-19).
+wcbquantity=0
+# This device's ID: 1-19, or 20 for the special/out-of-band slot.
+wcbid=0
+# Where outbound serial-string/HCR commands go: 0 = UART0 (wired, default),
+# 1 = WCB mesh only (the UART0 write is skipped). Falls back to UART0
+# automatically if the mesh isn't actually joined, regardless of this value.
+outboundserial=0
 
 # --- Gestures for Special Toggles ---
 # These set which stick gesture string toggles which mode (default values)

@@ -20,6 +20,12 @@ inline String hexStr(uint32_t v) {
     return String(buf);
 }
 
+inline String hexStr(uint8_t v) {
+    char buf[3];
+    snprintf(buf, sizeof(buf), "%02X", (unsigned int)v);
+    return String(buf);
+}
+
 // ---------------------------------------------------------------------------
 // GET /api/info
 // drive / dome / audio: compile-time strings; pass nullptr to emit JSON null.
@@ -115,6 +121,7 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     json += "\"wifion\":\""       + String(p.wifion ? "y" : "n")      + "\",";
     json += "\"wifissid\":\""     + String(p.wifiSSID)                 + "\",";
     json += "\"wifipassword\":\"" + String(p.wifiPassword)             + "\",";
+    json += "\"wifichannel\":"    + String(p.wifichannel)              + ",";
 
     // XBee
     json += "\"xbr\":\"" + hexStr(p.xbr) + "\",";
@@ -123,6 +130,15 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     // Bluetooth
     json += "\"btcontrolleron\":\"" + String(p.btcontrolleron ? "y" : "n") + "\",";
     json += "\"btaddr\":\"" + String(p.btaddr) + "\",";
+
+    // WCB Client
+    json += "\"wcbenable\":\"" + String(p.wcbenable ? "y" : "n") + "\",";
+    json += "\"wcboct2\":\"" + hexStr(p.wcboct2) + "\",";
+    json += "\"wcboct3\":\"" + hexStr(p.wcboct3) + "\",";
+    json += "\"wcbpassword\":\"" + String(p.wcbpassword) + "\",";
+    json += "\"wcbquantity\":" + String(p.wcbquantity) + ",";
+    json += "\"wcbid\":" + String(p.wcbid) + ",";
+    json += "\"outboundserial\":" + String(p.outboundserial) + ",";
 
     // Audio
     json += "\"audiohw\":\""      + String(hw)                        + "\",";

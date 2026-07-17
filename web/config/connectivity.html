@@ -20,24 +20,59 @@
 </main>
 <script src="/assets/edit.js"></script>
 <script>
+function wifiOn(d) { return d.wifion === 'y'; }
+function wcbOn(d)  { return d.wcbenable === 'y'; }
+
 var SCHEMA = [
   {section:'XBee Remotes'},
-  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address'},
-  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address'},
+  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address', restart:true},
+  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address', restart:true},
   {section:'WiFi Access Point'},
-  {key:'wifion',       label:'Enable WiFi AP', type:'bool'},
-  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars'},
-  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars'},
+  {key:'wifion',       label:'Enable WiFi AP', type:'bool', restart:true},
+  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', when:wifiOn, restart:true},
+  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars',  when:wifiOn, restart:true},
+  {key:'wifichannel',  label:'Channel',        type:'number', min:1, max:13, when:wifiOn,
+    note:'optional — must match the WCB mesh channel if WCB Client is used (mesh channels are 1-11 only)', restart:true},
   {section:'Bluetooth Controller'},
-  {key:'btcontrolleron', label:'Enable Bluetooth Controller', type:'bool'}
+  {key:'btcontrolleron', label:'Enable Bluetooth Controller', type:'bool'},
+  {section:'WCB Client (Mesh Network)'},
+  {key:'wcbenable', label:'Enable WCB Client', type:'bool'},
+  {key:'wcboct2', label:'MAC Octet 2 (HEX)', type:'hex', maxlength:2, note:'00-FF, must match on all boards', when:wcbOn},
+  {key:'wcboct3', label:'MAC Octet 3 (HEX)', type:'hex', maxlength:2, note:'00-FF, must match on all boards', when:wcbOn},
+  {key:'wcbpassword', label:'Mesh Password', type:'password', maxlength:39, note:'max 39 chars', when:wcbOn},
+  {key:'wcbquantity', label:'WCB Quantity', type:'number', min:0, max:19, when:wcbOn},
+  {key:'wcbid', label:'This Device ID', type:'number', min:0, max:20, note:'1-19, or 20 for the special slot', when:wcbOn},
+  {key:'outboundserial', label:'Outbound Destination', type:'select', when:wcbOn,
+    options:[{v:'0', l:'UART0 (wired)'}, {v:'1', l:'WCB Mesh'}]}
 ];
 
+// refreshWCBStatus() only runs once, when buildPage()'s callback fires on
+// initial load -- doSave() has no reason to know about page-specific status
+// panels, so without this hook a WCB identity-field edit that flips the
+// server's reboot_required flag would never be reflected until the next
+// full page load. See edit.js's doSave() for where this is called.
+function _onConfigSaved(key) {
+  if (key.indexOf('wcb') === 0 || key === 'outboundserial') refreshWCBStatus();
+}
+
 buildPage(SCHEMA, '/api/config', function() {
-  // buildPage replaces main's innerHTML; inject the BT panel after it.
+  // buildPage replaces main's innerHTML. Anchor each status panel right
+  // after its section's toggle row rather than appending at the end of
+  // <main>, so it reads as part of that section instead of trailing below
+  // an unrelated one.
   var panel = document.createElement('div');
   panel.id = 'bt-panel';
-  document.querySelector('main').appendChild(panel);
+  var btRow = document.querySelector('[data-key="btcontrolleron"]');
+  if (btRow) btRow.insertAdjacentElement('afterend', panel);
+  else document.querySelector('main').appendChild(panel);
   refreshBTStatus();
+
+  var wcbPanel = document.createElement('div');
+  wcbPanel.id = 'wcb-panel';
+  var wcbRow = document.querySelector('[data-key="outboundserial"]');
+  if (wcbRow) wcbRow.insertAdjacentElement('afterend', wcbPanel);
+  else document.querySelector('main').appendChild(wcbPanel);
+  refreshWCBStatus();
 });
 
 // ---- Bluetooth panel -------------------------------------------------------
@@ -156,6 +191,53 @@ function pairWith(addr) {
 function forgetDevice() {
   if (!confirm('Forget the paired Bluetooth controller?')) return;
   fetch('/api/bt/forget', {method:'POST'}).then(function() { refreshBTStatus(); });
+}
+
+// ---- WCB Client panel -------------------------------------------------------
+
+function refreshWCBStatus() {
+  fetch('/api/wcb/status').then(function(r) {
+    if (!r.ok) return;
+    return r.json();
+  }).then(function(d) {
+    if (!d) return;
+    var panel = document.getElementById('wcb-panel');
+    if (!panel) return;
+
+    if (!d.enabled) {
+      panel.innerHTML = '<div class="row"><div class="row-label" style="color:var(--muted)">'
+        + 'Enable above to join the WCB mesh network.</div></div>';
+      return;
+    }
+
+    var html = '';
+
+    if (d.reboot_required) _flagRestartRequired();
+
+    var statusText = !d.configured
+      ? 'Not configured — check the fields above'
+      : !d.running
+        ? 'Not running'
+        : d.joined
+          ? 'Connected'
+          : 'Running — no neighbors seen';
+    var dot = d.joined
+      ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#3a3;margin-right:6px;vertical-align:middle"></span>'
+      : '';
+
+    html += '<div class="row"><div class="row-label">Mesh</div>';
+    html += '<div class="rv">' + dot + escHtml(statusText) + '</div></div>';
+
+    if (d.configured) {
+      html += '<div class="row"><div class="row-label">Device ID</div>'
+            + '<div class="rv">' + d.device_id + ' of ' + d.quantity + '</div></div>';
+    }
+
+    panel.innerHTML = html;
+  }).catch(function() {
+    var panel = document.getElementById('wcb-panel');
+    if (panel) panel.innerHTML = '';
+  });
 }
 </script>
 </body>

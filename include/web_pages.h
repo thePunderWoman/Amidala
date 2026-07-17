@@ -489,6 +489,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -619,20 +635,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -649,7 +673,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -661,7 +684,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -746,9 +789,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -757,12 +801,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -805,6 +849,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -834,23 +952,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -860,6 +991,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       if (el) el.textContent = 'Failed to load settings.';
     });
 }
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
+}
 </script>
 <script>
 var SCHEMA = [
@@ -868,14 +1011,14 @@ var SCHEMA = [
   {key:'mix12',      label:'Channel Mixing',                 type:'bool'},
   {key:'auto',       label:'Autocorrect Gestures',           type:'bool'},
   {section:'Serial'},
-  {key:'serialbaud', label:'Baud Rate',                      type:'number', min:300, max:115200},
+  {key:'serialbaud', label:'Baud Rate',                      type:'number', min:300, max:115200, restart:true},
   {key:'serialdelim',label:'Delimiter',                      type:'ascii-char'},
   {key:'serialeol',  label:'End of Line',                    type:'select', options:[
     {v:'10', l:'LF (\\n)'},
     {v:'13', l:'CR (\\r)'},
     {v:'0',  l:'CRLF (\\r\\n)'}
   ]},
-  {key:'auxserial3', label:'Aux Serial 3 (Software Serial)', type:'bool'},
+  {key:'auxserial3', label:'Aux Serial 3 (Software Serial)', type:'bool', restart:true},
   {section:'I²C'},
   {key:'myi2c',      label:"This Board's Address",           type:'number', min:0, max:100}
 ];
@@ -1091,6 +1234,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -1221,20 +1380,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -1251,7 +1418,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -1263,7 +1429,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -1348,9 +1534,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -1359,12 +1546,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -1407,6 +1594,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -1436,23 +1697,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -1462,26 +1736,73 @@ function buildPage(SCHEMA, endpoint, callback) {
       if (el) el.textContent = 'Failed to load settings.';
     });
 }
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
+}
 </script>
 <script>
+function wifiOn(d) { return d.wifion === 'y'; }
+function wcbOn(d)  { return d.wcbenable === 'y'; }
+
 var SCHEMA = [
   {section:'XBee Remotes'},
-  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address'},
-  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address'},
+  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address', restart:true},
+  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address', restart:true},
   {section:'WiFi Access Point'},
-  {key:'wifion',       label:'Enable WiFi AP', type:'bool'},
-  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars'},
-  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars'},
+  {key:'wifion',       label:'Enable WiFi AP', type:'bool', restart:true},
+  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', when:wifiOn, restart:true},
+  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars',  when:wifiOn, restart:true},
+  {key:'wifichannel',  label:'Channel',        type:'number', min:1, max:13, when:wifiOn,
+    note:'optional — must match the WCB mesh channel if WCB Client is used (mesh channels are 1-11 only)', restart:true},
   {section:'Bluetooth Controller'},
-  {key:'btcontrolleron', label:'Enable Bluetooth Controller', type:'bool'}
+  {key:'btcontrolleron', label:'Enable Bluetooth Controller', type:'bool'},
+  {section:'WCB Client (Mesh Network)'},
+  {key:'wcbenable', label:'Enable WCB Client', type:'bool'},
+  {key:'wcboct2', label:'MAC Octet 2 (HEX)', type:'hex', maxlength:2, note:'00-FF, must match on all boards', when:wcbOn},
+  {key:'wcboct3', label:'MAC Octet 3 (HEX)', type:'hex', maxlength:2, note:'00-FF, must match on all boards', when:wcbOn},
+  {key:'wcbpassword', label:'Mesh Password', type:'password', maxlength:39, note:'max 39 chars', when:wcbOn},
+  {key:'wcbquantity', label:'WCB Quantity', type:'number', min:0, max:19, when:wcbOn},
+  {key:'wcbid', label:'This Device ID', type:'number', min:0, max:20, note:'1-19, or 20 for the special slot', when:wcbOn},
+  {key:'outboundserial', label:'Outbound Destination', type:'select', when:wcbOn,
+    options:[{v:'0', l:'UART0 (wired)'}, {v:'1', l:'WCB Mesh'}]}
 ];
 
+// refreshWCBStatus() only runs once, when buildPage()'s callback fires on
+// initial load -- doSave() has no reason to know about page-specific status
+// panels, so without this hook a WCB identity-field edit that flips the
+// server's reboot_required flag would never be reflected until the next
+// full page load. See edit.js's doSave() for where this is called.
+function _onConfigSaved(key) {
+  if (key.indexOf('wcb') === 0 || key === 'outboundserial') refreshWCBStatus();
+}
+
 buildPage(SCHEMA, '/api/config', function() {
-  // buildPage replaces main's innerHTML; inject the BT panel after it.
+  // buildPage replaces main's innerHTML. Anchor each status panel right
+  // after its section's toggle row rather than appending at the end of
+  // <main>, so it reads as part of that section instead of trailing below
+  // an unrelated one.
   var panel = document.createElement('div');
   panel.id = 'bt-panel';
-  document.querySelector('main').appendChild(panel);
+  var btRow = document.querySelector('[data-key="btcontrolleron"]');
+  if (btRow) btRow.insertAdjacentElement('afterend', panel);
+  else document.querySelector('main').appendChild(panel);
   refreshBTStatus();
+
+  var wcbPanel = document.createElement('div');
+  wcbPanel.id = 'wcb-panel';
+  var wcbRow = document.querySelector('[data-key="outboundserial"]');
+  if (wcbRow) wcbRow.insertAdjacentElement('afterend', wcbPanel);
+  else document.querySelector('main').appendChild(wcbPanel);
+  refreshWCBStatus();
 });
 
 // ---- Bluetooth panel -------------------------------------------------------
@@ -1600,6 +1921,53 @@ function pairWith(addr) {
 function forgetDevice() {
   if (!confirm('Forget the paired Bluetooth controller?')) return;
   fetch('/api/bt/forget', {method:'POST'}).then(function() { refreshBTStatus(); });
+}
+
+// ---- WCB Client panel -------------------------------------------------------
+
+function refreshWCBStatus() {
+  fetch('/api/wcb/status').then(function(r) {
+    if (!r.ok) return;
+    return r.json();
+  }).then(function(d) {
+    if (!d) return;
+    var panel = document.getElementById('wcb-panel');
+    if (!panel) return;
+
+    if (!d.enabled) {
+      panel.innerHTML = '<div class="row"><div class="row-label" style="color:var(--muted)">'
+        + 'Enable above to join the WCB mesh network.</div></div>';
+      return;
+    }
+
+    var html = '';
+
+    if (d.reboot_required) _flagRestartRequired();
+
+    var statusText = !d.configured
+      ? 'Not configured — check the fields above'
+      : !d.running
+        ? 'Not running'
+        : d.joined
+          ? 'Connected'
+          : 'Running — no neighbors seen';
+    var dot = d.joined
+      ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#3a3;margin-right:6px;vertical-align:middle"></span>'
+      : '';
+
+    html += '<div class="row"><div class="row-label">Mesh</div>';
+    html += '<div class="rv">' + dot + escHtml(statusText) + '</div></div>';
+
+    if (d.configured) {
+      html += '<div class="row"><div class="row-label">Device ID</div>'
+            + '<div class="rv">' + d.device_id + ' of ' + d.quantity + '</div></div>';
+    }
+
+    panel.innerHTML = html;
+  }).catch(function() {
+    var panel = document.getElementById('wcb-panel');
+    if (panel) panel.innerHTML = '';
+  });
 }
 </script>
 </body>
@@ -1812,6 +2180,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -1942,20 +2326,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -1972,7 +2364,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -1984,7 +2375,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -2069,9 +2480,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -2080,12 +2492,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -2128,6 +2540,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -2157,23 +2643,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -2183,13 +2682,27 @@ function buildPage(SCHEMA, endpoint, callback) {
       if (el) el.textContent = 'Failed to load settings.';
     });
 }
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
+}
 </script>
 <script>
 var SCHEMA = [
   {section:'Access Point'},
-  {key:'wifion',       label:'Enable WiFi AP', type:'bool'},
-  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars'},
-  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars'}
+  {key:'wifion',       label:'Enable WiFi AP', type:'bool', restart:true},
+  {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', restart:true},
+  {key:'wifipassword', label:'Password',       type:'password', maxlength:64, note:'min 8 chars', restart:true},
+  {key:'wifichannel',  label:'Channel',        type:'number', min:1, max:13,
+    note:'optional — must match the WCB mesh channel if WCB Client is used (mesh channels are 1-11 only)', restart:true}
 ];
 buildPage(SCHEMA, '/api/config');
 </script>
@@ -2403,6 +2916,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -2533,20 +3062,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -2563,7 +3100,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -2575,7 +3111,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -2660,9 +3216,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -2671,12 +3228,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -2719,6 +3276,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -2748,23 +3379,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -2774,12 +3418,24 @@ function buildPage(SCHEMA, endpoint, callback) {
       if (el) el.textContent = 'Failed to load settings.';
     });
 }
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
+}
 </script>
 <script>
 var SCHEMA = [
   {section:'Remote Addresses (32-bit hex)'},
-  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address'},
-  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address'}
+  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address', restart:true},
+  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address', restart:true}
 ];
 buildPage(SCHEMA, '/api/config');
 </script>
@@ -2993,6 +3649,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -3135,20 +3807,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -3165,7 +3845,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -3177,7 +3856,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -3262,9 +3961,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -3273,12 +3973,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -3321,6 +4021,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -3350,23 +4124,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -3375,6 +4162,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -3389,22 +4188,22 @@ var SCHEMA = [
   {section:'Hardware'},
   {key:'audiohw',        label:'Audio Board',        readOnly:true},
   {section:'Volume'},
-  {key:'volume',         label:'R2 Sounds Volume',   type:'number', min:0, max:100},
-  {key:'volumeChA',      label:'Channel A Volume',   type:'number', min:0, max:100, when:HCR},
-  {key:'volumeChB',      label:'Channel B Volume',   type:'number', min:0, max:100, when:HCR},
+  {key:'volume',         label:'R2 Sounds Volume',   type:'number', min:0, max:100, restart:true},
+  {key:'volumeChA',      label:'Channel A Volume',   type:'number', min:0, max:100, when:HCR, restart:true},
+  {key:'volumeChB',      label:'Channel B Volume',   type:'number', min:0, max:100, when:HCR, restart:true},
   {key:'volumewheel',    label:'Volume Wheel',       type:'select', options:_whl,   when:HCR},
   {key:'altvolumewheel', label:'Alt+Wheel',          type:'select', options:_awl,   when:HCR},
   {section:'Startup Emote', when:HCR},
-  {key:'startupem',  label:'Emotion', type:'select', options:_emo},
-  {key:'startuplvl', label:'Level',   type:'select', options:_lvl},
+  {key:'startupem',  label:'Emotion', type:'select', options:_emo, restart:true},
+  {key:'startuplvl', label:'Level',   type:'select', options:_lvl, restart:true},
   {section:'Ack Emote', when:HCR},
   {key:'ackem',  label:'Emotion', type:'select', options:_emo},
   {key:'acklvl', label:'Level',   type:'select', options:_lvl},
   {section:'Sound Playback'},
-  {key:'startup',  label:'Startup Sound',    type:'bool'},
-  {key:'rndon',    label:'Random Sounds',    type:'bool'},
-  {key:'mindelay', label:'Random Min Delay', type:'number', min:0, max:1000, note:'seconds'},
-  {key:'maxdelay', label:'Random Max Delay', type:'number', min:0, max:1000, note:'seconds'},
+  {key:'startup',  label:'Startup Sound',    type:'bool', restart:true},
+  {key:'rndon',    label:'Random Sounds',    type:'bool', restart:true},
+  {key:'mindelay', label:'Random Min Delay', type:'number', min:0, max:1000, note:'seconds', restart:true},
+  {key:'maxdelay', label:'Random Max Delay', type:'number', min:0, max:1000, note:'seconds', restart:true},
   {key:'ackon',    label:'Ack Sounds',       type:'bool'},
   {section:'Sound Banks', when:VMUSIC}
 ];
@@ -3702,6 +4501,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -3832,20 +4647,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -3862,7 +4685,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -3874,7 +4696,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -3959,9 +4801,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -3970,12 +4813,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -4018,6 +4861,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -4047,23 +4964,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -4072,6 +5002,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -4313,6 +5255,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -4443,20 +5401,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -4473,7 +5439,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -4485,7 +5450,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -4570,9 +5555,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -4581,12 +5567,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -4629,6 +5615,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -4658,23 +5718,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -4683,6 +5756,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -4929,6 +6014,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -5101,20 +6202,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -5131,7 +6240,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -5143,7 +6251,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -5228,9 +6356,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -5239,12 +6368,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -5287,6 +6416,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -5316,23 +6519,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -5341,6 +6557,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -5857,6 +7085,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -6014,20 +7258,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -6044,7 +7296,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -6056,7 +7307,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -6141,9 +7412,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -6152,12 +7424,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -6200,6 +7472,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -6229,23 +7575,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -6254,6 +7613,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -6691,6 +8062,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -6838,20 +8225,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -6868,7 +8263,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -6880,7 +8274,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -6965,9 +8379,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -6976,12 +8391,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -7024,6 +8439,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -7053,23 +8542,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -7078,6 +8580,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -7093,8 +8607,8 @@ function load() {
     var maxpulse = d.maxpulse !== undefined ? String(d.maxpulse) : '2000';
     pa.innerHTML =
       '<div class="section-label" style="margin-top:.8rem">Global Pulse Limits</div>' +
-      buildRow({key:'minpulse', label:'Min Pulse Width', type:'number', min:500, max:1500, note:'µs'}, minpulse) +
-      buildRow({key:'maxpulse', label:'Max Pulse Width', type:'number', min:1500, max:2500, note:'µs'}, maxpulse);
+      buildRow({key:'minpulse', label:'Min Pulse Width', type:'number', min:500, max:1500, note:'µs', restart:true}, minpulse) +
+      buildRow({key:'maxpulse', label:'Max Pulse Width', type:'number', min:1500, max:2500, note:'µs', restart:true}, maxpulse);
   }).catch(function(){
     document.getElementById('tbl-area').innerHTML='<div id="status">Failed to load</div>';
   });
@@ -7377,6 +8891,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -7537,20 +9067,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -7567,7 +9105,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -7579,7 +9116,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -7664,9 +9221,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -7675,12 +9233,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -7723,6 +9281,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -7752,23 +9384,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -7777,6 +9422,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -8268,6 +9925,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -8450,20 +10123,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -8480,7 +10161,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -8492,7 +10172,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -8577,9 +10277,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -8588,12 +10289,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -8636,6 +10337,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -8665,23 +10440,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -8690,6 +10478,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -9284,6 +11084,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -9432,20 +11248,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -9462,7 +11286,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -9474,7 +11297,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -9559,9 +11402,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -9570,12 +11414,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -9618,6 +11462,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -9647,23 +11565,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -9672,6 +11603,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -10046,6 +11989,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -10185,9 +12144,11 @@ main{flex:1;display:flex;flex-direction:column;min-height:0;max-width:none;margi
     <button class="tbtn on" id="f-tx" onclick="toggleFilter('tx')" title="Show TX (outgoing)">TX</button>
     <button class="tbtn"    id="f-rx" onclick="toggleFilter('rx')" title="Show RX (incoming)">RX</button>
     <span class="tsep"></span>
-    <button class="tbtn on" id="f-S0" onclick="toggleFilter('S0')" title="S0 — WCB serial">S0</button>
-    <button class="tbtn on" id="f-S1" onclick="toggleFilter('S1')" title="S1 — auxiliary">S1</button>
-    <button class="tbtn on" id="f-S2" onclick="toggleFilter('S2')" title="S2 — auxiliary">S2</button>
+    <button class="tbtn on" id="f-LOG" onclick="toggleFilter('LOG')" title="LOG — Amidala's own console output (boot, config dumps, command replies)">LOG</button>
+    <button class="tbtn on" id="f-S0" onclick="toggleFilter('S0')" title="S0 — WCB/body controller serial. Also a Send destination.">S0</button>
+    <button class="tbtn on" id="f-S1" onclick="toggleFilter('S1')" title="S1 — auxiliary" hidden>S1</button>
+    <button class="tbtn on" id="f-S2" onclick="toggleFilter('S2')" title="S2 — auxiliary serial. Also a Send destination." hidden>S2</button>
+    <button class="tbtn on" id="f-WCB" onclick="toggleFilter('WCB')" title="WCB — mesh network. Also a Send destination." hidden>WCB</button>
     <span class="tsep"></span>
     <button class="tbtn" id="pbtn" onclick="togglePause()">Pause</button>
     <button class="tbtn" onclick="clearLog()">Clear</button>
@@ -10239,20 +12200,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -10269,7 +12238,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -10281,7 +12249,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -10366,9 +12354,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -10377,12 +12366,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -10425,6 +12414,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -10454,23 +12517,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -10480,13 +12556,33 @@ function buildPage(SCHEMA, endpoint, callback) {
       if (el) el.textContent = 'Failed to load settings.';
     });
 }
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
+}
 </script>
 <script>
 var _seq      = -1;
 var _paused   = false;
 var _autoScroll = true;
 var _entries  = [];   // all received entries: [{t: text, c: cls}, ...]
-var _filters  = { tx: true, rx: false, S0: true, S1: true, S2: true };
+var _filters  = { tx: true, rx: false, LOG: true, S0: true, S1: true, S2: true, WCB: true };
+// Which toggled-on ports Send actually transmits to. S0 is always eligible
+// (the WCB/body controller UART -- always live). S1 is the RoboClaw dome
+// drive's own binary packet-serial link when that dome variant is built --
+// writing arbitrary text into it could corrupt a motor command mid-packet,
+// so it's excluded unless /api/info confirms a non-RoboClaw dome (or none).
+// S2/WCB are already hidden entirely unless enabled (see checks below), so
+// they don't need a separate eligibility flag here.
+var _sendEligible = { S0: true, S1: false };
 
 var logEl  = document.getElementById('log');
 var dotEl  = document.getElementById('dot');
@@ -10498,8 +12594,16 @@ logEl.addEventListener('scroll', function() {
 });
 
 function portOf(text) {
-  var m = text.match(/^(S\d)/);
-  return m ? m[1] : null;
+  // Mesh traffic is tagged "MESH: ..." at the source (controller.h's TX log,
+  // WCBClientController::poll()'s RX tag) -- mapped to the "WCB" filter key
+  // here rather than renaming the wire-level tag, so it reads distinctly
+  // from S0/S1/S2 in the log itself while still getting its own toolbar
+  // toggle, gated by the same tx/rx checks as every other port below. LOG is
+  // Amidala's own console output (see console.cpp's teeConsoleToMonitor()),
+  // tagged class 'i' server-side so it isn't also gated by the RX toggle.
+  var m = text.match(/^(S\d|MESH|LOG)/);
+  if (!m) return null;
+  return m[1] === 'MESH' ? 'WCB' : m[1];
 }
 
 function shouldShow(entry) {
@@ -10520,12 +12624,31 @@ function addLine(text, cls) {
   if (_autoScroll) logEl.scrollTop = logEl.scrollHeight;
 }
 
+// Full rebuild -- used for the initial load and whenever a filter toggle
+// changes which of the already-accumulated _entries should be visible.
+// NOT used for routine polling (see appendEntries()): tearing down and
+// rebuilding the whole log every 1.5s reset scroll position on every poll,
+// making the log look like it was clearing itself while scrolled up to
+// read something, even though the data was still there.
 function renderLog() {
   logEl.innerHTML = '';
   for (var i = 0; i < _entries.length; i++) {
     if (shouldShow(_entries[i])) addLine(_entries[i].t, _entries[i].c);
   }
   if (_autoScroll) logEl.scrollTop = logEl.scrollHeight;
+}
+
+// Appends only newly-arrived entries to the existing DOM/_entries, instead
+// of rebuilding everything -- preserves scroll position, and lets the
+// client accumulate a growing history for the life of the page view, well
+// beyond the server's fixed-size (256-line) ring buffer. Entries/DOM nodes
+// are kept for as long as the page is open -- nothing here ever trims them;
+// only clearLog() (the Clear button) or navigating away removes anything.
+function appendEntries(lines) {
+  for (var i = 0; i < lines.length; i++) {
+    _entries.push(lines[i]);
+    if (shouldShow(lines[i])) addLine(lines[i].t, lines[i].c);
+  }
 }
 
 function toggleFilter(key) {
@@ -10535,45 +12658,124 @@ function toggleFilter(key) {
   renderLog();
 }
 
-function poll() {
+// silentResync: used when resuming from Pause. A paused monitor should
+// behave like it genuinely stopped watching, not like it kept buffering
+// everything in the background for a catch-up dump on Resume -- so instead
+// of a normal poll (which would append every line that arrived while
+// paused), just adopt the server's current seq with nothing displayed, and
+// let normal polling pick up whatever comes next.
+function poll(silentResync) {
   if (_paused) return;
   fetch('/api/monitor').then(function(r){ return r.json(); }).then(function(d){
     dotEl.className = 'dot ok';
     connEl.textContent = 'Connected';
-    if (d.seq !== _seq) {
-      _entries = d.lines || [];
-      _seq = d.seq;
-      renderLog();
+    if (silentResync) { _seq = d.seq; return; }
+    if (d.seq === _seq) return;
+    var lines = d.lines || [];
+    if (_seq === -1) {
+      // First load: the server's current buffer is our starting history.
+      _entries = [];
+      appendEntries(lines);
+    } else {
+      // seq increments once per monAppend() call server-side, so the delta
+      // is exactly how many new lines have been appended since our last
+      // poll -- lets us append just the new tail instead of guessing from
+      // array length, which stops changing once the 256-line server buffer
+      // is full and just slides (evict oldest, add newest).
+      var delta = d.seq - _seq;
+      var numNew = Math.min(delta, lines.length);
+      if (delta > lines.length) {
+        // More lines were appended server-side than the buffer could still
+        // hold by the time we polled -- some history was evicted before we
+        // ever saw it. Note the gap instead of silently skipping it.
+        appendEntries([{t: '--- ' + (delta - lines.length) + ' line(s) lost (server buffer overflow between polls) ---', c: 'info'}]);
+      }
+      if (numNew > 0) appendEntries(lines.slice(lines.length - numNew));
     }
+    _seq = d.seq;
   }).catch(function(){
     dotEl.className = 'dot';
     connEl.textContent = 'Disconnected — retrying…';
   });
 }
 
+// Send targets whichever of S0/S1/S2/WCB are currently toggled on in the
+// toolbar -- those buttons double as both "show this port's traffic" and
+// "send to this port" controls. Independent of the tx/rx display filters,
+// which only affect what's shown, not what gets sent.
 function sendCmd() {
   var inp = document.getElementById('cmd');
   var cmd = inp.value.trim();
   if (!cmd) return;
   inp.value = '';
+  var body = 'cmd=' + encodeURIComponent(cmd)
+    + '&s0=' + ((_sendEligible.S0 && _filters.S0) ? '1' : '0')
+    + '&s1=' + ((_sendEligible.S1 && _filters.S1) ? '1' : '0')
+    + '&s2=' + (_filters.S2 ? '1' : '0')
+    + '&wcb=' + (_filters.WCB ? '1' : '0');
   fetch('/api/monitor', {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-    body: 'cmd=' + encodeURIComponent(cmd)
+    body: body
   }).then(function(r){
     if (!r.ok) addLine('! Server error ' + r.status, 'info');
     else poll();
   }).catch(function(){ addLine('! Send failed', 'info'); });
 }
 
-function clearLog() { logEl.innerHTML = ''; _entries = []; _seq = -1; }
+// Deliberately does NOT reset _seq to -1: poll() treats _seq === -1 as "first
+// load, show the server's entire current buffer" -- resetting it here would
+// make the very next poll immediately re-populate everything Clear just
+// wiped. Leaving _seq where it is means future polls only append lines that
+// are genuinely new from this point forward.
+function clearLog() { logEl.innerHTML = ''; _entries = []; }
 
 function togglePause() {
   _paused = !_paused;
   pbtn.textContent = _paused ? 'Resume' : 'Pause';
   pbtn.className   = 'tbtn' + (_paused ? ' on' : '');
-  if (!_paused) poll();
+  if (_paused) return;
+  // _seq === -1 means nothing has ever loaded yet (e.g. paused before the
+  // very first poll completed) -- a normal poll() is correct there so the
+  // initial history still shows up. Otherwise resync silently.
+  poll(_seq !== -1);
 }
+
+// The WCB filter button only makes sense (and only ever gets traffic) when
+// WCB Client is enabled -- checked once on load, same one-shot pattern
+// connectivity.html's WCB panel already uses, rather than polling
+// /api/wcb/status alongside /api/monitor on every tick.
+fetch('/api/wcb/status').then(function(r) { return r.ok ? r.json() : null; }).then(function(d) {
+  if (d && d.enabled) {
+    var btn = document.getElementById('f-WCB');
+    if (btn) btn.hidden = false;
+  }
+}).catch(function() {});
+
+// S2 (AUX_SERIAL) is a runtime-optional port -- only show/send to it once
+// auxserial3 is actually enabled in General settings, same reasoning as WCB.
+fetch('/api/config').then(function(r) { return r.ok ? r.json() : null; }).then(function(d) {
+  if (d && d.auxserial3 === 'y') {
+    var btn = document.getElementById('f-S2');
+    if (btn) btn.hidden = false;
+  }
+}).catch(function() {});
+
+// S1 only exists as a monitor/Send target when it isn't the RoboClaw dome
+// drive's own binary packet-serial link on this build -- when it is,
+// wifi_ap.cpp compiles out S1's RX tap entirely (see ROBOCLAW_SERIAL), so
+// the filter button would just sit there and never show any traffic.
+// /api/info's "dome" field reflects the compiled-in DOME_DRIVE variant.
+fetch('/api/info').then(function(r) { return r.ok ? r.json() : null; }).then(function(d) {
+  if (d && d.dome !== 'roboclaw') {
+    _sendEligible.S1 = true;
+    var btn = document.getElementById('f-S1');
+    if (btn) {
+      btn.hidden = false;
+      btn.title = 'S1 — auxiliary. Also a Send destination.';
+    }
+  }
+}).catch(function() {});
 
 poll();
 setInterval(poll, 1500);
@@ -10788,6 +12990,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -10975,20 +13193,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -11005,7 +13231,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -11017,7 +13242,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -11102,9 +13347,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -11113,12 +13359,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -11161,6 +13407,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -11190,23 +13510,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -11215,6 +13548,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -11517,6 +13862,22 @@ main {
   color: var(--muted); padding: .7rem 1rem; font-size: .75rem;
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
+
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
 
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
@@ -11823,6 +14184,22 @@ main {
   line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
 }
 
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
 /* sub-section heading used in droid-control + controllers */
 .sec-hdr {
   font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
@@ -11965,20 +14342,28 @@ function startEdit(btn) {
   row.querySelector('.bc').hidden = false;
 }
 
-function doCancel(btn) {
-  var row = btn.closest('.row');
-  var inp = row.querySelector('input,select');
-  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
-  btn.hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
 }
 
 async function doSave(btn) {
   var row = btn.closest('.row');
   var key = row.dataset.key;
+  var rt  = row.dataset.type;
   var inp = row.querySelector('input,select');
   var val = inp.value;
   var prev = btn.textContent;
@@ -11995,7 +14380,6 @@ async function doSave(btn) {
     });
     if (r.ok) {
       var dv = row.querySelector('.rv');
-      var rt = row.dataset.type;
       if (rt === 'bool' || rt === 'select') {
         var sel = row.querySelector('select');
         dv.textContent = sel.options[sel.selectedIndex].text;
@@ -12007,7 +14391,27 @@ async function doSave(btn) {
         var fmtFn = row.dataset.fmt;
         dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
       }
-      doCancel(row.querySelector('.bc'));
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
       showToast('Saved');
     } else {
       showToast('Save failed: ' + await r.text(), true);
@@ -12092,9 +14496,10 @@ async function doAction(btn) {
 
 var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
 
-function buildRow(s, val) {
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
   if (s.type === 'action') {
-    return '<div class="row">'
+    return '<div class="row"' + hiddenAttr + '>'
       + '<div class="row-label">' + s.label + '</div>'
       + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
       + (s.btnLabel || 'Send') + '</button>'
@@ -12103,12 +14508,12 @@ function buildRow(s, val) {
   var disp = dispValue(s, val);
   var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
   if (s.readOnly) {
-    return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row" data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
     + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
@@ -12151,6 +14556,80 @@ function buildRow(s, val) {
   else document.body.appendChild(rg);
 })();
 
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
 // --------------------------------------------------------------- footer -------
 
 (function() {
@@ -12180,23 +14659,36 @@ function showHashTab(t) {
   location.hash = '#' + t;
 }
 
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
 function buildPage(SCHEMA, endpoint, callback) {
   fetch(endpoint)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
       var html = '';
-      var skip = false;
+      var sectionSkip = false;
       SCHEMA.forEach(function(s) {
         if (s.section) {
-          skip = s.when ? !s.when(d) : false;
-          if (!skip) html += '<div class="section-label">' + s.section + '</div>';
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
           return;
         }
-        if (skip) return;
-        if (s.when && !s.when(d)) return;
-        if (s.type === 'action') { html += buildRow(s, ''); return; }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
         var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
-        html += buildRow(s, val);
+        html += buildRow(s, val, rowHidden);
       });
       document.querySelector('main').innerHTML = html;
       if (callback) callback(d);
@@ -12205,6 +14697,18 @@ function buildPage(SCHEMA, endpoint, callback) {
       var el = document.getElementById('status');
       if (el) el.textContent = 'Failed to load settings.';
     });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
 }
 </script>
 <script>
@@ -12225,7 +14729,11 @@ function connLed(ok) {
 }
 
 function buildUI() {
-  var html = '<div class="section-label">Connectivity</div>';
+  var html = '<div class="section-label">Device</div>';
+  html += '<div class="row"><div class="row-label">Restart Droid</div>'
+        + '<button class="be-action" onclick="_doRestart(this)">Restart</button></div>';
+
+  html += '<div class="section-label">Connectivity</div>';
   html += '<div class="row"><div class="row-label">XBee Drive</div>'
         + '<div class="pin-led low" id="conn-xd-led">&#9679;</div>'
         + '<div class="pin-state low" id="conn-xd-st">OFFLINE</div></div>';

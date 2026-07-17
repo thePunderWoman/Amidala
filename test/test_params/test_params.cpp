@@ -80,6 +80,30 @@ void test_default_btcontrolleron_false() {
     TEST_ASSERT_FALSE(gDefaultParams.btcontrolleron);
 }
 
+void test_default_wcbenable_false() {
+    gDefaultParams.init();
+    TEST_ASSERT_FALSE(gDefaultParams.wcbenable);
+}
+
+void test_default_wcb_identity_zeroed() {
+    gDefaultParams.init();
+    TEST_ASSERT_EQUAL(0, gDefaultParams.wcboct2);
+    TEST_ASSERT_EQUAL(0, gDefaultParams.wcboct3);
+    TEST_ASSERT_EQUAL_STRING("", gDefaultParams.wcbpassword);
+    TEST_ASSERT_EQUAL(0, gDefaultParams.wcbquantity);
+    TEST_ASSERT_EQUAL(0, gDefaultParams.wcbid);
+}
+
+void test_default_outboundserial_uart0() {
+    gDefaultParams.init();
+    TEST_ASSERT_EQUAL(0, gDefaultParams.outboundserial);
+}
+
+void test_default_wifichannel() {
+    gDefaultParams.init();
+    TEST_ASSERT_EQUAL(1, gDefaultParams.wifichannel);
+}
+
 void test_default_mindelay() {
     gDefaultParams.init();
     TEST_ASSERT_EQUAL(60, gDefaultParams.mindelay);
@@ -324,6 +348,10 @@ int main(int argc, char **argv) {
     RUN_TEST(test_default_rndon_true);
     RUN_TEST(test_default_ackon_false);
     RUN_TEST(test_default_btcontrolleron_false);
+    RUN_TEST(test_default_wcbenable_false);
+    RUN_TEST(test_default_wcb_identity_zeroed);
+    RUN_TEST(test_default_outboundserial_uart0);
+    RUN_TEST(test_default_wifichannel);
     RUN_TEST(test_default_mindelay);
     RUN_TEST(test_default_maxdelay);
     RUN_TEST(test_default_serialbaud);

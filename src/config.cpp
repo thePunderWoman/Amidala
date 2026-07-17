@@ -213,6 +213,10 @@ void AmidalaConfig::showCurrentConfiguration() {
     fOutput->println();
     fOutput->print(F("Bluetooth Controller: "));
     fOutput->println(params.btcontrolleron ? F("On") : F("Off"));
+    fOutput->print(F("WCB Client: "));
+    fOutput->println(params.wcbenable ? F("On") : F("Off"));
+    fOutput->print(F("WCB Outbound: "));
+    fOutput->println(params.outboundserial == 1 ? F("WCB Mesh") : F("UART0"));
     fOutput->print(F("WiFi AP: "));
     fOutput->println(params.wifion ? F("On") : F("Off"));
     fOutput->print(F("WiFi SSID: "));
@@ -674,7 +678,15 @@ bool AmidalaConfig::processConfig(const char *cmd) {
     domeDrive->setInverted(params.domeflip);
     return true;
   } else if (intparam(cmd, "domespeed=", params.domespeed, 0, 100)) {
-    domeDrive->setMaxSpeed(params.domespeed);
+    // setMaxSpeed()/setMaxSpeedPct() expect a 0.0-1.0 fraction, not the raw
+    // 0-100 UI value -- matches what boot-time setup() already does
+    // (src/controller.cpp). setMaxSpeedPct() is a RoboClaw-only convenience
+    // wrapper; other dome-drive variants only have the base setMaxSpeed().
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+    static_cast<DomeDriveRoboClaw*>(domeDrive)->setMaxSpeedPct(float(params.domespeed) / 100.0f);
+#else
+    domeDrive->setMaxSpeed(float(params.domespeed) / 100.0f);
+#endif
     return true;
   } else if (sintparam(cmd, "domepos=", sintarg)) {
 #ifdef RDH_SERIAL
@@ -734,8 +746,14 @@ bool AmidalaConfig::processConfig(const char *cmd) {
   // ---- RoboClaw dome drive parameters (parsed regardless of active dome
   //      drive so config.txt is portable between builds) ---------------------
   } else if (intparam(cmd, "domercaddr=", params.domercaddr, 128, 135)) {
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+    static_cast<DomeDriveRoboClaw*>(domeDrive)->setAddress(params.domercaddr);
+#endif
     return true;
   } else if (intparam(cmd, "domercchan=", params.domercchan, 1, 2)) {
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+    static_cast<DomeDriveRoboClaw*>(domeDrive)->setChannel(params.domercchan);
+#endif
     return true;
   } else if (intparam(cmd, "domercqpps=", params.domercqpps, 1, 65535)) {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
@@ -768,6 +786,24 @@ bool AmidalaConfig::processConfig(const char *cmd) {
     strncpy(params.btaddr, cmd, sizeof(params.btaddr) - 1);
     params.btaddr[sizeof(params.btaddr) - 1] = '\0';
     return true;
+  } else if (boolparam(cmd, "wcbenable=", params.wcbenable)) {
+    return true;
+  } else if (startswith(cmd, "wcboct2=")) {
+    params.wcboct2 = (uint8_t)strtoul(cmd, NULL, 16);
+    return true;
+  } else if (startswith(cmd, "wcboct3=")) {
+    params.wcboct3 = (uint8_t)strtoul(cmd, NULL, 16);
+    return true;
+  } else if (startswith(cmd, "wcbpassword=")) {
+    strncpy(params.wcbpassword, cmd, sizeof(params.wcbpassword) - 1);
+    params.wcbpassword[sizeof(params.wcbpassword) - 1] = '\0';
+    return true;
+  } else if (intparam(cmd, "wcbquantity=", params.wcbquantity, 0, 19)) {
+    return true;
+  } else if (intparam(cmd, "wcbid=", params.wcbid, 0, 20)) {
+    return true;
+  } else if (intparam(cmd, "outboundserial=", params.outboundserial, 0, 1)) {
+    return true;
   } else if (boolparam(cmd, "wifion=", params.wifion)) {
     return true;
   } else if (startswith(cmd, "wifissid=")) {
@@ -777,6 +813,8 @@ bool AmidalaConfig::processConfig(const char *cmd) {
   } else if (startswith(cmd, "wifipassword=")) {
     strncpy(params.wifiPassword, cmd, sizeof(params.wifiPassword) - 1);
     params.wifiPassword[sizeof(params.wifiPassword) - 1] = '\0';
+    return true;
+  } else if (intparam(cmd, "wifichannel=", params.wifichannel, 1, 13)) {
     return true;
   } else if (strcmp(cmd, "reboot") == 0) {
     void (*resetArduino)() = NULL;

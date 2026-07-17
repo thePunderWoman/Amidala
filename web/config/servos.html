@@ -49,8 +49,8 @@ function load() {
     var maxpulse = d.maxpulse !== undefined ? String(d.maxpulse) : '2000';
     pa.innerHTML =
       '<div class="section-label" style="margin-top:.8rem">Global Pulse Limits</div>' +
-      buildRow({key:'minpulse', label:'Min Pulse Width', type:'number', min:500, max:1500, note:'µs'}, minpulse) +
-      buildRow({key:'maxpulse', label:'Max Pulse Width', type:'number', min:1500, max:2500, note:'µs'}, maxpulse);
+      buildRow({key:'minpulse', label:'Min Pulse Width', type:'number', min:500, max:1500, note:'µs', restart:true}, minpulse) +
+      buildRow({key:'maxpulse', label:'Max Pulse Width', type:'number', min:1500, max:2500, note:'µs', restart:true}, maxpulse);
   }).catch(function(){
     document.getElementById('tbl-area').innerHTML='<div id="status">Failed to load</div>';
   });
