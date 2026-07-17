@@ -110,6 +110,38 @@ void test_gesture_does_not_match_prefix() {
   TEST_ASSERT_FALSE(g.matches("123"));
 }
 
+// ---- matches() with autocorrect ----------------------------------------------
+// autocorrect ignores '5' (center) characters on both sides, tolerating the
+// stray/missing recenter blips a human produces performing a real gesture.
+
+void test_gesture_autocorrect_off_rejects_extra_center() {
+  Gesture g("258");
+  TEST_ASSERT_FALSE(g.matches("2558"));
+  TEST_ASSERT_FALSE(g.matches("28"));
+}
+
+void test_gesture_autocorrect_on_ignores_extra_center() {
+  Gesture g("258");
+  TEST_ASSERT_TRUE(g.matches("2558", true));
+  TEST_ASSERT_TRUE(g.matches("2585", true));
+}
+
+void test_gesture_autocorrect_on_ignores_missing_center() {
+  Gesture g("258");
+  TEST_ASSERT_TRUE(g.matches("28", true));
+}
+
+void test_gesture_autocorrect_on_still_rejects_wrong_directions() {
+  Gesture g("258");
+  TEST_ASSERT_FALSE(g.matches("268", true));
+  TEST_ASSERT_FALSE(g.matches("259", true));
+}
+
+void test_gesture_autocorrect_defaults_to_off() {
+  Gesture g("258");
+  TEST_ASSERT_FALSE(g.matches("2558"));
+}
+
 // ---- getGestureString() ------------------------------------------------------
 
 void test_gesture_string_roundtrip_single() {
@@ -202,6 +234,12 @@ int main(int argc, char **argv) {
   RUN_TEST(test_gesture_slow_858);
   RUN_TEST(test_gesture_mixed_alphanum);
   RUN_TEST(test_gesture_does_not_match_prefix);
+
+  RUN_TEST(test_gesture_autocorrect_off_rejects_extra_center);
+  RUN_TEST(test_gesture_autocorrect_on_ignores_extra_center);
+  RUN_TEST(test_gesture_autocorrect_on_ignores_missing_center);
+  RUN_TEST(test_gesture_autocorrect_on_still_rejects_wrong_directions);
+  RUN_TEST(test_gesture_autocorrect_defaults_to_off);
 
   RUN_TEST(test_gesture_string_roundtrip_single);
   RUN_TEST(test_gesture_string_roundtrip_252);
