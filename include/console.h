@@ -69,6 +69,13 @@ public:
   void monitorOutput();
   void setMinimal(bool minimal) { fMinimal = minimal; }
 
+  // Flushes a trailing partial line teed into the web serial monitor (see
+  // write()) after a pause -- most console output ends in println(), but a
+  // few call sites (e.g. the "a" command's "Aux Out") don't, so without this
+  // periodic tick that text would just sit buffered and never show up.
+  // Called from AmidalaWiFiAP::handle(), alongside the S0/S1/S2 port ticks.
+  void tickMonitor();
+
 private:
   AmidalaController *fController = nullptr;
   unsigned fPos;

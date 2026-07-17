@@ -12144,8 +12144,9 @@ main{flex:1;display:flex;flex-direction:column;min-height:0;max-width:none;margi
     <button class="tbtn on" id="f-tx" onclick="toggleFilter('tx')" title="Show TX (outgoing)">TX</button>
     <button class="tbtn"    id="f-rx" onclick="toggleFilter('rx')" title="Show RX (incoming)">RX</button>
     <span class="tsep"></span>
+    <button class="tbtn on" id="f-LOG" onclick="toggleFilter('LOG')" title="LOG — Amidala's own console output (boot, config dumps, command replies)">LOG</button>
     <button class="tbtn on" id="f-S0" onclick="toggleFilter('S0')" title="S0 — WCB/body controller serial. Also a Send destination.">S0</button>
-    <button class="tbtn on" id="f-S1" onclick="toggleFilter('S1')" title="S1 — auxiliary">S1</button>
+    <button class="tbtn on" id="f-S1" onclick="toggleFilter('S1')" title="S1 — auxiliary" hidden>S1</button>
     <button class="tbtn on" id="f-S2" onclick="toggleFilter('S2')" title="S2 — auxiliary serial. Also a Send destination." hidden>S2</button>
     <button class="tbtn on" id="f-WCB" onclick="toggleFilter('WCB')" title="WCB — mesh network. Also a Send destination." hidden>WCB</button>
     <span class="tsep"></span>
@@ -12573,7 +12574,7 @@ var _seq      = -1;
 var _paused   = false;
 var _autoScroll = true;
 var _entries  = [];   // all received entries: [{t: text, c: cls}, ...]
-var _filters  = { tx: true, rx: false, S0: true, S1: true, S2: true, WCB: true };
+var _filters  = { tx: true, rx: false, LOG: true, S0: true, S1: true, S2: true, WCB: true };
 // Which toggled-on ports Send actually transmits to. S0 is always eligible
 // (the WCB/body controller UART -- always live). S1 is the RoboClaw dome
 // drive's own binary packet-serial link when that dome variant is built --
@@ -12597,8 +12598,10 @@ function portOf(text) {
   // WCBClientController::poll()'s RX tag) -- mapped to the "WCB" filter key
   // here rather than renaming the wire-level tag, so it reads distinctly
   // from S0/S1/S2 in the log itself while still getting its own toolbar
-  // toggle, gated by the same tx/rx checks as every other port below.
-  var m = text.match(/^(S\d|MESH)/);
+  // toggle, gated by the same tx/rx checks as every other port below. LOG is
+  // Amidala's own console output (see console.cpp's teeConsoleToMonitor()),
+  // tagged class 'i' server-side so it isn't also gated by the RX toggle.
+  var m = text.match(/^(S\d|MESH|LOG)/);
   if (!m) return null;
   return m[1] === 'MESH' ? 'WCB' : m[1];
 }
@@ -12638,23 +12641,13 @@ function renderLog() {
 // Appends only newly-arrived entries to the existing DOM/_entries, instead
 // of rebuilding everything -- preserves scroll position, and lets the
 // client accumulate a growing history for the life of the page view, well
-// beyond the server's fixed-size (256-line) ring buffer.
-var MAX_CLIENT_LINES = 4000;
+// beyond the server's fixed-size (256-line) ring buffer. Entries/DOM nodes
+// are kept for as long as the page is open -- nothing here ever trims them;
+// only clearLog() (the Clear button) or navigating away removes anything.
 function appendEntries(lines) {
   for (var i = 0; i < lines.length; i++) {
     _entries.push(lines[i]);
     if (shouldShow(lines[i])) addLine(lines[i].t, lines[i].c);
-  }
-  if (_entries.length > MAX_CLIENT_LINES) {
-    // Trimming _entries alone would leave stale DOM nodes behind forever --
-    // filtered-out entries never got a DOM node in the first place, so
-    // there's no simple 1:1 count to remove from the front of #log. This
-    // only fires after MAX_CLIENT_LINES have accumulated (a long-running
-    // view under heavy traffic), so the one-time rebuild/scroll-reset here
-    // is an acceptable rare cost, unlike the every-1.5s rebuild this whole
-    // change was meant to get rid of.
-    _entries = _entries.slice(_entries.length - MAX_CLIENT_LINES);
-    renderLog();
   }
 }
 
@@ -12665,11 +12658,18 @@ function toggleFilter(key) {
   renderLog();
 }
 
-function poll() {
+// silentResync: used when resuming from Pause. A paused monitor should
+// behave like it genuinely stopped watching, not like it kept buffering
+// everything in the background for a catch-up dump on Resume -- so instead
+// of a normal poll (which would append every line that arrived while
+// paused), just adopt the server's current seq with nothing displayed, and
+// let normal polling pick up whatever comes next.
+function poll(silentResync) {
   if (_paused) return;
   fetch('/api/monitor').then(function(r){ return r.json(); }).then(function(d){
     dotEl.className = 'dot ok';
     connEl.textContent = 'Connected';
+    if (silentResync) { _seq = d.seq; return; }
     if (d.seq === _seq) return;
     var lines = d.lines || [];
     if (_seq === -1) {
@@ -12723,13 +12723,22 @@ function sendCmd() {
   }).catch(function(){ addLine('! Send failed', 'info'); });
 }
 
-function clearLog() { logEl.innerHTML = ''; _entries = []; _seq = -1; }
+// Deliberately does NOT reset _seq to -1: poll() treats _seq === -1 as "first
+// load, show the server's entire current buffer" -- resetting it here would
+// make the very next poll immediately re-populate everything Clear just
+// wiped. Leaving _seq where it is means future polls only append lines that
+// are genuinely new from this point forward.
+function clearLog() { logEl.innerHTML = ''; _entries = []; }
 
 function togglePause() {
   _paused = !_paused;
   pbtn.textContent = _paused ? 'Resume' : 'Pause';
   pbtn.className   = 'tbtn' + (_paused ? ' on' : '');
-  if (!_paused) poll();
+  if (_paused) return;
+  // _seq === -1 means nothing has ever loaded yet (e.g. paused before the
+  // very first poll completed) -- a normal poll() is correct there so the
+  // initial history still shows up. Otherwise resync silently.
+  poll(_seq !== -1);
 }
 
 // The WCB filter button only makes sense (and only ever gets traffic) when
@@ -12752,14 +12761,19 @@ fetch('/api/config').then(function(r) { return r.ok ? r.json() : null; }).then(f
   }
 }).catch(function() {});
 
-// S1 is only safe to Send to when it isn't the RoboClaw dome drive's own
-// binary packet-serial link on this build -- /api/info's "dome" field
-// reflects the compiled-in DOME_DRIVE variant.
+// S1 only exists as a monitor/Send target when it isn't the RoboClaw dome
+// drive's own binary packet-serial link on this build -- when it is,
+// wifi_ap.cpp compiles out S1's RX tap entirely (see ROBOCLAW_SERIAL), so
+// the filter button would just sit there and never show any traffic.
+// /api/info's "dome" field reflects the compiled-in DOME_DRIVE variant.
 fetch('/api/info').then(function(r) { return r.ok ? r.json() : null; }).then(function(d) {
   if (d && d.dome !== 'roboclaw') {
     _sendEligible.S1 = true;
     var btn = document.getElementById('f-S1');
-    if (btn) btn.title = 'S1 — auxiliary. Also a Send destination.';
+    if (btn) {
+      btn.hidden = false;
+      btn.title = 'S1 — auxiliary. Also a Send destination.';
+    }
   }
 }).catch(function() {});
 

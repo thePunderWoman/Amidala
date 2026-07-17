@@ -39,3 +39,41 @@ inline void monAppend(const char* text, char cls = 'i') {
     if (sMonCount < MON_LINES) sMonCount++;
     sMonSeq++;
 }
+
+// Appends `text` to `out` as a JSON string body (the part between the
+// quotes), escaping everything ECMA-404 requires. monAppend() itself never
+// filters its input -- most callers only ever pass printable ASCII (the
+// serial-port drain in monitor_drain.h filters to 0x20-0x7E before it ever
+// reaches monAppend()), but callers that log other sources verbatim (e.g.
+// WCBClientController::poll() logging a received mesh command straight
+// through) can end up storing a raw control byte. Escaping only '"' and
+// '\\' -- which is all the API endpoint used to do -- left literal control
+// characters embedded in the JSON response; net effect was that any single
+// bad line permanently broke every future response.json() parse in the
+// browser (JSON.parse rejects unescaped control characters in a string),
+// which read as the serial monitor going "disconnected" forever even
+// though the device and its actual traffic were fine.
+template <typename StringT>
+inline void monJsonAppendEscaped(StringT& out, const char* text) {
+    static const char* const kHex = "0123456789abcdef";
+    for (const char* p = text; *p; p++) {
+        uint8_t c = (uint8_t)*p;
+        if (c == '"' || c == '\\') {
+            out += '\\';
+            out += (char)c;
+        } else if (c == '\n') {
+            out += "\\n";
+        } else if (c == '\r') {
+            out += "\\r";
+        } else if (c == '\t') {
+            out += "\\t";
+        } else if (c < 0x20) {
+            char esc[7] = "\\u0000";
+            esc[4] = kHex[(c >> 4) & 0xF];
+            esc[5] = kHex[c & 0xF];
+            out += esc;
+        } else {
+            out += (char)c;
+        }
+    }
+}

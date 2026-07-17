@@ -29,6 +29,7 @@ static uint8_t            sUserSerialCount = 0;
 
 #define MONITOR_BUF_OWNER
 #include "monitor_buf.h"
+#include "monitor_drain.h"
 
 // ---------------------------------------------------------------------------
 // SD card config write-back
@@ -1280,10 +1281,7 @@ static void handleApiMonitorGet() {
         if (i > 0) json += ",";
         uint16_t idx = (start + i) % MON_LINES;
         json += "{\"t\":\"";
-        for (const char* p = sMonBuf[idx].text; *p; p++) {
-            if (*p == '"' || *p == '\\') json += '\\';
-            json += *p;
-        }
+        monJsonAppendEscaped(json, sMonBuf[idx].text);
         json += "\",\"c\":\"";
         switch (sMonBuf[idx].cls) {
             case 't': json += "tx"; break;
@@ -1648,31 +1646,21 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
 // Drain one serial port into the monitor.  Accumulates printable bytes into a
 // line buffer and flushes on newline, when the buffer is full, or after 100 ms
 // of silence.  Non-printable bytes (other than \r/\n) are silently skipped.
+// The byte-level state machine lives in monitor_drain.h so it can be unit
+// tested without a real HardwareSerial.
 struct SerialMonPort {
     HardwareSerial* port;
-    const char      label[5]; // "S0: ", "S1: ", "S2: "
-    char            buf[MON_LINE_LEN];
-    uint8_t         pos;
-    uint32_t        lastMs;
+    MonDrainState   state;
 };
 
 static void monDrainSerial(SerialMonPort& p) {
+    monDrainSeedLabel(p.state);
     bool flushed = false;
     while (p.port->available()) {
         uint8_t b = (uint8_t)p.port->read();
-        p.lastMs = millis();
-        if (b == '\r' || b == '\n') {
-            if (p.pos > 0) { p.buf[p.pos] = '\0'; monAppend(p.buf, 'r'); p.pos = 0; flushed = true; }
-        } else if (b >= 0x20 && b < 0x7F) {
-            if (p.pos < MON_LINE_LEN - 1) p.buf[p.pos++] = (char)b;
-        }
-        // non-printable bytes silently skipped
-        if (p.pos >= MON_LINE_LEN - 1) { p.buf[p.pos] = '\0'; monAppend(p.buf, 'r'); p.pos = 0; flushed = true; }
+        if (monDrainByte(p.state, b, millis())) flushed = true;
     }
-    // Flush on 100 ms silence
-    if (!flushed && p.pos > 0 && (millis() - p.lastMs) > 100) {
-        p.buf[p.pos] = '\0'; monAppend(p.buf, 'r'); p.pos = 0;
-    }
+    if (!flushed) monDrainSilenceCheck(p.state, millis());
 }
 
 void AmidalaWiFiAP::handle() {
@@ -1680,29 +1668,29 @@ void AmidalaWiFiAP::handle() {
 
     // Serial RX monitoring.  ROBOCLAW_SERIAL is defined to Serial1 when the
     // RoboClaw dome drive is active — skip Serial1 in that case (binary protocol).
-    static SerialMonPort sPortWCB = { &Serial0, "S0: ", {}, 0, 0 };
+    static SerialMonPort sPortWCB = { &Serial0, {} };
 #ifndef ROBOCLAW_SERIAL
-    static SerialMonPort sPortS1  = { &Serial1, "S1: ", {}, 0, 0 };
+    static SerialMonPort sPortS1  = { &Serial1, {} };
 #endif
-    static SerialMonPort sPortAux = { &Serial2, "S2: ", {}, 0, 0 };
-    auto seedLabel = [](SerialMonPort& p) {
-        if (p.pos == 0) {
-            uint8_t len = (uint8_t)strlen(p.label);
-            memcpy(p.buf, p.label, len);
-            p.buf[len] = '\0';
-            p.pos = len;
-        }
-    };
-    seedLabel(sPortWCB);
+    static SerialMonPort sPortAux = { &Serial2, {} };
+    static bool sMonInit = false;
+    if (!sMonInit) {
+        monDrainInit(sPortWCB.state, "S0: ");
+#ifndef ROBOCLAW_SERIAL
+        monDrainInit(sPortS1.state, "S1: ");
+#endif
+        monDrainInit(sPortAux.state, "S2: ");
+        sMonInit = true;
+    }
+
     monDrainSerial(sPortWCB);
 #ifndef ROBOCLAW_SERIAL
-    seedLabel(sPortS1);
     monDrainSerial(sPortS1);
 #endif
     if (sCtrl && sCtrl->params.auxserial3) {
-        seedLabel(sPortAux);
         monDrainSerial(sPortAux);
     }
+    if (sCtrl) sCtrl->fConsole.tickMonitor();
 }
 
 #else  // UNIT_TEST

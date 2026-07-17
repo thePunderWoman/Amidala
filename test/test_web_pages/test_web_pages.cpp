@@ -222,9 +222,50 @@ void test_monitor_page_has_send_and_pause_ui() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "clearLog"));
 }
 
+// Regression: Clear used to reset _seq to -1, which poll() treats as "first
+// load, show the server's entire current buffer" -- so the very next poll
+// after Clear immediately re-populated everything that had just been wiped.
+// clearLog() must leave _seq alone so only genuinely new lines reappear.
+void test_monitor_page_clear_does_not_replay_history() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "function clearLog() { logEl.innerHTML = ''; _entries = []; }"));
+}
+
+// Regression: Resume used to call a plain poll(), which appends every line
+// that arrived on the server while paused -- a surprising "catch-up dump"
+// for a control most users expect to mean "stop watching". Resume must
+// silently resync to the server's current seq instead of replaying it.
+void test_monitor_page_resume_does_not_replay_paused_traffic() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "poll(_seq !== -1)"));
+}
+
 void test_monitor_page_has_wcb_filter_gated_on_status() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "id=\"f-WCB\""));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "/api/wcb/status"));
+}
+
+// Regression: the S1 filter button used to be shown unconditionally even
+// though wifi_ap.cpp compiles out S1's RX tap entirely when the RoboClaw
+// dome drive is active (ROBOCLAW_SERIAL), so the button sat there and never
+// showed any traffic. It must start hidden like S2/WCB and only be
+// unhidden once /api/info confirms a non-RoboClaw dome.
+void test_monitor_page_s1_filter_gated_on_dome_variant() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "id=\"f-S1\" onclick=\"toggleFilter('S1')\" title=\"S1 — auxiliary\" hidden"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "d.dome !== 'roboclaw'"));
+}
+
+// Amidala's own console output (boot banner, config dumps, command replies --
+// see console.cpp's teeConsoleToMonitor()) is teed into the monitor labeled
+// "LOG: ". It must have its own always-visible filter button (unlike
+// S1/S2/WCB, it isn't gated on any runtime-optional feature -- the console
+// always exists) and be recognized by portOf() so it gets its own toggle
+// instead of falling through to "always show, no filter".
+void test_monitor_page_has_log_filter_for_console_output() {
+    // No "hidden" attribute -- unlike S1/S2/WCB, LOG isn't gated on any
+    // runtime-optional feature, so the tag must close right after title.
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR,
+        "id=\"f-LOG\" onclick=\"toggleFilter('LOG')\" title=\"LOG — Amidala's own console output (boot, config dumps, command replies)\">LOG</button>"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "S\\d|MESH|LOG"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "LOG: true"));
 }
 
 // Regression coverage for the log-clears-itself bug: poll() used to rebuild
@@ -233,10 +274,14 @@ void test_monitor_page_has_wcb_filter_gated_on_status() {
 // look like it cleared itself while scrolled up to read something. Fixed
 // by accumulating a growing client-side history and only appending new
 // lines each poll -- assert the page actually ships that fix, not the old
-// wholesale-replace behavior.
+// wholesale-replace behavior. A later cap that trimmed old entries/DOM
+// nodes once the client history grew large was removed on request -- nodes
+// must persist for the life of the page view, so also assert there's no
+// trim/slice of _entries left in appendEntries().
 void test_monitor_page_appends_instead_of_rebuilding_on_poll() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "appendEntries"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "MAX_CLIENT_LINES"));
+    TEST_ASSERT_FALSE(contains(WEB_PAGE_MONITOR, "MAX_CLIENT_LINES"));
+    TEST_ASSERT_FALSE(contains(WEB_PAGE_MONITOR, "_entries.slice"));
 }
 
 void test_servos_page_uses_config_endpoint() {
@@ -855,7 +900,11 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_dome_page_schema_keys);
     RUN_TEST(test_monitor_page_uses_monitor_api);
     RUN_TEST(test_monitor_page_has_send_and_pause_ui);
+    RUN_TEST(test_monitor_page_clear_does_not_replay_history);
+    RUN_TEST(test_monitor_page_resume_does_not_replay_paused_traffic);
     RUN_TEST(test_monitor_page_has_wcb_filter_gated_on_status);
+    RUN_TEST(test_monitor_page_s1_filter_gated_on_dome_variant);
+    RUN_TEST(test_monitor_page_has_log_filter_for_console_output);
     RUN_TEST(test_monitor_page_appends_instead_of_rebuilding_on_poll);
     RUN_TEST(test_servos_page_uses_config_endpoint);
     RUN_TEST(test_servos_page_has_edit_ui);
