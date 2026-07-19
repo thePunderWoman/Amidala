@@ -433,6 +433,9 @@ private:
 public:
     /// Inject a synthetic encoder speed for testing checkObstruction().
     void    setMockEncoderSpeed(int32_t s)  { fMockEncoderSpeed = s; }
+    /// Inject a synthetic encoder position for testing processHallTrigger()
+    /// (readEncoder() returns this instead of the real RoboClaw read).
+    void    setMockEncoderPosition(int32_t p) { fMockEncoderPosition = p; }
     /// Expose state setter so tests can put the drive into kStateHomed etc.
     void    setStateForTest(State s)        { fState = s; }
     /// Expose commanded-speed setter (normally set via motor() callback).
@@ -442,6 +445,8 @@ public:
     State   getStateForTest()            const { return fState; }
     /// Directly exercise the full checkObstruction() wrapper.
     void    testCheckObstruction() { checkObstruction(); }
+    /// Directly exercise the full processHallTrigger() wrapper.
+    bool    testProcessHallTrigger() { return processHallTrigger(); }
     /// Inject current dome angle for goToAngle / getCurrentDegrees tests.
     void    setCurrentDegreesForTest(int d)  { fCurrentDegrees = d; }
     /// Inject calibration ticks-per-rev so isCalibrated() returns true.
@@ -451,8 +456,11 @@ public:
     /// Read back the RoboClaw packet address/channel for setAddress()/setChannel() tests.
     uint8_t getAddressForTest() const { return fAddress; }
     uint8_t getChannelForTest() const { return fChannel; }
+    /// Read back the registered home reference (see processHallTrigger()).
+    int32_t getHomeEncoderTickForTest() const { return fHomeEncoderTick; }
 private:
-    int32_t fMockEncoderSpeed = 0;
+    int32_t fMockEncoderSpeed    = 0;
+    int32_t fMockEncoderPosition = 0;
 #endif
 };
 

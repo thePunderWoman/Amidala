@@ -390,7 +390,7 @@ int32_t DomeDriveRoboClaw::readEncoder() {
     if (!valid) return fHomeEncoderTick;
     return (int32_t)raw;
 #else
-    return 0;
+    return fMockEncoderPosition;
 #endif
 }
 
@@ -433,15 +433,31 @@ void DomeDriveRoboClaw::updatePosition() {
 bool DomeDriveRoboClaw::processHallTrigger() {
     if (!fHallTriggered) return false;
 
-    // Atomically consume the flag.
+    // Atomically consume the flag and snapshot the ISR's trigger timestamp.
+    uint32_t triggerMs;
     noInterrupts();
     fHallTriggered = false;
+    triggerMs = fHallLastTriggerMs;
     interrupts();
 
-    // Snapshot the encoder at the moment of the trigger.
-    fHomeEncoderTick = readEncoder();
+    // The encoder can only be sampled here (reading it needs a blocking
+    // RoboClaw UART round-trip, unsafe inside the ISR), which may be well
+    // after the true trigger instant -- back out however far the dome
+    // travelled in the meantime so home is registered at the position it was
+    // actually at when the sensor fired, not wherever it drifted to by the
+    // time this got around to running. See dome_estimate_ticks_during_delay().
+    int32_t enc = readEncoder();
+    uint32_t delayMs = millis() - triggerMs;
+    int32_t drift = dome_estimate_ticks_during_delay(fLastCommandedSpeed, fQPPS, delayMs);
+    fHomeEncoderTick = enc - drift;
 #if defined(USE_HALL_DEBUG) && !defined(UNIT_TEST)
     Serial.print("HALL: fired encoder=");
+    Serial.print(enc);
+    Serial.print(" delayMs=");
+    Serial.print(delayMs);
+    Serial.print(" drift=");
+    Serial.print(drift);
+    Serial.print(" home=");
     Serial.println(fHomeEncoderTick);
 #endif
     return true;

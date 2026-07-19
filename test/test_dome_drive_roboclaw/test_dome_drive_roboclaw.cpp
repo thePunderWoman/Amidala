@@ -25,7 +25,7 @@
 #include "../../src/dome_drive_roboclaw.cpp"
 #include <unity.h>
 
-void setUp(void)    { memset(EEPROM.data, 0, sizeof(EEPROM.data)); }
+void setUp(void)    { memset(EEPROM.data, 0, sizeof(EEPROM.data)); mock_millis_value = 0; }
 void tearDown(void) {}
 
 // ---- dome_normalize_degrees() -----------------------------------------------
@@ -184,6 +184,41 @@ void test_front_offset_360_same_as_zero() {
     // A 360° offset is the same as 0° (normalize handles it).
     TEST_ASSERT_EQUAL(dome_encoder_to_degrees(300, 1200, 0),
                       dome_encoder_to_degrees(300, 1200, 360));
+}
+
+// ---- dome_estimate_ticks_during_delay() -------------------------------------
+// Regression coverage for https://github.com/thePunderWoman/Amidala/issues/140:
+// the encoder can only be sampled when processHallTrigger() runs on the main
+// loop, which may be well after the hall sensor's true trigger instant (e.g.
+// a WiFi request or SD write stalling the single-threaded loop). If the dome
+// was moving, that lag corresponds to real distance travelled that must be
+// backed out or "home" gets registered rotated in the direction of travel.
+
+void test_estimate_ticks_zero_delay_is_zero() {
+    TEST_ASSERT_EQUAL_INT32(0, dome_estimate_ticks_during_delay(1.0f, 3600, 0));
+}
+
+void test_estimate_ticks_zero_speed_is_zero() {
+    TEST_ASSERT_EQUAL_INT32(0, dome_estimate_ticks_during_delay(0.0f, 3600, 500));
+}
+
+void test_estimate_ticks_full_speed_one_second() {
+    // 100% commanded speed for a full second = qpps ticks.
+    TEST_ASSERT_EQUAL_INT32(3600, dome_estimate_ticks_during_delay(1.0f, 3600, 1000));
+}
+
+void test_estimate_ticks_full_speed_partial_delay() {
+    // 100ms at 100% of 3600 qpps = 360 ticks.
+    TEST_ASSERT_EQUAL_INT32(360, dome_estimate_ticks_during_delay(1.0f, 3600, 100));
+}
+
+void test_estimate_ticks_half_speed() {
+    TEST_ASSERT_EQUAL_INT32(180, dome_estimate_ticks_during_delay(0.5f, 3600, 100));
+}
+
+void test_estimate_ticks_negative_speed_is_negative() {
+    // Commanded CCW (negative) — ticks travelled during the delay are negative.
+    TEST_ASSERT_EQUAL_INT32(-360, dome_estimate_ticks_during_delay(-1.0f, 3600, 100));
 }
 
 // ---- Integration: calibration → positioning pipeline -----------------------
@@ -958,6 +993,97 @@ void test_goToRelative_crosses_360_boundary() {
     TEST_ASSERT_EQUAL(30, drive.getGoToTargetForTest());
 }
 
+// ---- processHallTrigger() delay compensation (issue #140) -------------------
+// Full-integration coverage (not just the pure helper above): onHallTrigger()
+// simulates the ISR firing at a given mock_millis_value, then
+// processHallTrigger() is called at a later mock_millis_value to simulate the
+// main loop only getting around to it after some delay. The mock encoder
+// position (readEncoder() in UNIT_TEST builds) represents whatever the
+// RoboClaw reports at the LATER time; getHomeEncoderTickForTest() should come
+// back compensated to what it was at the true trigger instant.
+
+void test_hall_trigger_no_delay_no_compensation() {
+    auto drive = make_drive();
+    drive.setQPPS(3600);
+    drive.setLastCommandedSpeedForTest(1.0f);
+    drive.setMockEncoderPosition(1000);
+
+    mock_millis_value = 1000;
+    drive.onHallTrigger();
+    // processHallTrigger() runs at the same instant -- zero delay.
+    TEST_ASSERT_TRUE(drive.testProcessHallTrigger());
+    TEST_ASSERT_EQUAL_INT32(1000, drive.getHomeEncoderTickForTest());
+}
+
+void test_hall_trigger_compensates_for_processing_delay() {
+    auto drive = make_drive();
+    drive.setQPPS(3600);
+    drive.setLastCommandedSpeedForTest(1.0f);  // full speed, clockwise
+    drive.setMockEncoderPosition(1000);        // encoder reading once finally sampled
+
+    mock_millis_value = 1000;
+    drive.onHallTrigger();                     // true trigger instant
+    mock_millis_value = 1100;                  // main loop stalled 100ms before sampling
+
+    TEST_ASSERT_TRUE(drive.testProcessHallTrigger());
+    // Drift during the 100ms delay: 1.0 * 3600 * 0.1s = 360 ticks travelled.
+    // True home at the trigger instant = sampled (1000) - drift (360) = 640.
+    TEST_ASSERT_EQUAL_INT32(640, drive.getHomeEncoderTickForTest());
+}
+
+void test_hall_trigger_compensation_scales_with_speed() {
+    auto drive = make_drive();
+    drive.setQPPS(3600);
+    drive.setLastCommandedSpeedForTest(0.5f);  // half speed
+    drive.setMockEncoderPosition(1000);
+
+    mock_millis_value = 1000;
+    drive.onHallTrigger();
+    mock_millis_value = 1100;
+
+    TEST_ASSERT_TRUE(drive.testProcessHallTrigger());
+    // Half the drift of the full-speed case: 180 ticks.
+    TEST_ASSERT_EQUAL_INT32(820, drive.getHomeEncoderTickForTest());
+}
+
+void test_hall_trigger_stationary_needs_no_compensation() {
+    auto drive = make_drive();
+    drive.setQPPS(3600);
+    drive.setLastCommandedSpeedForTest(0.0f);  // dome was holding still
+    drive.setMockEncoderPosition(1000);
+
+    mock_millis_value = 1000;
+    drive.onHallTrigger();
+    mock_millis_value = 1500;  // long delay, but no motion means no drift
+
+    TEST_ASSERT_TRUE(drive.testProcessHallTrigger());
+    TEST_ASSERT_EQUAL_INT32(1000, drive.getHomeEncoderTickForTest());
+}
+
+void test_hall_trigger_reverse_direction_compensation() {
+    auto drive = make_drive();
+    drive.setQPPS(3600);
+    drive.setLastCommandedSpeedForTest(-1.0f);  // full speed, counter-clockwise
+    drive.setMockEncoderPosition(1000);
+
+    mock_millis_value = 1000;
+    drive.onHallTrigger();
+    mock_millis_value = 1100;
+
+    TEST_ASSERT_TRUE(drive.testProcessHallTrigger());
+    // Travelling CCW during the delay means the true trigger-instant tick was
+    // HIGHER (less negative motion happened yet) than the later sample.
+    TEST_ASSERT_EQUAL_INT32(1360, drive.getHomeEncoderTickForTest());
+}
+
+void test_hall_trigger_without_pending_flag_returns_false() {
+    auto drive = make_drive();
+    drive.setMockEncoderPosition(1000);
+    // No onHallTrigger() call -- nothing pending.
+    TEST_ASSERT_FALSE(drive.testProcessHallTrigger());
+    TEST_ASSERT_EQUAL_INT32(0, drive.getHomeEncoderTickForTest());
+}
+
 // ---- main -------------------------------------------------------------------
 
 int main(int argc, char **argv) {
@@ -997,6 +1123,13 @@ int main(int argc, char **argv) {
     RUN_TEST(test_front_offset_90_degrees_past_front);
     RUN_TEST(test_front_offset_zero_means_hall_is_front);
     RUN_TEST(test_front_offset_360_same_as_zero);
+
+    RUN_TEST(test_estimate_ticks_zero_delay_is_zero);
+    RUN_TEST(test_estimate_ticks_zero_speed_is_zero);
+    RUN_TEST(test_estimate_ticks_full_speed_one_second);
+    RUN_TEST(test_estimate_ticks_full_speed_partial_delay);
+    RUN_TEST(test_estimate_ticks_half_speed);
+    RUN_TEST(test_estimate_ticks_negative_speed_is_negative);
 
     RUN_TEST(test_full_pipeline_basic);
     RUN_TEST(test_full_pipeline_with_front_offset);
@@ -1106,6 +1239,13 @@ int main(int argc, char **argv) {
     RUN_TEST(test_goToRelative_adds_to_current_position);
     RUN_TEST(test_goToRelative_negative_wraps_correctly);
     RUN_TEST(test_goToRelative_crosses_360_boundary);
+
+    RUN_TEST(test_hall_trigger_no_delay_no_compensation);
+    RUN_TEST(test_hall_trigger_compensates_for_processing_delay);
+    RUN_TEST(test_hall_trigger_compensation_scales_with_speed);
+    RUN_TEST(test_hall_trigger_stationary_needs_no_compensation);
+    RUN_TEST(test_hall_trigger_reverse_direction_compensation);
+    RUN_TEST(test_hall_trigger_without_pending_flag_returns_false);
 
     return UNITY_END();
 }

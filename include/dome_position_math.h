@@ -123,6 +123,36 @@ static inline int dome_encoder_to_degrees(int32_t relTicks,
 }
 
 /**
+ * Estimate encoder ticks travelled between a hall-sensor trigger's true
+ * timestamp and the (later) moment the encoder was actually sampled.
+ *
+ * Reading the RoboClaw's encoder requires a blocking UART round-trip, which
+ * can't safely happen inside the hall-sensor ISR -- so the actual sample
+ * always lags the true trigger instant by however long it takes the main
+ * loop to get back around to processHallTrigger(). Usually that's one
+ * animate() tick, but it can be much longer if something else sharing the
+ * single-threaded main loop (a WiFi request, an SD write) stalls it. If the
+ * dome was moving at the time, that lag corresponds to real distance
+ * travelled; using the later-sampled encoder value as-is registers "home"
+ * rotated by that amount in the direction of travel. This estimates (and
+ * lets the caller back out) that error.
+ *
+ * @param commandedSpeed  Motor command fraction in effect during the delay,
+ *                        -1.0..1.0 (fLastCommandedSpeed). Positive = ticks
+ *                        increasing, matching dome_encoder_to_degrees()'s
+ *                        "positive = clockwise" convention.
+ * @param qpps            Ticks/sec at 100% commanded speed (fQPPS).
+ * @param delayMs         Elapsed ms between the trigger timestamp and the
+ *                        moment the encoder was sampled.
+ * @return                Estimated signed ticks travelled during delayMs.
+ */
+static inline int32_t dome_estimate_ticks_during_delay(float    commandedSpeed,
+                                                        uint16_t qpps,
+                                                        uint32_t delayMs) {
+    return (int32_t)(commandedSpeed * (float)qpps * ((float)delayMs / 1000.0f));
+}
+
+/**
  * Compute ticks-per-dome-revolution from raw calibration measurements.
  *
  * During calibration the firmware counts the encoder ticks accumulated over
