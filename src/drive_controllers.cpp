@@ -59,11 +59,23 @@ void DriveController::notify() {
   if (lagTime > 5000) {
     DEBUG_PRINTLN("More than 5 seconds. Disconnect");
     fDriver->emergencyStop();
+    fSafetyStop.trip();
     disconnect();
   } else if (lagTime > 500) {
     DEBUG_PRINTLN("It has been 500ms. Shutdown motors");
     fDriver->emergencyStop();
+    fSafetyStop.trip();
   } else {
+    // Packets are flowing normally again -- if the lag-based safety stop
+    // above had tripped, undo it. Without this, a drop just under the
+    // failsafe timeout (params.fst) never reaches onConnect() (the only
+    // other path that re-enables the drive), so the drive stayed disabled
+    // until the remote was fully power-cycled even though input kept working.
+    if (fSafetyStop.recover()) {
+      DEBUG_PRINTLN("Signal recovered. Re-enabling drive");
+      fDriver->enableController();
+    }
+
     // ---- Alt-button state (drive buttons 1–5) --------------------------------
     int altbtn = fDriver->params.altbtn;
     if (altbtn >= 1 && altbtn <= 5)
@@ -116,11 +128,27 @@ void DomeController::notify() {
   if (lagTime > 5000) {
     DEBUG_PRINTLN("More than 5 seconds. Disconnect");
     fDriver->domeEmergencyStop();
+    fSafetyStop.trip();
     disconnect();
   } else if (lagTime > 500) {
     DEBUG_PRINTLN("It has been 500ms. Shutdown motors");
     fDriver->domeEmergencyStop();
+    fSafetyStop.trip();
   } else {
+    // Packets are flowing normally again -- if the lag-based safety stop
+    // above had tripped, undo it. Without this, a drop just under the
+    // failsafe timeout (params.fst) never reaches onConnect() (the only
+    // other path that re-enables the dome), so it stayed disabled until the
+    // remote was fully power-cycled even though input kept working.
+    // recover() always consumes the trip so a stale flag doesn't leak into
+    // whatever happens after a gesture, but skip the actual re-enable while
+    // a gesture is being collected -- that's an intentional disable (see
+    // process() below) that manages its own enable/disable independent of
+    // connection state.
+    if (fSafetyStop.recover() && !fGestureCollect) {
+      DEBUG_PRINTLN("Signal recovered. Re-enabling dome");
+      fDriver->enableDomeController();
+    }
     process();
   }
 }

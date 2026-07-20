@@ -21,6 +21,7 @@
 
 #include "JoystickController.h"
 #include "core.h"
+#include "safety_stop_latch.h"
 
 // ---- Timing constants (overrideable before including this header) -----------
 
@@ -180,6 +181,10 @@ public:
   virtual void onDisconnect() override;
 
   AmidalaController *fDriver;
+
+protected:
+  // See safety_stop_latch.h.
+  SafetyStopLatch fSafetyStop;
 };
 
 // ---- DomeController ---------------------------------------------------------
@@ -198,6 +203,10 @@ public:
   AmidalaController *fDriver;
 
 protected:
+  // See safety_stop_latch.h. Not force-re-enabled while fGestureCollect is
+  // true; gesture start/end already manages enable/disable of the dome
+  // controller for that window (see DomeController::notify()).
+  SafetyStopLatch fSafetyStop;
   bool fGestureCollect = false;
   bool fAltEngagedAbsStick = false; ///< true if alt hold engaged abs-stick mode
   char fGestureBuffer[MAX_GESTURE_LENGTH + 1];
