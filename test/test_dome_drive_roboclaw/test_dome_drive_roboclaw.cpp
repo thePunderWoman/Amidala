@@ -740,6 +740,85 @@ void test_setEnable_false_blocks_joystick_drive() {
     sTestStick.state.analog.stick.rx = 0;
 }
 
+// ---- noteConnectionLossStop() / resumeIfInterrupted() (issue #143) ---------
+// Bug: stop() (called by domeEmergencyStop(), which fires on any XBee
+// connection lag over 500ms -- see DomeController::notify()) unconditionally
+// collapses kStateRandom back to kStateHomed. Nothing ever resumed it once
+// the connection recovered, so random mode was silently and permanently
+// cancelled by any connection blip, not just a real e-stop.
+
+void test_note_and_resume_restores_random_mode() {
+    auto drive = make_drive();
+    drive.setTicksPerRevForTest(1200);  // calibrated
+    drive.setStateForTest(DomeDriveRoboClaw::kStateRandom);
+
+    drive.noteConnectionLossStop();
+    drive.stop();  // simulates domeEmergencyStop()'s effect
+    TEST_ASSERT_EQUAL_INT(DomeDriveRoboClaw::kStateHomed, drive.getStateForTest());
+
+    drive.resumeIfInterrupted();  // simulates the connection recovering
+    TEST_ASSERT_EQUAL_INT(DomeDriveRoboClaw::kStateRandom, drive.getStateForTest());
+}
+
+void test_resume_noop_when_not_in_random_mode() {
+    auto drive = make_drive();
+    drive.setTicksPerRevForTest(1200);
+    drive.setStateForTest(DomeDriveRoboClaw::kStateHomed);
+
+    drive.noteConnectionLossStop();  // nothing to remember -- wasn't random
+    drive.stop();
+    drive.resumeIfInterrupted();
+
+    TEST_ASSERT_EQUAL_INT(DomeDriveRoboClaw::kStateHomed, drive.getStateForTest());
+}
+
+void test_resume_noop_without_prior_note() {
+    // A deliberate e-stop (or any stop() not preceded by
+    // noteConnectionLossStop()) must not auto-resume random mode.
+    auto drive = make_drive();
+    drive.setTicksPerRevForTest(1200);
+    drive.setStateForTest(DomeDriveRoboClaw::kStateRandom);
+
+    drive.stop();  // no noteConnectionLossStop() call first
+    TEST_ASSERT_EQUAL_INT(DomeDriveRoboClaw::kStateHomed, drive.getStateForTest());
+
+    drive.resumeIfInterrupted();
+    TEST_ASSERT_EQUAL_INT(DomeDriveRoboClaw::kStateHomed, drive.getStateForTest());
+}
+
+void test_resume_only_fires_once() {
+    auto drive = make_drive();
+    drive.setTicksPerRevForTest(1200);
+    drive.setStateForTest(DomeDriveRoboClaw::kStateRandom);
+
+    drive.noteConnectionLossStop();
+    drive.stop();
+    drive.resumeIfInterrupted();
+    TEST_ASSERT_EQUAL_INT(DomeDriveRoboClaw::kStateRandom, drive.getStateForTest());
+
+    // User deliberately leaves random mode; a second resumeIfInterrupted()
+    // call (e.g. from another brief reconnect blip) must not force it back.
+    drive.disableRandomMode();
+    drive.resumeIfInterrupted();
+    TEST_ASSERT_NOT_EQUAL(DomeDriveRoboClaw::kStateRandom, drive.getStateForTest());
+}
+
+void test_resume_respects_calibration_guard() {
+    // enableRandomMode() itself refuses to engage when uncalibrated; the
+    // resume path must go through that same guard rather than forcing state
+    // directly, so it can't leave the drive claiming "random" without a
+    // valid ticks-per-rev ratio to steer by.
+    auto drive = make_drive();
+    // No setTicksPerRevForTest() call -- stays uncalibrated (tpr == 0).
+    drive.setStateForTest(DomeDriveRoboClaw::kStateRandom);
+
+    drive.noteConnectionLossStop();
+    drive.stop();
+    drive.resumeIfInterrupted();
+
+    TEST_ASSERT_EQUAL_INT(DomeDriveRoboClaw::kStateHomed, drive.getStateForTest());
+}
+
 // ---- setMaxSpeedPct() / setAddress() / setChannel() — live-apply setters ----
 // Regression coverage for two bugs found while auditing which config.cpp
 // live-apply call sites actually work:
@@ -1081,6 +1160,12 @@ int main(int argc, char **argv) {
     RUN_TEST(test_stop_preserves_kStateHomed);
     RUN_TEST(test_stop_zeros_motor_command);
     RUN_TEST(test_setEnable_false_blocks_joystick_drive);
+
+    RUN_TEST(test_note_and_resume_restores_random_mode);
+    RUN_TEST(test_resume_noop_when_not_in_random_mode);
+    RUN_TEST(test_resume_noop_without_prior_note);
+    RUN_TEST(test_resume_only_fires_once);
+    RUN_TEST(test_resume_respects_calibration_guard);
 
     RUN_TEST(test_setMaxSpeedPct_converts_fraction_correctly);
     RUN_TEST(test_setMaxSpeedPct_clamps_above_one);
