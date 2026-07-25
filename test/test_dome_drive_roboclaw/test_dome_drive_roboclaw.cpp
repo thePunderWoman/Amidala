@@ -819,6 +819,58 @@ void test_resume_respects_calibration_guard() {
     TEST_ASSERT_EQUAL_INT(DomeDriveRoboClaw::kStateHomed, drive.getStateForTest());
 }
 
+// ---- cancelPendingRandomResume() -- deliberate e-stop must win -------------
+// Gap found while reviewing #143's fix: if a connection drop sets the
+// pending "resume random on reconnect" flag, and a deliberate stop
+// (/api/estop, or the button/gesture/console dome=stop action) happens
+// while that drop is still unresolved, resumeIfInterrupted() would later
+// silently undo the deliberate stop once the connection reconnects. A
+// deliberate stop must always cancel any pending resume.
+
+void test_cancel_pending_resume_prevents_later_resume() {
+    auto drive = make_drive();
+    drive.setTicksPerRevForTest(1200);
+    drive.setStateForTest(DomeDriveRoboClaw::kStateRandom);
+
+    // Connection drop interrupts random mode -- pending resume is armed.
+    drive.noteConnectionLossStop();
+    drive.stop();
+    TEST_ASSERT_EQUAL_INT(DomeDriveRoboClaw::kStateHomed, drive.getStateForTest());
+
+    // Deliberate e-stop happens while the drop is still unresolved.
+    drive.cancelPendingRandomResume();
+    drive.stop();  // e-stop's own stop() call -- already kStateHomed, no-op
+
+    // Connection "reconnects" -- must NOT resume random mode.
+    drive.resumeIfInterrupted();
+    TEST_ASSERT_EQUAL_INT(DomeDriveRoboClaw::kStateHomed, drive.getStateForTest());
+}
+
+void test_cancel_pending_resume_noop_when_nothing_pending() {
+    auto drive = make_drive();
+    drive.setTicksPerRevForTest(1200);
+    drive.setStateForTest(DomeDriveRoboClaw::kStateHomed);
+
+    // No prior noteConnectionLossStop() -- nothing pending to cancel.
+    drive.cancelPendingRandomResume();
+    drive.resumeIfInterrupted();
+
+    TEST_ASSERT_EQUAL_INT(DomeDriveRoboClaw::kStateHomed, drive.getStateForTest());
+}
+
+void test_cancel_pending_resume_does_not_affect_current_mode() {
+    // Cancelling a pending resume must not stop random mode that's ACTUALLY
+    // active right now (no connection loss involved) -- it only clears the
+    // "resume later" memory, it isn't itself a stop.
+    auto drive = make_drive();
+    drive.setTicksPerRevForTest(1200);
+    drive.setStateForTest(DomeDriveRoboClaw::kStateRandom);
+
+    drive.cancelPendingRandomResume();
+
+    TEST_ASSERT_EQUAL_INT(DomeDriveRoboClaw::kStateRandom, drive.getStateForTest());
+}
+
 // ---- setMaxSpeedPct() / setAddress() / setChannel() — live-apply setters ----
 // Regression coverage for two bugs found while auditing which config.cpp
 // live-apply call sites actually work:
@@ -1166,6 +1218,10 @@ int main(int argc, char **argv) {
     RUN_TEST(test_resume_noop_without_prior_note);
     RUN_TEST(test_resume_only_fires_once);
     RUN_TEST(test_resume_respects_calibration_guard);
+
+    RUN_TEST(test_cancel_pending_resume_prevents_later_resume);
+    RUN_TEST(test_cancel_pending_resume_noop_when_nothing_pending);
+    RUN_TEST(test_cancel_pending_resume_does_not_affect_current_mode);
 
     RUN_TEST(test_setMaxSpeedPct_converts_fraction_correctly);
     RUN_TEST(test_setMaxSpeedPct_clamps_above_one);

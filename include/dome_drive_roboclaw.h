@@ -185,6 +185,18 @@ public:
         }
     }
 
+    /**
+     * Call from any deliberate stop (e.g. the web /api/estop handler) that
+     * isn't a connection-loss safety stop. Cancels a pending
+     * noteConnectionLossStop() resume so a manual e-stop always wins, even
+     * if it happens to land while a connection drop is still unresolved --
+     * otherwise resumeIfInterrupted() would later un-do the e-stop by
+     * resuming random mode once the connection reconnects.
+     */
+    void cancelPendingRandomResume() {
+        fRandomModeInterrupted = false;
+    }
+
     /** Return to manual / idle mode (cancels all autonomous movement). */
     void disableAutoMode();
 
