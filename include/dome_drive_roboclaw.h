@@ -163,6 +163,40 @@ public:
     /** Toggle random mode on/off. */
     void toggleRandomMode();
 
+    /**
+     * Call immediately before a connection-loss-triggered stop() (i.e. from
+     * DomeController::notify()'s lag-based safety stop). Remembers whether
+     * random mode was active so resumeIfInterrupted() can restore it --
+     * without this, stop() unconditionally collapses kStateRandom to
+     * kStateHomed and nothing ever resumes it (issue #143).
+     */
+    void noteConnectionLossStop() {
+        if (fState == kStateRandom) fRandomModeInterrupted = true;
+    }
+
+    /**
+     * Call once the connection has recovered. Resumes random mode if it was
+     * active when noteConnectionLossStop() last ran; no-op otherwise.
+     */
+    void resumeIfInterrupted() {
+        if (fRandomModeInterrupted) {
+            fRandomModeInterrupted = false;
+            enableRandomMode();
+        }
+    }
+
+    /**
+     * Call from any deliberate stop (e.g. the web /api/estop handler) that
+     * isn't a connection-loss safety stop. Cancels a pending
+     * noteConnectionLossStop() resume so a manual e-stop always wins, even
+     * if it happens to land while a connection drop is still unresolved --
+     * otherwise resumeIfInterrupted() would later un-do the e-stop by
+     * resuming random mode once the connection reconnects.
+     */
+    void cancelPendingRandomResume() {
+        fRandomModeInterrupted = false;
+    }
+
     /** Return to manual / idle mode (cancels all autonomous movement). */
     void disableAutoMode();
 
@@ -381,6 +415,9 @@ private:
     uint8_t  fRandomSeekMaxDelay  = DEFAULT_DOME_SEEK_MAX_DELAY;
     uint8_t  fRandomSeekLeft      = DEFAULT_DOME_SEEK_LEFT;
     uint8_t  fRandomSeekRight     = DEFAULT_DOME_SEEK_RIGHT;
+
+    // See noteConnectionLossStop() / resumeIfInterrupted().
+    bool     fRandomModeInterrupted = false;
 
     // ---- Obstruction detection ----------------------------------------------
 
