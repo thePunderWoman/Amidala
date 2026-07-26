@@ -1268,31 +1268,41 @@ static void handleApiConfigPost() {
     sServer.send(200, "text/plain", "OK");
 }
 
-static void handleApiEstop() {
+// Shared by handleApiEstop()/handleApiResume() below and the OTA upload
+// handler (issue #152, see handleUpdateUpload()) so both trigger paths stay
+// in sync -- broadcasts across the WCB mesh too, since sendSerialString()
+// routes through fWCB.routeOutbound() before falling back to wired serial.
+static void triggerEstop() {
     monAppend("! EMERGENCY STOP", 'i');
-    if (sCtrl) {
-        sCtrl->emergencyStop();
-        sCtrl->domeEmergencyStop();
+    if (!sCtrl) return;
+    sCtrl->emergencyStop();
+    sCtrl->domeEmergencyStop();
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-        // A deliberate e-stop must always win, even if it lands while an
-        // unresolved XBee drop is still waiting to auto-resume random mode
-        // on reconnect (see DomeDriveRoboClaw::resumeIfInterrupted()).
-        sCtrl->fDomeDrive->cancelPendingRandomResume();
+    // A deliberate e-stop must always win, even if it lands while an
+    // unresolved XBee drop is still waiting to auto-resume random mode
+    // on reconnect (see DomeDriveRoboClaw::resumeIfInterrupted()).
+    sCtrl->fDomeDrive->cancelPendingRandomResume();
 #endif
-        for (uint8_t i = 0; i < sCtrl->params.estopCmdCount; i++)
-            sCtrl->sendSerialString(sCtrl->params.EstopCmds[i].str);
-    }
+    for (uint8_t i = 0; i < sCtrl->params.estopCmdCount; i++)
+        sCtrl->sendSerialString(sCtrl->params.EstopCmds[i].str);
+}
+
+static void triggerResume() {
+    monAppend("RESUME", 'i');
+    if (!sCtrl) return;
+    sCtrl->enableController();
+    sCtrl->enableDomeController();
+    for (uint8_t i = 0; i < sCtrl->params.resumeCmdCount; i++)
+        sCtrl->sendSerialString(sCtrl->params.ResumeCmds[i].str);
+}
+
+static void handleApiEstop() {
+    triggerEstop();
     sServer.send(200, "text/plain", "OK");
 }
 
 static void handleApiResume() {
-    monAppend("RESUME", 'i');
-    if (sCtrl) {
-        sCtrl->enableController();
-        sCtrl->enableDomeController();
-        for (uint8_t i = 0; i < sCtrl->params.resumeCmdCount; i++)
-            sCtrl->sendSerialString(sCtrl->params.ResumeCmds[i].str);
-    }
+    triggerResume();
     sServer.send(200, "text/plain", "OK");
 }
 
@@ -1488,8 +1498,17 @@ static void handleUpdateUpload() {
     HTTPUpload& upload = sServer.upload();
     if (upload.status == UPLOAD_FILE_START) {
         monAppend("OTA: upload started", 'i');
+        // E-stop as soon as the flash upload begins (issue #152) --
+        // sServer.handleClient() blocks synchronously reading this upload's
+        // chunks for the whole request, so AnimatedEvent::process()'s other
+        // animate() calls (joystick/throttle updates, etc.) don't run again
+        // until it completes. Without this, the droid keeps executing
+        // whatever was last commanded for the entire flash. Broadcasts
+        // across the WCB mesh too, so other boards stop as well.
+        triggerEstop();
         if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
             monAppend("OTA: begin failed", 'i');
+            triggerResume();  // nothing is actually happening -- don't leave it e-stopped
         }
     } else if (upload.status == UPLOAD_FILE_WRITE) {
         if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
@@ -1498,8 +1517,14 @@ static void handleUpdateUpload() {
     } else if (upload.status == UPLOAD_FILE_END) {
         if (Update.end(true)) {
             monAppend("OTA: flash complete, restarting", 'i');
+            // Resume before restarting (issue #152) -- this board is about
+            // to reboot into new firmware regardless (see
+            // handleUpdatePost()), but other boards on the WCB mesh need
+            // the explicit broadcast to start responding to input again.
+            triggerResume();
         } else {
             monAppend("OTA: end failed", 'i');
+            triggerResume();  // flash didn't take -- old firmware still active, safe to resume
         }
     }
 }
