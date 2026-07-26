@@ -127,6 +127,17 @@ inline bool ensureConfigDefaults(const AmidalaParameters& params) {
         {"mutebutton=",     String(params.mutebutton)},
         {"b9=",             String(params.b9)},
         {"dbtimeout=",      String(params.dbtimeout)},
+        {"pin1role=",       String(pinRoleToString(params.pinRole[0]))},
+        {"pin2role=",       String(pinRoleToString(params.pinRole[1]))},
+        {"pin3role=",       String(pinRoleToString(params.pinRole[2]))},
+        {"pin4role=",       String(pinRoleToString(params.pinRole[3]))},
+        {"pin5role=",       String(pinRoleToString(params.pinRole[4]))},
+        {"pin6role=",       String(pinRoleToString(params.pinRole[5]))},
+        {"pin39role=",      String(pinRoleToString(params.pinRole[6]))},
+        {"pin40role=",      String(pinRoleToString(params.pinRole[7]))},
+        {"pin41role=",      String(pinRoleToString(params.pinRole[8]))},
+        {"pin42role=",      String(pinRoleToString(params.pinRole[9]))},
+        {"pin47role=",      String(pinRoleToString(params.pinRole[10]))},
     };
     constexpr unsigned kNumKeys = sizeof(keys) / sizeof(keys[0]);
 

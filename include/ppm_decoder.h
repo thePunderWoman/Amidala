@@ -1,13 +1,15 @@
 // ppm_decoder.h
 // PPM pulse-position modulation decoder for Amidala Firmware.
 //
-// Reads a PPM signal from PPMIN_PIN (defined in pin_config.h) and decodes
-// up to channelCount RC channels from the frame.  After channelCount valid
-// channels have accumulated and a 10-frame warm-up period has passed,
-// decode() returns true and channel() returns the mapped pulse values.
+// Reads a PPM signal from the pin passed to the constructor (default
+// PPMIN_PIN from pin_config.h; call setPin() to reassign it at runtime --
+// see params.pinRole / pin_assignment.h, issue #133) and decodes up to
+// channelCount RC channels from the frame.  After channelCount valid
+// channels have accumulated and a
+// 10-frame warm-up period has passed, decode() returns true and channel()
+// returns the mapped pulse values.
 //
-// Depends on: PPMIN_PIN (pin_config.h must be included before this header),
-//             digitalRead / micros (Arduino / arduino_mock.h),
+// Depends on: digitalRead / micros (Arduino / arduino_mock.h),
 //             map / min / max (Arduino / arduino_mock.h)
 
 #pragma once
@@ -37,8 +39,10 @@ public:
     memset(fLastChannel, 0, fChannelCount * sizeof(uint16_t));
   }
 
+  void setPin(uint8_t pin) { fPin = pin; }
+
   bool decode() {
-    uint32_t pulse = readPulse(PPMIN_PIN);
+    uint32_t pulse = readPulse(fPin);
     if (!pulse)
       return false;
     if (fCurrent == fChannelCount) {

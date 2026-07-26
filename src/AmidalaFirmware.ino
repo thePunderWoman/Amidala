@@ -24,6 +24,9 @@ void setup() {
 
   REELTWO_READY();
 
+  // Intentionally the compiled-in default, not a params.pinRole-derived
+  // pin (issue #133) -- this runs before config.txt is even loaded, and
+  // entropy quality doesn't depend on which ADC1 pin is sampled.
   randomSeed(analogRead(ANALOG1_PIN));
 
   // Drive all SPI CS pins HIGH before touching the bus so no slave sees a

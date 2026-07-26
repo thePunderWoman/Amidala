@@ -48,6 +48,19 @@ static AmidalaParameters makeParams() {
     p.mutebutton = 4;
     p.b9 = 's';
     p.dbtimeout = 275;
+    // Distinct from defaultPinRoles() so tests can confirm ensureConfigDefaults()
+    // writes the CURRENT in-memory role, not the compiled-in default.
+    p.pinRole[0]  = PinRoleType::kServo;   // 1
+    p.pinRole[1]  = PinRoleType::kDout;    // 2
+    p.pinRole[2]  = PinRoleType::kAnalog;  // 3
+    p.pinRole[3]  = PinRoleType::kAnalog;  // 4
+    p.pinRole[4]  = PinRoleType::kDout;    // 5
+    p.pinRole[5]  = PinRoleType::kServo;   // 6
+    p.pinRole[6]  = PinRoleType::kServo;   // 39
+    p.pinRole[7]  = PinRoleType::kDout;    // 40
+    p.pinRole[8]  = PinRoleType::kHall;    // 41
+    p.pinRole[9]  = PinRoleType::kServo;   // 42
+    p.pinRole[10] = PinRoleType::kDout;    // 47
     return p;
 }
 
@@ -69,7 +82,10 @@ void test_no_change_when_all_keys_present() {
         "btcontrolleron=n\nbtaddr=\n"
         "wcbenable=n\nwcboct2=0\nwcboct3=0\nwcbpassword=\nwcbquantity=0\n"
         "wcbid=0\noutboundserial=0\n"
-        "mutebutton=0\nb9=n\ndbtimeout=300\n";
+        "mutebutton=0\nb9=n\ndbtimeout=300\n"
+        "pin1role=servo\npin2role=dout\npin3role=analog\npin4role=analog\n"
+        "pin5role=dout\npin6role=servo\npin39role=servo\npin40role=dout\n"
+        "pin41role=hall\npin42role=servo\npin47role=dout\n";
     seedFile(full);
     AmidalaParameters p = makeParams();
     TEST_ASSERT_TRUE(ensureConfigDefaults(p));
@@ -149,6 +165,17 @@ void test_appends_all_when_file_has_none_of_the_keys() {
     TEST_ASSERT_TRUE(got.find("mutebutton=4") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("b9=s") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("dbtimeout=275") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("pin1role=servo") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("pin2role=dout") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("pin3role=analog") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("pin4role=analog") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("pin5role=dout") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("pin6role=servo") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("pin39role=servo") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("pin40role=dout") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("pin41role=hall") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("pin42role=servo") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("pin47role=dout") != std::string::npos);
 }
 
 // ---------------------------------------------------------------------------

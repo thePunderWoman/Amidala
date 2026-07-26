@@ -31,6 +31,7 @@
 - **Native built-in safety features** — Web based e-stop, dome obstruction motor disconnect, auto motor disable on controller disconnect.
 - **Layers of controller button configurations** — with short-press, double-press, long-press, and alt-modifier layers
 - **Effectively unlimited serial strings and gestures** — the only limits are your imagination!
+- **Reassignable GPIO pin roles** — trade any of the board's digital output, analog input, PPM, or servo headers for another role right from the web UI (e.g. give up a digital output for a 5th servo channel), no reflashing needed
 - **And more** — I2C aux output, digital outputs, analog inputs, SD card config, servo outputs, and emergency stop handling
 
 ---
@@ -69,6 +70,8 @@ The Amidala PCB is a purpose-built carrier for the ESP32-S3, designed to consoli
 - Micro SD card reader
 - Additional SPI breakout
 - PPM input for RC receivers
+
+> The servo, digital output, analog input, and PPM header counts above are just the defaults — each of those 11 pins can be independently reassigned to a different role from the web UI's Pins page (e.g. trade a digital output for a 5th servo channel, up to the ESP32-S3's 8-channel PWM ceiling). A reboot applies the change; no reflashing or rewiring of the PCB itself is needed.
 
 > **[PCB details, schematics, and BOM →](PCB/)**
 

@@ -240,6 +240,16 @@ public:
     /** Set the hall-sensor-to-front offset (degrees). Applied immediately. */
     void setFrontOffset(uint16_t degrees) { fFrontOffset = degrees; }
 
+    /**
+     * Reassign the hall-sensor input pin (issue #133 -- the hall sensor is
+     * physically wired to whatever header DOUT2 is, so reassigning DOUT2
+     * moves this too). Only stores the new pin; must be called BEFORE
+     * setup(), which is where pinMode()/attachInterrupt() on the hall pin
+     * actually happen. Calling it after setup() would leave a stale
+     * attachInterrupt() on the old pin.
+     */
+    void setHallPin(uint8_t pin) { fHallPin = pin; }
+
     /** Set max speed as fraction of QPPS (0.0–1.0). */
     void setMaxSpeedPct(float pct);
 

@@ -330,32 +330,22 @@ public:
   void domeEmergencyStop();
 
   void setDigitalPin(int pin, bool state) {
-    // DOUT pins are non-sequential on ESP32 so use a lookup table rather than
-    // DOUT1_PIN + offset arithmetic.  Entries beyond the wired count are 0.
-    static const uint8_t kDoutPins[] = {
-        DOUT1_PIN, DOUT2_PIN, DOUT3_PIN, DOUT4_PIN,
-        0, 0,
-#ifdef DOUT7_PIN
-        DOUT7_PIN,
-#else
-        0,
-#endif
-#ifdef DOUT8_PIN
-        DOUT8_PIN,
-#else
-        0,
-#endif
-    };
-    if (pin >= 1 && pin <= 8) {
-      params.D[--pin].state = state;
-      if (kDoutPins[pin] != 0)
-        digitalWrite(kDoutPins[pin], state ? HIGH : LOW);
+    // pin is 1-based, indexing however many of the 11 pool pins currently
+    // have role Dout (issue #133) -- 0-11, not a fixed 4. Out-of-range pins
+    // are silently ignored (mirrors the old fixed-table's "entries beyond
+    // the wired count are 0" behavior).
+    uint8_t doutCount = countPinsWithRole(params.pinRole, PinRoleType::kDout);
+    if (pin >= 1 && (uint8_t)pin <= doutCount) {
+      params.D[pin - 1].state = state;
+      uint8_t gpio = nthPinWithRole(params.pinRole, PinRoleType::kDout, pin - 1);
+      digitalWrite(gpio, state ? HIGH : LOW);
     }
   }
 
   bool getDigitalPin(int pin) {
-    if (pin >= 1 && pin <= 8) {
-      return params.D[--pin].state;
+    uint8_t doutCount = countPinsWithRole(params.pinRole, PinRoleType::kDout);
+    if (pin >= 1 && (uint8_t)pin <= doutCount) {
+      return params.D[pin - 1].state;
     }
     return false;
   }
@@ -411,6 +401,15 @@ private:
   uint32_t fDblPressTime[9] = {};
   uint32_t fDriveStateMillis = 0;
   uint32_t fDomeStateMillis = 0;
+  // Internal drive/dome "recently active" indicators used by animate()'s
+  // timing logic. Previously piggybacked on setDigitalPin(7)/(8) against
+  // two always-unwired DOUT slots (DRIVE_ACTIVE/DOME_ACTIVE, see
+  // pin_config.h) -- now that DOUT-typed pin COUNT is dynamic (issue #133,
+  // 0-11 rather than a fixed 4), there's no fixed "slot 7/8" to piggyback
+  // on without risking collision with a real user-configured DOUT pin, so
+  // these get their own dedicated state instead.
+  bool fDriveActiveIndicator = false;
+  bool fDomeActiveIndicator = false;
   float fDomeThrottle = 0;
   float fDriveThrottle = 0;
 

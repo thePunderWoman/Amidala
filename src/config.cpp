@@ -5,6 +5,57 @@ void AmidalaConfig::init(AmidalaController *controller) {
   fOutput = &controller->fConsole;
 }
 
+// ---------------------------------------------------------------------------
+// Reassignable GPIO pin roles (issue #133) -- see include/pin_assignment.h
+// ---------------------------------------------------------------------------
+
+void AmidalaConfig::validatePinAssignments() {
+  AmidalaParameters &params = fController->params;
+  PinRoleType before[11];
+  memcpy(before, params.pinRole, sizeof(before));
+
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+  bool requireHall = true;
+#else
+  bool requireHall = false;
+#endif
+  sanitizePinRoles(params.pinRole, requireHall);
+
+  if (fOutput) {
+    for (uint8_t i = 0; i < 11; i++) {
+      if (before[i] == params.pinRole[i]) continue;
+      fOutput->print(F("WARNING: pin config for GPIO"));
+      fOutput->print(kAssignablePins[i]);
+      fOutput->print(F(" was invalid or left the board without a required "
+                       "role -- reset to "));
+      fOutput->println(pinRoleToString(params.pinRole[i]));
+    }
+  }
+}
+
+// Parses "<match><type>" (e.g. "pin1role=analog"), validates the requested
+// role against the current pinRole[] array (hardware ceilings, ADC1
+// narrowing), and only writes params.pinRole[pinIndexOf(pin)] on success.
+static bool applyPinRoleParam(AmidalaParameters &params, const char *cmd,
+                              const char *match, uint8_t pin, Print *out) {
+  if (!startswith(cmd, match)) return false;
+  PinRoleType newRole;
+  if (!pinRoleFromString(cmd, &newRole)) {
+    if (out) out->println(F("pin role rejected: unrecognized role"));
+    return false;
+  }
+  PinRoleValidationResult r = validateRoleChange(pin, newRole, params.pinRole);
+  if (!r.ok) {
+    if (out) {
+      out->print(F("pin role rejected: "));
+      out->println(r.reason);
+    }
+    return false;
+  }
+  params.pinRole[pinIndexOf(pin)] = newRole;
+  return true;
+}
+
 void AmidalaConfig::applyDomePositionParams() {
 #ifdef DOME_DRIVE
   AmidalaParameters &params = fController->params;
@@ -815,6 +866,28 @@ bool AmidalaConfig::processConfig(const char *cmd) {
     params.wifiPassword[sizeof(params.wifiPassword) - 1] = '\0';
     return true;
   } else if (intparam(cmd, "wifichannel=", params.wifichannel, 1, 13)) {
+    return true;
+  } else if (applyPinRoleParam(params, cmd, "pin1role=", 1, fOutput)) {
+    return true;
+  } else if (applyPinRoleParam(params, cmd, "pin2role=", 2, fOutput)) {
+    return true;
+  } else if (applyPinRoleParam(params, cmd, "pin3role=", 3, fOutput)) {
+    return true;
+  } else if (applyPinRoleParam(params, cmd, "pin4role=", 4, fOutput)) {
+    return true;
+  } else if (applyPinRoleParam(params, cmd, "pin5role=", 5, fOutput)) {
+    return true;
+  } else if (applyPinRoleParam(params, cmd, "pin6role=", 6, fOutput)) {
+    return true;
+  } else if (applyPinRoleParam(params, cmd, "pin39role=", 39, fOutput)) {
+    return true;
+  } else if (applyPinRoleParam(params, cmd, "pin40role=", 40, fOutput)) {
+    return true;
+  } else if (applyPinRoleParam(params, cmd, "pin41role=", 41, fOutput)) {
+    return true;
+  } else if (applyPinRoleParam(params, cmd, "pin42role=", 42, fOutput)) {
+    return true;
+  } else if (applyPinRoleParam(params, cmd, "pin47role=", 47, fOutput)) {
     return true;
   } else if (strcmp(cmd, "reboot") == 0) {
     void (*resetArduino)() = NULL;

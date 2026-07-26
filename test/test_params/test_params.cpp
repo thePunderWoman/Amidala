@@ -29,9 +29,12 @@ void test_sound_bank_count() {
     TEST_ASSERT_EQUAL(20, p.getSoundBankCount());
 }
 
-void test_servo_count() {
+void test_servo_storage_capacity() {
+    // S[]'s fixed storage capacity (kMaxServoChannels), NOT the live
+    // pinRole[]-derived count -- see test_default_servo_count_matches_
+    // default_servo_pins() for the live-count-on-default-init case.
     AmidalaParameters p;
-    TEST_ASSERT_EQUAL(4, p.getServoCount());
+    TEST_ASSERT_EQUAL(kMaxServoChannels, sizeof(p.S) / sizeof(p.S[0]));
 }
 
 void test_button_count() {
@@ -192,6 +195,94 @@ void test_default_domestall() {
     TEST_ASSERT_EQUAL(DEFAULT_DOME_STALL_TIMEOUT_MS, gDefaultParams.domestall);
 }
 
+// ---- Reassignable GPIO pin-role defaults (issue #133) -----------------------
+// Defaults must reproduce today's REAL wiring exactly, in kAssignablePins
+// order {1,2,3,4,5,6,39,40,41,42,47}, since upgrading firmware must not
+// silently change anyone's existing behavior. Pin 40 is a special case: it
+// defaults to Hall (not Dout) whenever RoboClaw dome drive is compiled in,
+// since the hall sensor's pinMode(INPUT_PULLUP) always wins the pin-mode
+// race there regardless of what DOUT setup claims -- see params.h's init().
+
+void test_default_pin_roles_match_todays_wiring() {
+    gDefaultParams.init();
+    TEST_ASSERT_TRUE(PinRoleType::kAnalog == gDefaultParams.pinRole[0]);  // 1
+    TEST_ASSERT_TRUE(PinRoleType::kAnalog == gDefaultParams.pinRole[1]);  // 2
+    TEST_ASSERT_TRUE(PinRoleType::kServo  == gDefaultParams.pinRole[2]);  // 3
+    TEST_ASSERT_TRUE(PinRoleType::kServo  == gDefaultParams.pinRole[3]);  // 4
+    TEST_ASSERT_TRUE(PinRoleType::kServo  == gDefaultParams.pinRole[4]);  // 5
+    TEST_ASSERT_TRUE(PinRoleType::kServo  == gDefaultParams.pinRole[5]);  // 6
+    TEST_ASSERT_TRUE(PinRoleType::kDout   == gDefaultParams.pinRole[6]);  // 39
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+    TEST_ASSERT_TRUE(PinRoleType::kHall   == gDefaultParams.pinRole[7]);  // 40
+#else
+    TEST_ASSERT_TRUE(PinRoleType::kDout   == gDefaultParams.pinRole[7]);  // 40
+#endif
+    TEST_ASSERT_TRUE(PinRoleType::kDout   == gDefaultParams.pinRole[8]);  // 41
+    TEST_ASSERT_TRUE(PinRoleType::kDout   == gDefaultParams.pinRole[9]);  // 42
+    TEST_ASSERT_TRUE(PinRoleType::kPpm    == gDefaultParams.pinRole[10]); // 47
+}
+
+void test_default_servo_count_matches_default_servo_pins() {
+    gDefaultParams.init();
+    TEST_ASSERT_EQUAL(4, gDefaultParams.getServoCount());
+}
+
+// ---- sanitizePinRoles() boot-time recovery sweep (issue #133) ---------------
+// AmidalaConfig::validatePinAssignments() (config.cpp) calls this after
+// config.txt loads, since a line's own conflict check only sees whatever's
+// been parsed so far -- these exercise the pure function directly rather
+// than through AmidalaConfig, which can't be constructed natively (it needs
+// a real AmidalaController).
+
+void test_sanitize_pin_roles_leaves_valid_defaults_unchanged() {
+    PinRoleType roles[11];
+    defaultPinRoles(roles);
+    PinRoleType before[11];
+    memcpy(before, roles, sizeof(before));
+    sanitizePinRoles(roles, true);
+    TEST_ASSERT_EQUAL_MEMORY(before, roles, sizeof(roles));
+}
+
+void test_sanitize_pin_roles_reverts_electrically_invalid_role() {
+    // GPIO39 (index 6) isn't ADC1-capable -- simulate a corrupted/pre-#133
+    // config state where it's somehow Analog anyway.
+    PinRoleType roles[11];
+    defaultPinRoles(roles);
+    roles[6] = PinRoleType::kAnalog;
+    sanitizePinRoles(roles, true);
+    PinRoleType defaults[11];
+    defaultPinRoles(defaults);
+    TEST_ASSERT_TRUE(defaults[6] == roles[6]);
+}
+
+void test_sanitize_pin_roles_forces_hall_when_required_and_missing() {
+    PinRoleType roles[11];
+    defaultPinRoles(roles);
+    roles[7] = PinRoleType::kDout;  // GPIO40 traded away, nothing else is Hall
+    sanitizePinRoles(roles, true);
+    TEST_ASSERT_TRUE(PinRoleType::kHall == roles[7]);
+}
+
+void test_sanitize_pin_roles_leaves_hall_missing_when_not_required() {
+    PinRoleType roles[11];
+    defaultPinRoles(roles);
+    roles[7] = PinRoleType::kDout;
+    sanitizePinRoles(roles, false);
+    TEST_ASSERT_TRUE(PinRoleType::kDout == roles[7]);  // not forced back
+}
+
+void test_sanitize_pin_roles_does_not_force_hall_when_already_present_elsewhere() {
+    // Hall already lives on a different pin (physically rewired) --
+    // sanitizePinRoles() must not also stomp GPIO40 back to Hall.
+    PinRoleType roles[11];
+    defaultPinRoles(roles);
+    roles[7] = PinRoleType::kDout;   // GPIO40 no longer Hall
+    roles[8] = PinRoleType::kHall;   // GPIO41 is Hall instead
+    sanitizePinRoles(roles, true);
+    TEST_ASSERT_TRUE(PinRoleType::kDout == roles[7]);
+    TEST_ASSERT_TRUE(PinRoleType::kHall == roles[8]);
+}
+
 void test_roboclaw_params_are_distinct_addresses() {
     // Guard against any future copy-paste that aliases one field to another.
     AmidalaParameters p;
@@ -239,12 +330,13 @@ void test_dout_array_does_not_overlap_str() {
         "D[] overlaps Str[0]: D[4..7] would corrupt Str[0].name");
 }
 
-void test_dout_all_eight_pins_fit() {
-    // The firmware uses pin numbers 1..8 → indices 0..7.
-    // Verify the array is large enough so no out-of-bounds write occurs.
+void test_dout_all_eleven_pins_fit() {
+    // Issue #133: DOUT count is no longer fixed at 4 (or 8) -- up to all 11
+    // pool pins could be DOUT-typed. Verify the array is large enough so no
+    // out-of-bounds write occurs at the new ceiling.
     AmidalaParameters p;
-    TEST_ASSERT_EQUAL_MESSAGE(8, (int)(sizeof(p.D) / sizeof(p.D[0])),
-        "D[] must hold 8 entries for pin indices 0..7");
+    TEST_ASSERT_EQUAL_MESSAGE(11, (int)(sizeof(p.D) / sizeof(p.D[0])),
+        "D[] must hold 11 entries -- the full assignable-pool size");
 }
 
 void test_dout_write_does_not_corrupt_sstr_name() {
@@ -338,7 +430,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_audio_hw_constants);
 
     RUN_TEST(test_sound_bank_count);
-    RUN_TEST(test_servo_count);
+    RUN_TEST(test_servo_storage_capacity);
     RUN_TEST(test_button_count);
     RUN_TEST(test_gesture_count);
     RUN_TEST(test_serial_string_count);
@@ -370,6 +462,13 @@ int main(int argc, char **argv) {
     RUN_TEST(test_default_domercqpps);
     RUN_TEST(test_default_domefront);
     RUN_TEST(test_default_domestall);
+    RUN_TEST(test_default_pin_roles_match_todays_wiring);
+    RUN_TEST(test_default_servo_count_matches_default_servo_pins);
+    RUN_TEST(test_sanitize_pin_roles_leaves_valid_defaults_unchanged);
+    RUN_TEST(test_sanitize_pin_roles_reverts_electrically_invalid_role);
+    RUN_TEST(test_sanitize_pin_roles_forces_hall_when_required_and_missing);
+    RUN_TEST(test_sanitize_pin_roles_leaves_hall_missing_when_not_required);
+    RUN_TEST(test_sanitize_pin_roles_does_not_force_hall_when_already_present_elsewhere);
     RUN_TEST(test_roboclaw_params_are_distinct_addresses);
 
     RUN_TEST(test_default_altbtn_is_zero);
@@ -377,7 +476,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_altbtn_and_altdomestick_are_distinct_addresses);
 
     RUN_TEST(test_dout_array_does_not_overlap_str);
-    RUN_TEST(test_dout_all_eight_pins_fit);
+    RUN_TEST(test_dout_all_eleven_pins_fit);
     RUN_TEST(test_dout_write_does_not_corrupt_sstr_name);
 
     RUN_TEST(test_eeprom_serial_loaded_when_db01_signature_present);

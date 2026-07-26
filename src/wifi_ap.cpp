@@ -742,6 +742,36 @@ static void handleApiConfigPost() {
         return;
     }
 
+    // Reassignable GPIO pin roles (issue #133) -- validate directly so the
+    // client gets the SPECIFIC rejection reason (e.g. "servo channels full
+    // (8/8)") instead of the generic fallback's misleading "unknown
+    // setting" message for a known key with an invalid value. Key format
+    // matches config.txt's pin<N>role= scheme (see config.cpp), e.g.
+    // "pin1role"/"pin39role"/"pin40role".
+    for (uint8_t i = 0; i < 11; i++) {
+        String pinKey = "pin" + String(kAssignablePins[i]) + "role";
+        if (key != pinKey) continue;
+        AmidalaParameters &params = sCtrl->params;
+        PinRoleType newRole;
+        if (!pinRoleFromString(value.c_str(), &newRole)) {
+            sServer.send(400, "text/plain", "unrecognized role");
+            return;
+        }
+        PinRoleValidationResult r =
+            validateRoleChange(kAssignablePins[i], newRole, params.pinRole);
+        if (!r.ok) {
+            sServer.send(400, "text/plain", r.reason);
+            return;
+        }
+        params.pinRole[i] = newRole;
+        if (!updateConfigFile(pinKey.c_str(), value.c_str())) {
+            sServer.send(500, "text/plain", "SD write failed — change applied in memory only");
+            return;
+        }
+        sServer.send(200, "text/plain", "OK");
+        return;
+    }
+
     // sstr_del_N — delete serial string at index N, shift remainder down
     if (key.startsWith("sstr_del_")) {
         int idx = key.substring(9).toInt();
@@ -1273,14 +1303,24 @@ static void handleApiVolume() {
 }
 
 static void handleApiPins() {
+    if (!sCtrl) { sServer.send(500, "application/json", "{}"); return; }
+    AmidalaParameters &params = sCtrl->params;
+    // dout/ain are variable-length now (issue #133) -- however many pool
+    // pins currently have that role, not a fixed 4/2. Same order as
+    // buildFullConfigJson()'s doutPins/analogPins so the client can zip
+    // labels from /api/config with live values from here by index.
     String json = "{\"dout\":[";
-    json += String(digitalRead(DOUT1_PIN)); json += ",";
-    json += String(digitalRead(DOUT2_PIN)); json += ",";
-    json += String(digitalRead(DOUT3_PIN)); json += ",";
-    json += String(digitalRead(DOUT4_PIN));
+    uint8_t doutCount = countPinsWithRole(params.pinRole, PinRoleType::kDout);
+    for (uint8_t i = 0; i < doutCount; i++) {
+        if (i > 0) json += ",";
+        json += String(digitalRead(nthPinWithRole(params.pinRole, PinRoleType::kDout, i)));
+    }
     json += "],\"ain\":[";
-    json += String(analogRead(ANALOG1_PIN)); json += ",";
-    json += String(analogRead(ANALOG2_PIN));
+    uint8_t analogCount = countPinsWithRole(params.pinRole, PinRoleType::kAnalog);
+    for (uint8_t i = 0; i < analogCount; i++) {
+        if (i > 0) json += ",";
+        json += String(analogRead(nthPinWithRole(params.pinRole, PinRoleType::kAnalog, i)));
+    }
     json += "]}";
     sServer.send(200, "application/json", json);
 }
@@ -1409,6 +1449,7 @@ static void handleConfigRcRadio()       { sServer.send_P(200, "text/html", WEB_P
 static void handleConfigDome()          { sServer.send_P(200, "text/html", WEB_PAGE_DOME);            }
 static void handleConfigSerialStrings() { sServer.send_P(200, "text/html", WEB_PAGE_SERIAL_STRINGS);  }
 static void handleConfigServos()        { sServer.send_P(200, "text/html", WEB_PAGE_SERVOS);           }
+static void handleConfigPins()          { sServer.send_P(200, "text/html", WEB_PAGE_PINS);             }
 static void handleConfigControllers()   { sServer.send_P(200, "text/html", WEB_PAGE_CONTROLLERS);     }
 static void handleMonitor()             { sServer.send_P(200, "text/html", WEB_PAGE_MONITOR);         }
 static void handleUpdatePage()          { sServer.send_P(200, "text/html", WEB_PAGE_UPDATE);          }
@@ -1646,6 +1687,7 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/config/controllers",    HTTP_GET, handleConfigControllers);
     sServer.on("/config/buttons",        HTTP_GET, handleConfigControllers);  // legacy alias
     sServer.on("/config/servos",         HTTP_GET, handleConfigServos);
+    sServer.on("/config/pins",           HTTP_GET, handleConfigPins);
     sServer.on("/config/serial-strings", HTTP_GET, handleConfigSerialStrings);
     sServer.on("/config/gadgets",        HTTP_GET, handleConfigGadgets);
     sServer.on("/droid-control",        HTTP_GET, handleDroidControl);

@@ -47,6 +47,13 @@ def _make_button():
     return {"p": {"t": 0}, "l": {"t": 0}, "a": {"t": 0}}
 
 
+def _derive_pin_lists(cfg):
+    """Recompute doutPins/analogPins from pinRoles+assignablePins (issue #133) --
+    mirrors web_api.h's buildFullConfigJson(), called after any pinRoles change."""
+    cfg["doutPins"] = [pin for pin, role in zip(cfg["assignablePins"], cfg["pinRoles"]) if role == "dout"]
+    cfg["analogPins"] = [pin for pin, role in zip(cfg["assignablePins"], cfg["pinRoles"]) if role == "analog"]
+
+
 def parse_example_config(path):
     """Read path and return a _config dict matching buildFullConfigJson()."""
     # Firmware defaults
@@ -109,6 +116,16 @@ def parse_example_config(path):
         "minpulse":      1000,
         "maxpulse":      2000,
         "domehw":        "roboclaw",
+        # Reassignable GPIO pin roles (issue #133) -- mirrors params.h's
+        # defaultPinRoles() and pin_assignment.h's kAssignablePins.
+        # assignablePins is a fixed pool, not config.txt-driven; pinRoles is
+        # the role (same order/indexing) currently assigned to each --
+        # doutPins/analogPins are derived from it below (_derive_pin_lists()).
+        "assignablePins": [1, 2, 3, 4, 5, 6, 39, 40, 41, 42, 47],
+        "pinRoles": ["analog", "analog", "servo", "servo", "servo", "servo",
+                    "dout", "hall", "dout", "dout", "ppm"],
+        "doutPins": [],
+        "analogPins": [],
         "altbtn":        0,
         "mutebutton":    0,
         "altdomestick":  0,
@@ -176,6 +193,14 @@ def parse_example_config(path):
                 cfg[key] = int(val)
             except ValueError:
                 pass
+            continue
+
+        # pin<N>role=<type> — GPIO role reassignment (issue #133)
+        m = re.match(r"^pin(\d+)role$", key)
+        if m:
+            pin = int(m.group(1))
+            if pin in cfg["assignablePins"]:
+                cfg["pinRoles"][cfg["assignablePins"].index(pin)] = val
             continue
 
         if key in _str_keys:
@@ -274,6 +299,7 @@ def parse_example_config(path):
         # Ignored firmware-only keys: domemode, domegest, rnd, ackgest, etc.
 
     cfg["sstr_user_cnt"] = len(cfg["sstr"])
+    _derive_pin_lists(cfg)
     return cfg
 
 
@@ -575,6 +601,16 @@ class _Handler(SimpleHTTPRequestHandler):
             return
 
         print(f"  CONFIG  {key} = {value!r}")
+
+        # pin<N>role=<type> — GPIO role reassignment (issue #133)
+        m = re.match(r"^pin(\d+)role$", key)
+        if m:
+            pin = int(m.group(1))
+            if pin in _config["assignablePins"]:
+                _config["pinRoles"][_config["assignablePins"].index(pin)] = value
+                _derive_pin_lists(_config)
+            self._text("OK")
+            return
 
         # s=N,min,max,n,d,t,speed,reversed — servo channel config
         if key == "s":
