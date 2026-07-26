@@ -32,6 +32,7 @@
 - **Layers of controller button configurations** — with short-press, double-press, long-press, and alt-modifier layers
 - **Effectively unlimited serial strings and gestures** — the only limits are your imagination!
 - **Reassignable GPIO pin roles** — trade any of the board's digital output, analog input, PPM, or servo headers for another role right from the web UI (e.g. give up a digital output for a 5th servo channel), no reflashing needed
+- **Reassignable dome/drive serial ports** — move the dome drive or drive system's serial link (RoboClaw, Sabertooth, RoboteQ serial) onto either of the board's two hardware UARTs from the web UI, for wiring that doesn't match the reference PCB or to free up a header for other hardware
 - **And more** — I2C aux output, digital outputs, analog inputs, SD card config, servo outputs, and emergency stop handling
 
 ---
@@ -64,7 +65,7 @@ The Amidala PCB is a purpose-built carrier for the ESP32-S3, designed to consoli
 - 4 servo headers (LEDC PWM)
 - 4 digital output pins
 - 2 analog inputs
-- 3 serial headers (UART0 primary out, UART1 RoboClaw, UART2 aux)
+- 3 serial headers (UART0 primary out, plus UART1 and UART2 for the dome drive and drive system's serial link — reassignable between the two, see below)
 - Auxiliary I2C header
 - Native XBee slot (SPI, no adapter needed)
 - Micro SD card reader
@@ -72,6 +73,8 @@ The Amidala PCB is a purpose-built carrier for the ESP32-S3, designed to consoli
 - PPM input for RC receivers
 
 > The servo, digital output, analog input, and PPM header counts above are just the defaults — each of those 11 pins can be independently reassigned to a different role from the web UI's Pins page (e.g. trade a digital output for a 5th servo channel, up to the ESP32-S3's 8-channel PWM ceiling). A reboot applies the change; no reflashing or rewiring of the PCB itself is needed.
+>
+> Likewise, UART1 and UART2 default to the dome drive and drive system's serial link respectively (matching the reference wiring), but either can be reassigned to the other from the web UI's Serial Ports page — e.g. if your build's wiring swaps which header the RoboClaw is actually connected to. UART0 always carries the primary serial-out / WCB mesh path and isn't reassignable.
 
 > **[PCB details, schematics, and BOM →](PCB/)**
 
