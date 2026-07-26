@@ -28,8 +28,7 @@ The AmidalaShield is a carrier/breakout board for the **ESP32-S3 N16R8 DevKit**.
 - **4× PWM servo outputs** — 3-pin headers (signal, power, ground)
 
 ### Serial Ports
-- **2× hardware serial ports** — UART0 (shared with USB/programming) and UART1
-- **1× software serial port** — for additional peripherals
+- **3× hardware serial ports** — UART0 (shared with USB/programming, silkscreen "Serial 0"), UART1 ("Serial 1"), and UART2 ("Serial 2"). None of these are bit-banged/software serial — the ESP32-S3's UART peripherals route through its GPIO matrix onto whichever pins are needed, unlike chips with a single hardware UART. Firmware reassigns the dome drive and drive system's serial link between Serial 1/Serial 2 at runtime — see the Amidala firmware wiki's [Serial Ports](https://github.com/thePunderWoman/Amidala/wiki/Serial-Ports) page.
 
 ### I/O
 - **4× digital I/O pins**
@@ -91,12 +90,12 @@ The AmidalaShield is a carrier/breakout board for the **ESP32-S3 N16R8 DevKit**.
 | **XBee SLEEP** | GPIO15 | Left | |
 | **I2C SDA** | GPIO8 | Left | Native I2C default |
 | **I2C SCL** | GPIO9 | Left | Native I2C default |
-| **UART0 TX** | GPIO43 | Right | Shared w/ USB — do not use simultaneously |
+| **UART0 TX** | GPIO43 | Right | Shared w/ USB — do not use simultaneously. Silkscreen "Serial 0"; fixed, carries the main serial-out/WCB mesh path |
 | **UART0 RX** | GPIO44 | Right | Shared w/ USB — do not use simultaneously |
-| **UART1 TX** | GPIO17 | Right | Primary droid brain serial |
+| **UART1 TX** | GPIO17 | Right | Silkscreen "Serial 1". Reassignable between the dome/drive serial link (default: dome) |
 | **UART1 RX** | GPIO18 | Right | |
-| **SW-UART TX** | GPIO21 | Right | |
-| **SW-UART RX** | GPIO38 | Right | |
+| **UART2 TX** | GPIO21 | Right | Silkscreen "Serial 2". Real hardware UART, not software serial. Reassignable between the dome/drive serial link (default: drive) |
+| **UART2 RX** | GPIO38 | Right | |
 | **PPMIN** | GPIO47 | Right | |
 | **Analog 1** | GPIO1 | Right | ADC1_0, WiFi-safe |
 | **Analog 2** | GPIO2 | Right | ADC1_1, WiFi-safe |

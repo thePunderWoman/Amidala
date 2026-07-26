@@ -73,7 +73,7 @@ void test_i2c_pins() {
     TEST_ASSERT_EQUAL(9, I2C_SCL_PIN);
 }
 
-// ---- AUX serial (Serial 3 / SW-UART header) ---------------------------------
+// ---- AUX serial (Serial 2 header, real hardware UART2) ----------------------
 
 void test_aux_serial_pins() {
     TEST_ASSERT_EQUAL(21, AUX_SERIAL_TX_PIN);

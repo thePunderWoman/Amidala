@@ -1054,7 +1054,7 @@ var SCHEMA = [
     {v:'13', l:'CR (\\r)'},
     {v:'0',  l:'CRLF (\\r\\n)'}
   ]},
-  {key:'auxserial3', label:'Enable Serial 3 (GPIO21/38)', type:'bool', restart:true,
+  {key:'auxserial3', label:'Enable Serial 2 (GPIO21/38)', type:'bool', restart:true,
     note:'Real hardware UART2, not software serial. Force it on even if neither the dome nor drive system claims it — see Serial Ports.'},
   {section:'I²C'},
   {key:'myi2c',      label:"This Board's Address",           type:'number', min:0, max:100}
@@ -10560,25 +10560,17 @@ function _refreshDynamicOptions() {
 </script>
 <script>
 // Reassigns which physical UART (issue #147) each serial-consuming
-// subsystem's link uses -- e.g. "move the RoboClaw dome link from Serial 3
-// to Serial 2" -- not a general "any port, any protocol" tool. Only the two
-// ports the firmware can already open (Serial 2 / Serial 3, silkscreen
-// numbering -- see below) are reassignable; Serial 1 (the fixed WCB/body-
-// controller main-out path) has its own destination toggle on the
-// Connectivity page and I2C is fixed. Hand-built (like pins.html) rather
+// subsystem's link uses -- e.g. "move the RoboClaw dome link from Serial 2
+// to Serial 1" -- not a general "any port, any protocol" tool. Only the two
+// ports the firmware can already open (Serial 1 / Serial 2, matching both
+// the silkscreen printed on the header and the config.txt/serial_assignment.h
+// value strings -- no offset between them) are reassignable; Serial 0 (the
+// fixed WCB/body-controller main-out path) has its own destination toggle on
+// the Connectivity page and I2C is fixed. Hand-built (like pins.html) rather
 // than schema-driven, since each row's visibility and the OTHER row's
 // current value both depend on live server state.
-//
-// Silkscreen vs. firmware numbering: the physical header printed "Serial 2"
-// on this board is what the firmware/config keys call "Serial1"
-// (domeserialport=serial1/driveserialport=serial1), and the header printed
-// "Serial 3" is the firmware's "Serial2"/AUX_SERIAL. Labels below use the
-// silkscreen numbers a builder actually sees next to the pins they're
-// wiring; the config value strings ("serial1"/"serial2") are an internal
-// wire format shared with config.txt/serial_assignment.h and intentionally
-// don't change to match.
 
-var PORT_LABELS = {serial1: 'Serial 2 (GPIO17/18)', serial2: 'Serial 3 (GPIO21/38)'};
+var PORT_LABELS = {serial1: 'Serial 1 (GPIO17/18)', serial2: 'Serial 2 (GPIO21/38)'};
 
 function domeNeedsSerial(d) { return d.domehw === 'roboclaw' || d.domehw === 'saber'; }
 function driveNeedsSerial(d) {
@@ -10632,8 +10624,8 @@ function render() {
     '<div class="section-label">Serial Ports</div>' + rows
     + '<div class="section-label" style="margin-top:1.2rem">About</div>'
     + '<div class="row"><div class="row-label" style="color:var(--muted);font-size:.8rem;line-height:1.5;font-weight:400">'
-    + 'Serial 1 (fixed) always carries the main serial-out / WCB mesh path — see Connectivity. '
-    + 'Serial 2 and Serial 3 above are the two ports available to split between the dome and drive links; '
+    + 'Serial 0 (fixed) always carries the main serial-out / WCB mesh path — see Connectivity. '
+    + 'Serial 1 and Serial 2 above are the two ports available to split between the dome and drive links; '
     + 'each can only be claimed by one of them at a time.'
     + '</div></div>';
 }
@@ -14201,8 +14193,8 @@ main{flex:1;display:flex;flex-direction:column;min-height:0;max-width:none;margi
     <span class="tsep"></span>
     <button class="tbtn on" id="f-LOG" onclick="toggleFilter('LOG')" title="LOG — Amidala's own console output (boot, config dumps, command replies)">LOG</button>
     <button class="tbtn on" id="f-S0" onclick="toggleFilter('S0')" title="S0 — WCB/body controller serial. Also a Send destination.">S0</button>
-    <button class="tbtn on" id="f-S1" onclick="toggleFilter('S1')" title="S1 — Serial 2 header (GPIO17/18)" hidden>S1</button>
-    <button class="tbtn on" id="f-S2" onclick="toggleFilter('S2')" title="S2 — Serial 3 header (GPIO21/38). Also a Send destination." hidden>S2</button>
+    <button class="tbtn on" id="f-S1" onclick="toggleFilter('S1')" title="S1 — Serial 1 header (GPIO17/18)" hidden>S1</button>
+    <button class="tbtn on" id="f-S2" onclick="toggleFilter('S2')" title="S2 — Serial 2 header (GPIO21/38). Also a Send destination." hidden>S2</button>
     <button class="tbtn on" id="f-WCB" onclick="toggleFilter('WCB')" title="WCB — mesh network. Also a Send destination." hidden>WCB</button>
     <span class="tsep"></span>
     <button class="tbtn" id="pbtn" onclick="togglePause()">Pause</button>

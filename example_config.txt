@@ -72,14 +72,22 @@ maxdelay=45
 # --- Aux I2C ---
 # This board's I2C address (0 = Master, used for auxiliary I2C output)
 myi2c=0
-# Primary Serial Port (Serial3 / COM3) Baud Rate
+# Primary Serial Port (Serial 0, UART0) Baud Rate — main serial-out / WCB mesh path
 serialbaud=9600
 # ASCII code for delimiter (default 58 = ':', 124 = '|')
 serialdelim=124
 # ASCII code for EOL (default 13 = Carriage Return)
 serialeol=13
-# Aux Serial 3: enable a second software-serial output on UART2 (y/n)
+# Aux Serial 2: enable UART2 (real hardware serial, GPIO21/38) even if neither
+# the dome nor drive system claims it below (y/n)
 auxserial3=n
+# Reassignable dome/drive serial ports: which physical UART (serial1 = GPIO17/18,
+# serial2 = GPIO21/38) each subsystem's serial link uses. Only meaningful when
+# that subsystem's compiled hardware type actually needs a serial link (e.g.
+# RoboClaw/Sabertooth dome, Sabertooth/RoboteQ-serial drive) -- ignored
+# otherwise. Defaults: dome=serial1, drive=serial2.
+domeserialport=serial1
+driveserialport=serial2
 
 # --- Dome Motor Control ---
 # Default Dome Mode: 0=Manual, 1=Auto-Home, 2=Random, 3=Seek

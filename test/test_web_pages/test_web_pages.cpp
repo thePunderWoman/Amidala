@@ -252,7 +252,7 @@ void test_monitor_page_has_wcb_filter_gated_on_status() {
 // variant alone) confirms nothing has claimed it.
 void test_monitor_page_s1_filter_gated_on_dome_variant() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR,
-        "id=\"f-S1\" onclick=\"toggleFilter('S1')\" title=\"S1 — Serial 2 header (GPIO17/18)\" hidden"));
+        "id=\"f-S1\" onclick=\"toggleFilter('S1')\" title=\"S1 — Serial 1 header (GPIO17/18)\" hidden"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "d.serial1_role === 'unused'"));
 }
 
