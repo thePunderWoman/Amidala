@@ -20,6 +20,7 @@
 #include "drive_config.h"
 #include "button_actions.h"
 #include "pin_assignment.h"
+#include "serial_assignment.h"
 
 // ---- Audio hardware selection -----------------------------------------------
 
@@ -99,6 +100,28 @@ inline void sanitizePinRoles(PinRoleType allRoles[11], bool requireHall) {
   if (requireHall && countPinsWithRole(allRoles, PinRoleType::kHall) == 0) {
     allRoles[7] = PinRoleType::kHall;  // kAssignablePins[7] == GPIO40
   }
+}
+
+// ---- Default dome/drive serial port mapping (issue #147) --------------------
+//
+// Reproduces today's REAL wiring: RoboClaw dome defaults to Serial1 (its
+// only-ever port today, ROBOCLAW_SERIAL); everything else that consumes a
+// serial port (Sabertooth dome, Sabertooth/Roboteq-serial/Roboteq-PWM-serial
+// drive) defaults to Serial2/AUX_SERIAL (today's DOME_DRIVE_SERIAL/
+// DRIVE_SERIAL, both always AUX_SERIAL). Builds whose dome/drive doesn't
+// consume a serial port at all (PWM) still get a deterministic default here
+// -- it's simply inert, same as domercaddr etc. being harmless on non-
+// RoboClaw builds. Pulled out of AmidalaParameters::init() for the same
+// reason as defaultPinRoles() above -- AmidalaConfig::validateSerialPortAssignments()
+// (config.cpp) needs a defaults source that doesn't depend on the init()
+// singleton-guard dance.
+inline void defaultSerialPorts(SerialPortId &domePort, SerialPortId &drivePort) {
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+  domePort = SerialPortId::kSerial1;
+#else
+  domePort = SerialPortId::kSerial2;  // Sabertooth dome (only other serial-consuming dome)
+#endif
+  drivePort = SerialPortId::kSerial2; // Sabertooth/Roboteq-serial/Roboteq-PWM-serial drive
 }
 
 // ---- AmidalaParameters ------------------------------------------------------
@@ -271,9 +294,24 @@ struct AmidalaParameters {
   // double-press detection entirely.  Default 300.
   uint16_t dbtimeout;
 
-  // ---- Aux serial (Serial 3 / SW-UART header, GPIO21 TX / GPIO38 RX) ------
-  // auxserial3: enable UART2 at startup (default false).
+  // ---- Aux serial (Serial2/AUX_SERIAL header, GPIO21 TX / GPIO38 RX) ------
+  // auxserial3: enable UART2 at startup even when nothing in this build
+  // claims it via domeSerialPort/driveSerialPort below (default false).
+  // Real hardware UART2, not software/bit-banged serial -- see AUX_SERIAL in
+  // pin_config.h.
   bool    auxserial3;
+
+  // ---- Reassignable dome/drive serial ports (issue #147) ------------------
+  // Which physical UART (Serial1 or Serial2/AUX_SERIAL) the compiled-in
+  // dome/drive subsystem's serial link uses. Only meaningful (and only shown
+  // in the web UI) when the compiled DOME_DRIVE/DRIVE_SYSTEM actually needs
+  // a serial port at all (RoboClaw or Sabertooth dome; Sabertooth or
+  // Roboteq-serial/Roboteq-PWM-serial drive) -- inert otherwise, same as
+  // domercaddr etc. on non-RoboClaw builds. Defaults reproduce today's real
+  // wiring -- see defaultSerialPorts() above. Reassigning either requires a
+  // reboot -- baked into a constructor call in AmidalaController::setup().
+  SerialPortId domeSerialPort;
+  SerialPortId driveSerialPort;
 
   // ---- Serial string metadata (favorites, hidden, categories) ---------------
   // Stored as separate config blocks; sstr= entries are unchanged.
@@ -399,6 +437,9 @@ struct AmidalaParameters {
       rcj = 5;
       // Default pin roles (issue #133) -- see defaultPinRoles() above.
       defaultPinRoles(pinRole);
+      // Default dome/drive serial ports (issue #147) -- see
+      // defaultSerialPorts() above.
+      defaultSerialPorts(domeSerialPort, driveSerialPort);
       myi2c = 0;
       serialbaud = 9600;
       serialdelim = ':';

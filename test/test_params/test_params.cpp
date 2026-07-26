@@ -222,6 +222,25 @@ void test_default_pin_roles_match_todays_wiring() {
     TEST_ASSERT_TRUE(PinRoleType::kPpm    == gDefaultParams.pinRole[10]); // 47
 }
 
+// ---- Reassignable dome/drive serial port defaults (issue #147) -------------
+// Defaults must reproduce today's REAL wiring: RoboClaw dome only ever used
+// Serial1; everything else that consumes a serial port (Sabertooth dome,
+// Sabertooth/Roboteq-serial/Roboteq-PWM-serial drive) only ever used
+// Serial2/AUX_SERIAL. driveSerialPort still gets a deterministic default on
+// the reference build (RoboClaw dome + Roboteq-PWM drive) even though
+// nothing consumes it there -- inert, not uninitialized, same as
+// domercaddr etc. being harmless on non-RoboClaw builds.
+
+void test_default_serial_ports_match_todays_wiring() {
+    gDefaultParams.init();
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+    TEST_ASSERT_TRUE(SerialPortId::kSerial1 == gDefaultParams.domeSerialPort);
+#else
+    TEST_ASSERT_TRUE(SerialPortId::kSerial2 == gDefaultParams.domeSerialPort);
+#endif
+    TEST_ASSERT_TRUE(SerialPortId::kSerial2 == gDefaultParams.driveSerialPort);
+}
+
 void test_default_servo_count_matches_default_servo_pins() {
     gDefaultParams.init();
     TEST_ASSERT_EQUAL(4, gDefaultParams.getServoCount());
@@ -463,6 +482,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_default_domefront);
     RUN_TEST(test_default_domestall);
     RUN_TEST(test_default_pin_roles_match_todays_wiring);
+    RUN_TEST(test_default_serial_ports_match_todays_wiring);
     RUN_TEST(test_default_servo_count_matches_default_servo_pins);
     RUN_TEST(test_sanitize_pin_roles_leaves_valid_defaults_unchanged);
     RUN_TEST(test_sanitize_pin_roles_reverts_electrically_invalid_role);

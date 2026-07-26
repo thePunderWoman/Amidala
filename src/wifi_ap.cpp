@@ -685,6 +685,25 @@ static void handleApiInfo() {
     const char* audio = "hcr";
 #endif
 
+    // Which role (issue #147) actually occupies each reassignable physical
+    // port right now -- lets web/monitor.html adapt to reassignment instead
+    // of assuming a fixed port-to-role mapping from the compiled drive/dome
+    // type alone. "aux" = up but unclaimed by a built-in protocol (auxserial3
+    // turned it on anyway); "unused" = not running at all. Serial1 has no
+    // "force on anyway" toggle, so it's simply "unused" when unclaimed.
+    const char* serial1Role = "unused";
+    const char* serial2Role = sCtrl->params.auxserial3 ? "aux" : "unused";
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW || DOME_DRIVE == DOME_DRIVE_SABER
+    if (sCtrl->params.domeSerialPort == SerialPortId::kSerial1) serial1Role = dome;
+    else serial2Role = dome;
+#endif
+#if DRIVE_SYSTEM == DRIVE_SYSTEM_SABER || \
+    DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_SERIAL || \
+    DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM_SERIAL
+    if (sCtrl->params.driveSerialPort == SerialPortId::kSerial1) serial1Role = drive;
+    else serial2Role = drive;
+#endif
+
     sServer.send(200, "application/json",
         buildInfoJson(drive, dome, audio,
                       sCtrl->params.wifiSSID,
@@ -696,11 +715,11 @@ static void handleApiInfo() {
                       gBTGamepad.isConnected(),
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
                       sCtrl->fDomeDrive->isHomed(),
-                      sCtrl->fDomeDrive->getCurrentDegrees()
+                      sCtrl->fDomeDrive->getCurrentDegrees(),
 #else
-                      false, 0
+                      false, 0,
 #endif
-                      ));
+                      serial1Role, serial2Role));
 }
 
 static void handleApiConfigGet() {
@@ -765,6 +784,51 @@ static void handleApiConfigPost() {
         }
         params.pinRole[i] = newRole;
         if (!updateConfigFile(pinKey.c_str(), value.c_str())) {
+            sServer.send(500, "text/plain", "SD write failed — change applied in memory only");
+            return;
+        }
+        sServer.send(200, "text/plain", "OK");
+        return;
+    }
+
+    // Reassignable dome/drive serial ports (issue #147) -- validate
+    // directly so the client gets the SPECIFIC rejection reason ("port
+    // already used by the other serial subsystem") instead of the generic
+    // fallback's misleading "unknown setting" message. Key format matches
+    // config.txt's domeserialport=/driveserialport= scheme (see config.cpp).
+    if (key == "domeserialport" || key == "driveserialport") {
+        AmidalaParameters &params = sCtrl->params;
+        SerialConsumer consumer =
+            (key == "domeserialport") ? SerialConsumer::kDome : SerialConsumer::kDrive;
+        SerialPortId newPort;
+        if (!serialPortFromString(value.c_str(), &newPort)) {
+            sServer.send(400, "text/plain", "unrecognized port");
+            return;
+        }
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW || DOME_DRIVE == DOME_DRIVE_SABER
+        constexpr bool kDomeActive = true;
+#else
+        constexpr bool kDomeActive = false;
+#endif
+#if DRIVE_SYSTEM == DRIVE_SYSTEM_SABER || \
+    DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_SERIAL || \
+    DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM_SERIAL
+        constexpr bool kDriveActive = true;
+#else
+        constexpr bool kDriveActive = false;
+#endif
+        bool otherActive = (consumer == SerialConsumer::kDome) ? kDriveActive : kDomeActive;
+        SerialPortId otherPort = (consumer == SerialConsumer::kDome) ? params.driveSerialPort
+                                                                      : params.domeSerialPort;
+        SerialPortValidationResult r =
+            validateSerialPortChange(consumer, newPort, otherActive, otherPort);
+        if (!r.ok) {
+            sServer.send(400, "text/plain", r.reason);
+            return;
+        }
+        if (consumer == SerialConsumer::kDome) params.domeSerialPort = newPort;
+        else params.driveSerialPort = newPort;
+        if (!updateConfigFile(key.c_str(), value.c_str())) {
             sServer.send(500, "text/plain", "SD write failed — change applied in memory only");
             return;
         }
@@ -1347,6 +1411,25 @@ static void handleApiMonitorGet() {
     sServer.send(200, "application/json", json);
 }
 
+// True if a binary/packet-serial protocol (RoboClaw, Sabertooth, or
+// Roboteq-serial) currently occupies `port` -- reading or writing arbitrary
+// bytes on such a link races (RX) or corrupts (TX) the motor controller's
+// own traffic. Runtime check (issue #147): which port (if either) that is
+// now depends on domeSerialPort/driveSerialPort, not a fixed compile-time
+// port-to-role mapping.
+static bool portCarriesBinaryProtocol(SerialPortId port) {
+    if (!sCtrl) return false;
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW || DOME_DRIVE == DOME_DRIVE_SABER
+    if (sCtrl->params.domeSerialPort == port) return true;
+#endif
+#if DRIVE_SYSTEM == DRIVE_SYSTEM_SABER || \
+    DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_SERIAL || \
+    DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM_SERIAL
+    if (sCtrl->params.driveSerialPort == port) return true;
+#endif
+    return false;
+}
+
 static void handleApiMonitorPost() {
     if (!sCtrl) { sServer.send(500, "text/plain", "no controller"); return; }
     String cmd = sServer.arg("cmd");
@@ -1368,17 +1451,16 @@ static void handleApiMonitorPost() {
         sendSerialStringTo(SERIAL, cmd.c_str(), params.serialdelim, params.serialeol);
         monAppend(("S0: " + cmd).c_str(), 't');
     }
-#ifndef ROBOCLAW_SERIAL
-    // Only compiled in when Serial1 isn't claimed by the RoboClaw dome
-    // drive's own binary packet-serial protocol -- writing arbitrary text
-    // into that link could corrupt a motor command mid-packet. See
-    // monDrainSerial()'s matching #ifndef guard on the read side above.
-    if (sServer.arg("s1") == "1") {
+    // Skipped when the port is claimed by a binary packet-serial protocol
+    // (RoboClaw/Sabertooth/Roboteq-serial, issue #147) -- writing arbitrary
+    // text into that link could corrupt a motor command mid-packet. See
+    // portCarriesBinaryProtocol()'s matching check on the RX side above.
+    if (sServer.arg("s1") == "1" && !portCarriesBinaryProtocol(SerialPortId::kSerial1)) {
         sendSerialStringTo(Serial1, cmd.c_str(), params.serialdelim, params.serialeol);
         monAppend(("S1: " + cmd).c_str(), 't');
     }
-#endif
-    if (params.auxserial3 && sServer.arg("s2") == "1") {
+    if (params.auxserial3 && sServer.arg("s2") == "1" &&
+        !portCarriesBinaryProtocol(SerialPortId::kSerial2)) {
         sendSerialStringTo(AUX_SERIAL, cmd.c_str(), params.serialdelim, params.serialeol);
         monAppend(("S2: " + cmd).c_str(), 't');
     }
@@ -1450,6 +1532,7 @@ static void handleConfigDome()          { sServer.send_P(200, "text/html", WEB_P
 static void handleConfigSerialStrings() { sServer.send_P(200, "text/html", WEB_PAGE_SERIAL_STRINGS);  }
 static void handleConfigServos()        { sServer.send_P(200, "text/html", WEB_PAGE_SERVOS);           }
 static void handleConfigPins()          { sServer.send_P(200, "text/html", WEB_PAGE_PINS);             }
+static void handleConfigSerialPorts()   { sServer.send_P(200, "text/html", WEB_PAGE_SERIAL_PORTS);      }
 static void handleConfigControllers()   { sServer.send_P(200, "text/html", WEB_PAGE_CONTROLLERS);     }
 static void handleMonitor()             { sServer.send_P(200, "text/html", WEB_PAGE_MONITOR);         }
 static void handleUpdatePage()          { sServer.send_P(200, "text/html", WEB_PAGE_UPDATE);          }
@@ -1688,6 +1771,7 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/config/buttons",        HTTP_GET, handleConfigControllers);  // legacy alias
     sServer.on("/config/servos",         HTTP_GET, handleConfigServos);
     sServer.on("/config/pins",           HTTP_GET, handleConfigPins);
+    sServer.on("/config/serial-ports",   HTTP_GET, handleConfigSerialPorts);
     sServer.on("/config/serial-strings", HTTP_GET, handleConfigSerialStrings);
     sServer.on("/config/gadgets",        HTTP_GET, handleConfigGadgets);
     sServer.on("/droid-control",        HTTP_GET, handleDroidControl);
@@ -1749,28 +1833,28 @@ static void monDrainSerial(SerialMonPort& p) {
 void AmidalaWiFiAP::handle() {
     sServer.handleClient();
 
-    // Serial RX monitoring.  ROBOCLAW_SERIAL is defined to Serial1 when the
-    // RoboClaw dome drive is active — skip Serial1 in that case (binary protocol).
+    // Serial RX monitoring. Skip a port's binary-protocol traffic (RoboClaw/
+    // Sabertooth/Roboteq-serial, issue #147, see portCarriesBinaryProtocol())
+    // -- reading its bytes here would race the motor controller's own reads
+    // on the same UART FIFO, not just garble the log. Runtime check since
+    // which port (if either) that is now depends on domeSerialPort/
+    // driveSerialPort, not a fixed compile-time port-to-role mapping.
     static SerialMonPort sPortWCB = { &Serial0, {} };
-#ifndef ROBOCLAW_SERIAL
     static SerialMonPort sPortS1  = { &Serial1, {} };
-#endif
     static SerialMonPort sPortAux = { &Serial2, {} };
     static bool sMonInit = false;
     if (!sMonInit) {
         monDrainInit(sPortWCB.state, "S0: ");
-#ifndef ROBOCLAW_SERIAL
         monDrainInit(sPortS1.state, "S1: ");
-#endif
         monDrainInit(sPortAux.state, "S2: ");
         sMonInit = true;
     }
 
     monDrainSerial(sPortWCB);
-#ifndef ROBOCLAW_SERIAL
-    monDrainSerial(sPortS1);
-#endif
-    if (sCtrl && sCtrl->params.auxserial3) {
+    if (!portCarriesBinaryProtocol(SerialPortId::kSerial1)) {
+        monDrainSerial(sPortS1);
+    }
+    if (sCtrl && sCtrl->params.auxserial3 && !portCarriesBinaryProtocol(SerialPortId::kSerial2)) {
         monDrainSerial(sPortAux);
     }
     if (sCtrl) sCtrl->fConsole.tickMonitor();

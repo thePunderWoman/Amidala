@@ -28,6 +28,7 @@ PAGES = [
     ("config/gadgets.html",         "WEB_PAGE_GADGETS"),
     ("config/servos.html",          "WEB_PAGE_SERVOS"),
     ("config/pins.html",            "WEB_PAGE_PINS"),
+    ("config/serial-ports.html",    "WEB_PAGE_SERIAL_PORTS"),
     ("config/controllers.html",     "WEB_PAGE_CONTROLLERS"),
     ("droid-control.html",             "WEB_PAGE_DROID_CONTROL"),
     ("safety.html",                 "WEB_PAGE_SAFETY"),

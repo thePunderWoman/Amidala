@@ -9,6 +9,28 @@
 // pull in ServoDispatchPrivate.h and duplicate ISR definitions.
 extern ServoDispatch& servoDispatch;
 
+// ---------------------------------------------------------------------------
+// Reassignable dome/drive serial ports (issue #147) -- see
+// include/serial_assignment.h for the port-conflict validation this relies
+// on. Only Serial1 and Serial2/AUX_SERIAL are ever reassignable; Serial0
+// (WCB/body-controller out) is fixed and handled separately below.
+// ---------------------------------------------------------------------------
+
+static HardwareSerial& resolveSerialPort(SerialPortId id) {
+  return (id == SerialPortId::kSerial2) ? AUX_SERIAL : Serial1;
+}
+
+// Explicit pins required for both ports: ESP32-S3 UART1/UART2 have no
+// hardware-fixed default pins and won't route to the right GPIOs without
+// them (see pin_config.h's SERIAL1_*_PIN/AUX_SERIAL_*_PIN).
+static void beginSerialPort(SerialPortId id, uint32_t baud) {
+  if (id == SerialPortId::kSerial2) {
+    AUX_SERIAL.begin(baud, SERIAL_8N1, AUX_SERIAL_RX_PIN, AUX_SERIAL_TX_PIN);
+  } else {
+    Serial1.begin(baud, SERIAL_8N1, SERIAL1_RX_PIN, SERIAL1_TX_PIN);
+  }
+}
+
 AmidalaController::AmidalaController()
     : fConsole(),
       fHCR(&SERIAL, HCR_BAUD_RATE),
@@ -75,6 +97,10 @@ void AmidalaController::setup() {
   // only sees whatever's been parsed so far -- before anything below reads
   // them into a pinMode()/constructor call.
   fConfig.validatePinAssignments();
+  // Guarantee domeSerialPort/driveSerialPort (issue #147) don't both claim
+  // the same physical port before either is read below -- same "config.txt
+  // parses in file order" reasoning as validatePinAssignments() above.
+  fConfig.validateSerialPortAssignments();
   fConfig.showCurrentConfiguration();
 
   // fTankDrive/fDomeDrive construction is deferred to here (issue #147),
@@ -82,41 +108,41 @@ void AmidalaController::setup() {
   // controller.h's member declarations. This is the earliest point after
   // config has loaded, and strictly before the first live use of either
   // (fTankDrive->setGuestStick() below). Each branch also opens its serial
-  // port on the correct pins/baud before constructing -- previously done in
-  // AmidalaFirmware.ino's setup(), before config was even loaded, and (for
-  // AUX_SERIAL/Serial2 users) on the WRONG pins (SERIAL0_RX_PIN/TX_PIN,
-  // i.e. GPIO43/44, meant for Serial0/WCB-out) since neither
+  // port -- resolved from params.driveSerialPort/domeSerialPort -- on the
+  // correct pins/baud before constructing. Previously (before this and the
+  // reassignment feature both landed) this begin() happened in
+  // AmidalaFirmware.ino's setup(), before config was even loaded, always on
+  // AUX_SERIAL, and on the WRONG pins there (SERIAL0_RX_PIN/TX_PIN, i.e.
+  // GPIO43/44, meant for Serial0/WCB-out) since neither
   // TankDriveRoboteq/TankDriveSabertooth/DomeDriveSabertooth ever begin()
-  // their own serial port themselves -- fixed here incidentally while this
-  // code is being relocated anyway.
+  // their own serial port themselves.
 #if DRIVE_SYSTEM == DRIVE_SYSTEM_SABER
-  AUX_SERIAL.begin(DRIVE_BAUD_RATE, SERIAL_8N1, AUX_SERIAL_RX_PIN, AUX_SERIAL_TX_PIN);
-  fTankDrive = new TankDriveSabertooth(128, DRIVE_SERIAL, fDriveStick);
+  beginSerialPort(params.driveSerialPort, DRIVE_BAUD_RATE);
+  fTankDrive = new TankDriveSabertooth(128, resolveSerialPort(params.driveSerialPort), fDriveStick);
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_PWM
   fTankDrive = new TankDrivePWM(servoDispatch, 1, 0, 2, fDriveStick);
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM
   fTankDrive = new TankDriveRoboteq(servoDispatch, 1, 0, 2, fDriveStick);
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_SERIAL
-  AUX_SERIAL.begin(DRIVE_BAUD_RATE, SERIAL_8N1, AUX_SERIAL_RX_PIN, AUX_SERIAL_TX_PIN);
-  fTankDrive = new TankDriveRoboteq(DRIVE_SERIAL, fDriveStick);
+  beginSerialPort(params.driveSerialPort, DRIVE_BAUD_RATE);
+  fTankDrive = new TankDriveRoboteq(resolveSerialPort(params.driveSerialPort), fDriveStick);
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM_SERIAL
-  AUX_SERIAL.begin(DRIVE_BAUD_RATE, SERIAL_8N1, AUX_SERIAL_RX_PIN, AUX_SERIAL_TX_PIN);
-  fTankDrive = new TankDriveRoboteq(DRIVE_SERIAL, servoDispatch, 1, 0, 4, fDriveStick);
+  beginSerialPort(params.driveSerialPort, DRIVE_BAUD_RATE);
+  fTankDrive = new TankDriveRoboteq(resolveSerialPort(params.driveSerialPort), servoDispatch, 1, 0, 4, fDriveStick);
 #endif
 
 #if DOME_DRIVE == DOME_DRIVE_SABER
-  AUX_SERIAL.begin(DRIVE_BAUD_RATE, SERIAL_8N1, AUX_SERIAL_RX_PIN, AUX_SERIAL_TX_PIN);
-  fDomeDrive = new DomeDriveSabertooth(129, DOME_DRIVE_SERIAL, fDomeStick);
+  beginSerialPort(params.domeSerialPort, DRIVE_BAUD_RATE);
+  fDomeDrive = new DomeDriveSabertooth(129, resolveSerialPort(params.domeSerialPort), fDomeStick);
 #elif DOME_DRIVE == DOME_DRIVE_PWM
   fDomeDrive = new DomeDrivePWM(servoDispatch, 3, fDomeStick);
 #elif DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-  // Explicit pins required: ESP32-S3 UART1 has no hardware-fixed pins and
-  // will not default to GPIO17/18 without them. DomeDriveRoboClaw::setup()
-  // re-begin()s this same port later (dome_drive_roboclaw.cpp) without pin
-  // args, which is fine -- the ESP32 Arduino core keeps a UART's
-  // already-attached pins across a re-begin() that doesn't specify new ones.
-  ROBOCLAW_SERIAL.begin(ROBOCLAW_BAUD_RATE, SERIAL_8N1, ROBOCLAW_RX_PIN, ROBOCLAW_TX_PIN);
-  fDomeDrive = new DomeDriveRoboClaw(ROBOCLAW_SERIAL,
+  // DomeDriveRoboClaw::setup() re-begin()s this same port later
+  // (dome_drive_roboclaw.cpp) without pin args, which is fine -- the ESP32
+  // Arduino core keeps a UART's already-attached pins across a re-begin()
+  // that doesn't specify new ones.
+  beginSerialPort(params.domeSerialPort, ROBOCLAW_BAUD_RATE);
+  fDomeDrive = new DomeDriveRoboClaw(resolveSerialPort(params.domeSerialPort),
                                      DEFAULT_DOME_ROBOCLAW_ADDRESS,
                                      DEFAULT_DOME_ROBOCLAW_CHANNEL,
                                      DOME_HALL_PIN,

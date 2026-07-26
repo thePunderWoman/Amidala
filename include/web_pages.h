@@ -174,6 +174,10 @@ footer a:hover{opacity:1;}
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1.5"/><line x1="9" y1="3" x2="9" y2="7"/><line x1="15" y1="3" x2="15" y2="7"/><line x1="9" y1="17" x2="9" y2="21"/><line x1="15" y1="17" x2="15" y2="21"/><line x1="3" y1="9" x2="7" y2="9"/><line x1="3" y1="15" x2="7" y2="15"/><line x1="17" y1="9" x2="21" y2="9"/><line x1="17" y1="15" x2="21" y2="15"/></svg>
       <div><div class="name">Pins</div><div class="sub">GPIO assignment</div></div>
     </a>
+    <a class="card" href="/config/serial-ports">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="8" height="6" rx="1.5"/><rect x="3" y="14" width="8" height="6" rx="1.5"/><path d="M11 7 h4 a3 3 0 0 1 3 3 v4 a3 3 0 0 0 3 3 h1"/></svg>
+      <div><div class="name">Serial Ports</div><div class="sub">Dome · drive assignment</div></div>
+    </a>
     <a class="card" href="/config/connectivity">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 10.5 a10 10 0 0 1 14 0"/><path d="M8 13.5 a6 6 0 0 1 8 0"/><circle cx="12" cy="16.8" r="1.2" fill="var(--accent)" stroke="none"/><line x1="12" y1="16.8" x2="7" y2="5"/><line x1="12" y1="16.8" x2="17" y2="5"/></svg>
       <div><div class="name">Connectivity</div><div class="sub">XBee · WiFi · Bluetooth</div></div>
@@ -1050,7 +1054,8 @@ var SCHEMA = [
     {v:'13', l:'CR (\\r)'},
     {v:'0',  l:'CRLF (\\r\\n)'}
   ]},
-  {key:'auxserial3', label:'Aux Serial 3 (Software Serial)', type:'bool', restart:true},
+  {key:'auxserial3', label:'Enable Serial 3 (GPIO21/38)', type:'bool', restart:true,
+    note:'Real hardware UART2, not software serial. Force it on even if neither the dome nor drive system claims it — see Serial Ports.'},
   {section:'I²C'},
   {key:'myi2c',      label:"This Board's Address",           type:'number', min:0, max:100}
 ];
@@ -9804,6 +9809,853 @@ fetch('/api/config').then(function(r) { return r.json(); }).then(function(d) {
 </html>
 )html";
 
+static const char WEB_PAGE_SERIAL_PORTS[] = R"html(<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Serial Ports — AMIDALA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Amidala web UI — shared styles.
+   Embed script inlines this into every page's <style> block.
+   In dev mode (scripts/web_dev.py) it's served as a real file from /assets/common.css. */
+
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+
+:root {
+  --accent:      #8f2d3b;
+  --bg:          #e9edf1;
+  --surface:     #ffffff;
+  --surface2:    #f4f7f9;
+  --border:      #dce3e9;
+  --text:        #2b333b;
+  --muted:       #707b85;
+  --danger:      #a8323a;
+  --danger-soft: rgba(168,50,58,.08);
+  --tex:         rgba(43,51,59,.07);
+  --glow:        rgba(143,45,59,.10);
+  /* legacy aliases — pages referencing --gold / --dim / --fg still work */
+  --gold: var(--accent);
+  --dim:  var(--muted);
+  --fg:   var(--text);
+}
+
+body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(120% 62% at 50% -12%, var(--glow), transparent 58%),
+    radial-gradient(var(--tex) .9px, transparent 1.2px),
+    radial-gradient(var(--tex) .9px, transparent 1.2px);
+  background-size: auto, 14px 14px, 23px 23px;
+  background-position: center top, 0 0, 7px 11px;
+  color: var(--text);
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100vh;
+  padding: 24px 22px 80px;
+}
+
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: inherit; }
+.hidden { display: none !important; }
+[hidden] { display: none !important; }
+
+/* ---- page shell ---- */
+
+.page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 4px 0 18px; border-bottom: 1px solid var(--border);
+  max-width: 820px; margin: 0 auto;
+}
+
+.back {
+  display: inline-flex; align-items: center; gap: 8px;
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .18em; color: var(--muted); transition: color .15s;
+  flex-shrink: 0; white-space: nowrap;
+}
+.back:hover { color: var(--accent); }
+
+.page-title {
+  display: flex; align-items: center; gap: 13px;
+}
+.page-title .dot {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+  display: inline-block; flex-shrink: 0;
+}
+.page-title .label {
+  font: 600 20px/1 'Cormorant Garamond', Georgia, serif;
+  letter-spacing: .16em; color: var(--text); text-transform: uppercase;
+}
+
+main {
+  max-width: 820px; margin: 0 auto; padding-top: 28px;
+}
+
+#status {
+  text-align: center; padding: 2rem; color: var(--muted);
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: .2em;
+}
+
+/* ---- section labels ---- */
+
+.section-label {
+  margin: 26px 0 4px; border-bottom: 1px solid var(--border); padding-bottom: 10px;
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .22em; text-transform: uppercase; color: var(--muted);
+}
+
+/* ---- settings rows ---- */
+
+.row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--border);
+}
+.row-label {
+  font: 400 15px/1.3 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: var(--text); flex: 1;
+}
+.rv {
+  font: 500 14px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  color: var(--accent);
+}
+.ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.ri input, .ri select {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); padding: .3rem .5rem; border-radius: 4px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: .82rem;
+  min-width: 80px;
+}
+.ri input:focus, .ri select:focus { outline: none; border-color: var(--accent); }
+
+/* edit / save / cancel */
+.be {
+  background: none; border: none; padding: 4px; color: var(--muted);
+  cursor: pointer; display: flex; align-items: center;
+  opacity: .7; transition: opacity .15s, color .15s; flex-shrink: 0;
+}
+.be:hover { opacity: 1; color: var(--accent); }
+.bs {
+  background: var(--accent); border: none; border-radius: 4px;
+  padding: 5px 12px; font: 600 10px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .1em; color: #fff; cursor: pointer;
+  flex-shrink: 0; transition: opacity .15s;
+}
+.bs:hover { opacity: .85; }
+.bc {
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  padding: 4px 10px; font: 500 10px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  color: var(--muted); cursor: pointer; flex-shrink: 0; transition: border-color .15s;
+}
+.bc:hover { border-color: var(--muted); }
+
+/* action-type row button */
+.be-action {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+  padding: 6px 16px; font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .1em; color: var(--text); cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.be-action:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- tabs (used on controllers + droid-control) ---- */
+
+.tabs {
+  display: flex; border-bottom: 1px solid var(--border);
+  max-width: 820px; margin: 0 auto;
+}
+.tab {
+  flex: 1; background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--muted); font-family: inherit; font-size: .72rem;
+  letter-spacing: .1em; text-transform: uppercase; padding: .85rem 1rem; cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ---- toast ---- */
+
+.toast {
+  position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); padding: .55rem 1.4rem;
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: .08em;
+  pointer-events: none; white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(30,45,55,.12);
+  animation: _tfi .15s ease, _tfo .3s 1.9s ease forwards; z-index: 9999;
+}
+.toast-err { border-color: var(--danger); color: var(--danger); }
+@keyframes _tfi {
+  from { opacity:0; transform:translateX(-50%) translateY(6px) }
+  to   { opacity:1; transform:translateX(-50%) translateY(0) }
+}
+@keyframes _tfo { from{opacity:1} to{opacity:0} }
+
+/* ---- E-Stop (injected into page-header by edit.js) ---- */
+
+#estop {
+  display: inline-flex; align-items: center; gap: 9px;
+  background: var(--danger-soft); border: 1px solid var(--danger); border-radius: 6px;
+  padding: 8px 14px; font: 600 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .2em; color: var(--danger); cursor: pointer;
+  transition: background .15s, color .15s; flex-shrink: 0;
+}
+#estop:hover { background: var(--danger); color: #fff; }
+#estop .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: inline-block; }
+
+/* ---- shared page utilities ---- */
+
+.info-banner {
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--muted); padding: .7rem 1rem; font-size: .75rem;
+  line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
+}
+
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
+/* sub-section heading used in droid-control + controllers */
+.sec-hdr {
+  font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--muted); padding: .55rem 0 .35rem;
+  border-bottom: 1px solid var(--border); margin: .6rem 0 0;
+}
+.sub-hdr {
+  font-size: .65rem; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); padding: .4rem 0 .25rem;
+  border-bottom: 1px solid var(--border); margin: .6rem 0 0;
+}
+
+/* touch-control buttons */
+.dc-btn, .angle-btn, .grid-btn {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); padding: .85rem .5rem; border-radius: 4px;
+  cursor: pointer; font-size: .88rem; text-align: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .12s, border-color .12s;
+}
+.dc-btn:hover, .dc-btn:active,
+.angle-btn:hover, .angle-btn:active,
+.grid-btn:hover, .grid-btn:active { background: var(--surface2); border-color: var(--accent); }
+.grid-btn { line-height: 1.3; min-height: 3.5rem; }
+.grid-btn.full { grid-column: 1/-1; }
+
+/* ---- footer (injected by edit.js on sub-pages) ---- */
+
+footer {
+  max-width: 820px; margin: 48px auto 0; padding-bottom: 32px;
+  text-align: center;
+  font: 500 10px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .24em; color: var(--muted); opacity: .7;
+}
+footer a {
+  color: inherit; text-decoration: none;
+  border-bottom: 1px solid currentColor; padding-bottom: 1px;
+  transition: opacity .15s;
+}
+footer a:hover { opacity: 1; }
+
+/* ---- dark mode (colors from design system renderVals()) ---- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --accent:      #cf6470;
+    --bg:          #0f1216;
+    --surface:     #161b21;
+    --surface2:    #1c232a;
+    --border:      #283139;
+    --text:        #e7ecf0;
+    --muted:       #828e98;
+    --danger:      #d05b63;
+    --danger-soft: rgba(208,91,99,.14);
+    --tex:         rgba(231,236,240,.06);
+    --glow:        rgba(207,100,112,.17);
+  }
+}
+:root[data-theme="dark"] {
+  --accent:      #cf6470;
+  --bg:          #0f1216;
+  --surface:     #161b21;
+  --surface2:    #1c232a;
+  --border:      #283139;
+  --text:        #e7ecf0;
+  --muted:       #828e98;
+  --danger:      #d05b63;
+  --danger-soft: rgba(208,91,99,.14);
+  --tex:         rgba(231,236,240,.06);
+  --glow:        rgba(207,100,112,.17);
+}
+
+/* ---- right header group (theme toggle + e-stop, injected by edit.js) ---- */
+.hdr-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* ---- theme toggle button ---- */
+#theme-toggle {
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  padding: 5px 9px; color: var(--muted); cursor: pointer; flex-shrink: 0;
+  font-size: .85rem; line-height: 1; transition: border-color .15s, color .15s;
+}
+#theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+<script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; BACK</a>
+  <div class="page-title"><span class="dot"></span><span class="label">Serial Ports</span><span class="dot"></span></div>
+</div>
+<main>
+  <div id="status">LOADING&#8230;</div>
+</main>
+<script>
+/* Amidala web UI — edit-in-place widget + shared config page helpers.
+   Embed script inlines this into every config sub-page.
+   In dev mode (scripts/web_dev.py) it's served as /assets/edit.js. */
+
+// ----------------------------------------------------------------- theme ----
+
+function _toggleTheme() {
+  var t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem('amidala-theme', t);
+  var btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = t === 'dark' ? '☀' : '☾';
+}
+
+// ------------------------------------------------------------------ toast ---
+
+function showToast(msg, isErr) {
+  var t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' toast-err' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
+}
+
+// -------------------------------------------------------- edit-in-place -----
+
+function startEdit(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
+  row.querySelector('.rv').hidden = true;
+  row.querySelector('.ri').hidden = false;
+  btn.hidden = true;
+  row.querySelector('.bs').hidden = false;
+  row.querySelector('.bc').hidden = false;
+}
+
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
+  row.querySelector('.rv').hidden = false;
+  row.querySelector('.ri').hidden = true;
+  row.querySelector('.be').hidden = false;
+  row.querySelector('.bs').hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
+}
+
+async function doSave(btn) {
+  var row = btn.closest('.row');
+  var key = row.dataset.key;
+  var rt  = row.dataset.type;
+  var inp = row.querySelector('input,select');
+  var val = inp.value;
+  var prev = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
+  try {
+    var r = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'key=' + encodeURIComponent(key) + '&value=' + encodeURIComponent(val)
+    });
+    if (r.ok) {
+      var dv = row.querySelector('.rv');
+      if (rt === 'bool' || rt === 'select') {
+        var sel = row.querySelector('select');
+        dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
+      } else if (rt === 'password') {
+        dv.textContent = '••••••••';
+      } else {
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
+      }
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      _refreshDynamicOptions();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
+      showToast('Saved');
+    } else {
+      showToast('Save failed: ' + await r.text(), true);
+    }
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+// ------------------------------------------------ schema-driven row builder --
+
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
+function dispValue(s, val) {
+  if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
+  if (s.type === 'select') {
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
+    return found ? found.l : val;
+  }
+  if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
+  return String(val);
+}
+
+function buildInput(s, val) {
+  if (s.type === 'bool') {
+    return '<select>'
+      + '<option value="y"' + (val === 'y' ? ' selected' : '') + '>On</option>'
+      + '<option value="n"' + (val === 'n' ? ' selected' : '') + '>Off</option>'
+      + '</select>';
+  }
+  if (s.type === 'select') {
+    var opts = _resolveOptions(s).map(function(op) {
+      return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
+    }).join('');
+    return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
+  }
+  if (s.type === 'number') {
+    return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
+  }
+  if (s.type === 'password') {
+    return '<input type="password" value="' + val + '" maxlength="' + (s.maxlength || 64) + '">';
+  }
+  return '<input type="text" value="' + val + '"' + (s.maxlength ? ' maxlength="' + s.maxlength + '"' : '') + '>';
+}
+
+async function doAction(btn) {
+  var cmd      = btn.dataset.cmd;
+  var endpoint = btn.dataset.endpoint || '/api/monitor';
+  var prev = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
+  try {
+    var r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'cmd=' + encodeURIComponent(cmd)
+    });
+    showToast(r.ok ? 'Sent' : 'Failed', !r.ok);
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
+
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
+  if (s.type === 'action') {
+    return '<div class="row"' + hiddenAttr + '>'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
+      + (s.btnLabel || 'Send') + '</button>'
+      + '</div>';
+  }
+  var disp = dispValue(s, val);
+  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  if (s.readOnly) {
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<div class="rv">' + disp + '</div>'
+      + '</div>';
+  }
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+    + '<div class="row-label">' + s.label + '</div>'
+    + '<div class="rv">' + disp + '</div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
+    + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + '</div>';
+}
+
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var hdr = document.querySelector('.page-header');
+
+  // right-side group keeps the header at 3 flex children: [BACK] [TITLE] [GROUP]
+  var rg = document.createElement('div');
+  rg.className = 'hdr-right';
+
+  // theme toggle
+  var tt = document.createElement('button');
+  tt.id = 'theme-toggle';
+  tt.title = 'Toggle dark / light mode';
+  tt.textContent = document.documentElement.dataset.theme === 'dark' ? '☀' : '☾';
+  tt.onclick = _toggleTheme;
+  rg.appendChild(tt);
+
+  // e-stop
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.innerHTML = '<span class="dot"></span>E-STOP';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  rg.appendChild(b);
+
+  if (hdr) hdr.appendChild(rg);
+  else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
+// --------------------------------------------------------------- footer -------
+
+(function() {
+  if (location.pathname.indexOf('monitor') !== -1) return;
+  var f = document.createElement('footer');
+  f.innerHTML = '<a href="https://github.com/thePunderWoman/Amidala/wiki" target="_blank" rel="noopener">DOCUMENTATION</a>';
+  document.body.appendChild(f);
+})();
+
+// ------------------------------------------------- hash-based tab nav --------
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
+
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
+function buildPage(SCHEMA, endpoint, callback) {
+  fetch(endpoint)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
+      var html = '';
+      var sectionSkip = false;
+      SCHEMA.forEach(function(s) {
+        if (s.section) {
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
+          return;
+        }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
+        var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
+        html += buildRow(s, val, rowHidden);
+      });
+      document.querySelector('main').innerHTML = html;
+      if (callback) callback(d);
+    })
+    .catch(function() {
+      var el = document.getElementById('status');
+      if (el) el.textContent = 'Failed to load settings.';
+    });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
+  });
+}
+</script>
+<script>
+// Reassigns which physical UART (issue #147) each serial-consuming
+// subsystem's link uses -- e.g. "move the RoboClaw dome link from Serial 3
+// to Serial 2" -- not a general "any port, any protocol" tool. Only the two
+// ports the firmware can already open (Serial 2 / Serial 3, silkscreen
+// numbering -- see below) are reassignable; Serial 1 (the fixed WCB/body-
+// controller main-out path) has its own destination toggle on the
+// Connectivity page and I2C is fixed. Hand-built (like pins.html) rather
+// than schema-driven, since each row's visibility and the OTHER row's
+// current value both depend on live server state.
+//
+// Silkscreen vs. firmware numbering: the physical header printed "Serial 2"
+// on this board is what the firmware/config keys call "Serial1"
+// (domeserialport=serial1/driveserialport=serial1), and the header printed
+// "Serial 3" is the firmware's "Serial2"/AUX_SERIAL. Labels below use the
+// silkscreen numbers a builder actually sees next to the pins they're
+// wiring; the config value strings ("serial1"/"serial2") are an internal
+// wire format shared with config.txt/serial_assignment.h and intentionally
+// don't change to match.
+
+var PORT_LABELS = {serial1: 'Serial 2 (GPIO17/18)', serial2: 'Serial 3 (GPIO21/38)'};
+
+function domeNeedsSerial(d) { return d.domehw === 'roboclaw' || d.domehw === 'saber'; }
+function driveNeedsSerial(d) {
+  return d.drivehw === 'sabertooth' || d.drivehw === 'roboteq-serial' || d.drivehw === 'roboteq-pwm-serial';
+}
+
+// domehw's "saber" value covers both Sabertooth (common on foot drives) and
+// Syren10 (its single-channel sibling, protocol-compatible -- the usual
+// choice for a dome since only one motor channel is needed there). Label it
+// accordingly so the dome row doesn't read as if only Sabertooth is supported.
+function domeLabel(d) {
+  return d.domehw === 'saber' ? 'Dome Drive Serial Port (Sabertooth / Syren10)' : 'Dome Drive Serial Port';
+}
+
+// otherActive: whether the OTHER consumer actually needs a serial port on
+// this build -- its stored port value is otherwise inert (e.g. drivehw
+// 'roboteq-pwm' needs no serial link at all, so driveserialport is just a
+// leftover default with nothing real behind it) and must NOT be labeled as
+// "in use" against the row being rendered here.
+function portOptions(otherKey, otherLabel, otherActive, d) {
+  return ['serial1', 'serial2'].map(function(v) {
+    var l = PORT_LABELS[v];
+    if (otherActive && d[otherKey] === v) l += ' — in use by ' + otherLabel;
+    return {v: v, l: l};
+  });
+}
+
+function domeRow(d) {
+  return buildRow({key: 'domeserialport', label: domeLabel(d), type: 'select',
+                   options: function(cd) { return portOptions('driveserialport', 'Drive', driveNeedsSerial(cd), cd); },
+                   restart: true}, d.domeserialport);
+}
+
+function driveRow(d) {
+  return buildRow({key: 'driveserialport', label: 'Drive Serial Port', type: 'select',
+                   options: function(cd) { return portOptions('domeserialport', 'Dome', domeNeedsSerial(cd), cd); },
+                   restart: true}, d.driveserialport);
+}
+
+function render() {
+  var d = _configData;
+  var rows = '';
+  if (domeNeedsSerial(d)) rows += domeRow(d);
+  if (driveNeedsSerial(d)) rows += driveRow(d);
+  if (!rows) {
+    rows = '<div class="row"><div class="row-label" style="color:var(--muted)">'
+         + 'No reassignable serial ports on this build — neither the dome nor drive system uses a serial link.'
+         + '</div></div>';
+  }
+  document.querySelector('main').innerHTML =
+    '<div class="section-label">Serial Ports</div>' + rows
+    + '<div class="section-label" style="margin-top:1.2rem">About</div>'
+    + '<div class="row"><div class="row-label" style="color:var(--muted);font-size:.8rem;line-height:1.5;font-weight:400">'
+    + 'Serial 1 (fixed) always carries the main serial-out / WCB mesh path — see Connectivity. '
+    + 'Serial 2 and Serial 3 above are the two ports available to split between the dome and drive links; '
+    + 'each can only be claimed by one of them at a time.'
+    + '</div></div>';
+}
+
+// Re-render after a successful save so the OTHER row's "in use by ..." label
+// reflects the just-changed value immediately, without a full page reload --
+// same reasoning as pins.html's renderUsage() hook.
+window._onConfigSaved = function(key) {
+  if (key === 'domeserialport' || key === 'driveserialport') render();
+};
+
+fetch('/api/config').then(function(r) { return r.json(); }).then(function(d) {
+  _configData = d;
+  render();
+}).catch(function() {
+  document.getElementById('status').textContent = 'Failed to load settings.';
+});
+</script>
+</body>
+</html>
+)html";
+
 static const char WEB_PAGE_CONTROLLERS[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -13349,8 +14201,8 @@ main{flex:1;display:flex;flex-direction:column;min-height:0;max-width:none;margi
     <span class="tsep"></span>
     <button class="tbtn on" id="f-LOG" onclick="toggleFilter('LOG')" title="LOG — Amidala's own console output (boot, config dumps, command replies)">LOG</button>
     <button class="tbtn on" id="f-S0" onclick="toggleFilter('S0')" title="S0 — WCB/body controller serial. Also a Send destination.">S0</button>
-    <button class="tbtn on" id="f-S1" onclick="toggleFilter('S1')" title="S1 — auxiliary" hidden>S1</button>
-    <button class="tbtn on" id="f-S2" onclick="toggleFilter('S2')" title="S2 — auxiliary serial. Also a Send destination." hidden>S2</button>
+    <button class="tbtn on" id="f-S1" onclick="toggleFilter('S1')" title="S1 — Serial 2 header (GPIO17/18)" hidden>S1</button>
+    <button class="tbtn on" id="f-S2" onclick="toggleFilter('S2')" title="S2 — Serial 3 header (GPIO21/38). Also a Send destination." hidden>S2</button>
     <button class="tbtn on" id="f-WCB" onclick="toggleFilter('WCB')" title="WCB — mesh network. Also a Send destination." hidden>WCB</button>
     <span class="tsep"></span>
     <button class="tbtn" id="pbtn" onclick="togglePause()">Pause</button>
@@ -13807,11 +14659,12 @@ var _autoScroll = true;
 var _entries  = [];   // all received entries: [{t: text, c: cls}, ...]
 var _filters  = { tx: true, rx: false, LOG: true, S0: true, S1: true, S2: true, WCB: true };
 // Which toggled-on ports Send actually transmits to. S0 is always eligible
-// (the WCB/body controller UART -- always live). S1 is the RoboClaw dome
-// drive's own binary packet-serial link when that dome variant is built --
-// writing arbitrary text into it could corrupt a motor command mid-packet,
-// so it's excluded unless /api/info confirms a non-RoboClaw dome (or none).
-// S2/WCB are already hidden entirely unless enabled (see checks below), so
+// (the WCB/body controller UART -- always live). S1/S2 are the two
+// reassignable serial ports (issue #147) -- whichever of them is currently
+// claimed by a binary packet-serial protocol (RoboClaw/Sabertooth/Roboteq-
+// serial, per /api/info's serial1_role/serial2_role) is excluded, since
+// writing arbitrary text into it could corrupt a motor command mid-packet.
+// S2/WCB are already hidden entirely unless eligible (see checks below), so
 // they don't need a separate eligibility flag here.
 var _sendEligible = { S0: true, S1: false };
 
@@ -13983,28 +14836,25 @@ fetch('/api/wcb/status').then(function(r) { return r.ok ? r.json() : null; }).th
   }
 }).catch(function() {});
 
-// S2 (AUX_SERIAL) is a runtime-optional port -- only show/send to it once
-// auxserial3 is actually enabled in General settings, same reasoning as WCB.
-fetch('/api/config').then(function(r) { return r.ok ? r.json() : null; }).then(function(d) {
-  if (d && d.auxserial3 === 'y') {
-    var btn = document.getElementById('f-S2');
-    if (btn) btn.hidden = false;
-  }
-}).catch(function() {});
-
-// S1 only exists as a monitor/Send target when it isn't the RoboClaw dome
-// drive's own binary packet-serial link on this build -- when it is,
-// wifi_ap.cpp compiles out S1's RX tap entirely (see ROBOCLAW_SERIAL), so
-// the filter button would just sit there and never show any traffic.
-// /api/info's "dome" field reflects the compiled-in DOME_DRIVE variant.
+// S1/S2 visibility and Send-eligibility both derive from which role (issue
+// #147) is actually resolved onto each port right now -- see /api/info's
+// serial1_role/serial2_role (wifi_ap.cpp's portCarriesBinaryProtocol()).
+// A "roboclaw"/"sabertooth"/"roboteq-serial" role means that port carries a
+// binary packet-serial protocol -- writing/reading arbitrary text there
+// could corrupt or steal bytes from a motor command, so it stays hidden.
+// S1 has no "force on anyway" toggle, so "unused" is its only eligible
+// state; S2's "aux" role only appears when auxserial3 is on AND nothing
+// else has claimed it (see wifi_ap.cpp's handleApiInfo()).
 fetch('/api/info').then(function(r) { return r.ok ? r.json() : null; }).then(function(d) {
-  if (d && d.dome !== 'roboclaw') {
+  if (!d) return;
+  if (d.serial1_role === 'unused') {
     _sendEligible.S1 = true;
-    var btn = document.getElementById('f-S1');
-    if (btn) {
-      btn.hidden = false;
-      btn.title = 'S1 — auxiliary. Also a Send destination.';
-    }
+    var s1 = document.getElementById('f-S1');
+    if (s1) s1.hidden = false;
+  }
+  if (d.serial2_role === 'aux') {
+    var s2 = document.getElementById('f-S2');
+    if (s2) s2.hidden = false;
   }
 }).catch(function() {});
 

@@ -138,6 +138,8 @@ inline bool ensureConfigDefaults(const AmidalaParameters& params) {
         {"pin41role=",      String(pinRoleToString(params.pinRole[8]))},
         {"pin42role=",      String(pinRoleToString(params.pinRole[9]))},
         {"pin47role=",      String(pinRoleToString(params.pinRole[10]))},
+        {"domeserialport=",  String(serialPortToString(params.domeSerialPort))},
+        {"driveserialport=", String(serialPortToString(params.driveSerialPort))},
     };
     constexpr unsigned kNumKeys = sizeof(keys) / sizeof(keys[0]);
 

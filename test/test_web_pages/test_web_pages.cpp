@@ -246,11 +246,14 @@ void test_monitor_page_has_wcb_filter_gated_on_status() {
 // Regression: the S1 filter button used to be shown unconditionally even
 // though wifi_ap.cpp compiles out S1's RX tap entirely when the RoboClaw
 // dome drive is active (ROBOCLAW_SERIAL), so the button sat there and never
-// showed any traffic. It must start hidden like S2/WCB and only be
-// unhidden once /api/info confirms a non-RoboClaw dome.
+// showed any traffic. It must start hidden like S2/WCB and only be unhidden
+// once /api/info's serial1_role (issue #147 -- the port a binary protocol
+// actually occupies is now a runtime fact, not implied by the compiled dome
+// variant alone) confirms nothing has claimed it.
 void test_monitor_page_s1_filter_gated_on_dome_variant() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "id=\"f-S1\" onclick=\"toggleFilter('S1')\" title=\"S1 — auxiliary\" hidden"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "d.dome !== 'roboclaw'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR,
+        "id=\"f-S1\" onclick=\"toggleFilter('S1')\" title=\"S1 — Serial 2 header (GPIO17/18)\" hidden"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "d.serial1_role === 'unused'"));
 }
 
 // Amidala's own console output (boot banner, config dumps, command replies --

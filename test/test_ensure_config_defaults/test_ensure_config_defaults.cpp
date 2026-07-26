@@ -61,6 +61,12 @@ static AmidalaParameters makeParams() {
     p.pinRole[8]  = PinRoleType::kHall;    // 41
     p.pinRole[9]  = PinRoleType::kServo;   // 42
     p.pinRole[10] = PinRoleType::kDout;    // 47
+    // Distinct from defaultSerialPorts() (which would give Serial1/Serial2
+    // on this default RoboClaw-dome build) so tests can confirm
+    // ensureConfigDefaults() writes the CURRENT in-memory port, not the
+    // compiled-in default.
+    p.domeSerialPort = SerialPortId::kSerial2;
+    p.driveSerialPort = SerialPortId::kSerial1;
     return p;
 }
 
@@ -85,7 +91,8 @@ void test_no_change_when_all_keys_present() {
         "mutebutton=0\nb9=n\ndbtimeout=300\n"
         "pin1role=servo\npin2role=dout\npin3role=analog\npin4role=analog\n"
         "pin5role=dout\npin6role=servo\npin39role=servo\npin40role=dout\n"
-        "pin41role=hall\npin42role=servo\npin47role=dout\n";
+        "pin41role=hall\npin42role=servo\npin47role=dout\n"
+        "domeserialport=serial2\ndriveserialport=serial1\n";
     seedFile(full);
     AmidalaParameters p = makeParams();
     TEST_ASSERT_TRUE(ensureConfigDefaults(p));
@@ -176,6 +183,8 @@ void test_appends_all_when_file_has_none_of_the_keys() {
     TEST_ASSERT_TRUE(got.find("pin41role=hall") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("pin42role=servo") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("pin47role=dout") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("domeserialport=serial2") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("driveserialport=serial1") != std::string::npos);
 }
 
 // ---------------------------------------------------------------------------

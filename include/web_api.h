@@ -38,9 +38,13 @@ inline String buildInfoJson(const char* drive, const char* dome,
                              uint8_t sstrUsed = 0, uint32_t freeHeap = 0,
                              bool xbeeDrive = false, bool xbeeDome = false,
                              bool btConnected = false,
-                             bool domeHomed = false, int domeDegrees = 0) {
+                             bool domeHomed = false, int domeDegrees = 0,
+                             const char* serial1Role = nullptr,
+                             const char* serial2Role = nullptr) {
     String driveVal = drive ? (String("\"") + drive + "\"") : String("null");
     String domeVal  = dome  ? (String("\"") + dome  + "\"") : String("null");
+    String serial1Val = serial1Role ? (String("\"") + serial1Role + "\"") : String("null");
+    String serial2Val = serial2Role ? (String("\"") + serial2Role + "\"") : String("null");
 
     String json = "{";
     json += "\"version\":\""   FIRMWARE_VERSION "\",";
@@ -58,7 +62,14 @@ inline String buildInfoJson(const char* drive, const char* dome,
     json += "\"xbee_dome\":"   + String(xbeeDome   ? "true" : "false") + ",";
     json += "\"bt_connected\":" + String(btConnected ? "true" : "false") + ",";
     json += "\"dome_homed\":"  + String(domeHomed  ? "true" : "false") + ",";
-    json += "\"dome_degrees\":" + String(domeDegrees);
+    json += "\"dome_degrees\":" + String(domeDegrees) + ",";
+    // Which role (issue #147) is actually resolved onto each reassignable
+    // physical port in the CURRENT config -- one of "roboclaw"/"roboteq"/
+    // "sabertooth"/"aux"/"unused". Lets the Serial Monitor page (and any
+    // other UI) adapt to reassignment instead of assuming a fixed
+    // port-to-role mapping from the compiled drive/dome type alone.
+    json += "\"serial1_role\":" + serial1Val + ",";
+    json += "\"serial2_role\":" + serial2Val;
     json += "}";
     return json;
 }
@@ -212,6 +223,21 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     json += "\"domehw\":\"pwm\",";
 #else
     json += "\"domehw\":\"analog\",";
+#endif
+
+    // Drive hardware type (compile-time, exposed for UI gating) -- mirrors
+    // domehw above. Used by the Serial Ports config page to decide whether
+    // the drive system consumes a serial port at all in this build.
+#if DRIVE_SYSTEM == DRIVE_SYSTEM_SABER
+    json += "\"drivehw\":\"sabertooth\",";
+#elif DRIVE_SYSTEM == DRIVE_SYSTEM_PWM
+    json += "\"drivehw\":\"pwm\",";
+#elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM
+    json += "\"drivehw\":\"roboteq-pwm\",";
+#elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_SERIAL
+    json += "\"drivehw\":\"roboteq-serial\",";
+#elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM_SERIAL
+    json += "\"drivehw\":\"roboteq-pwm-serial\",";
 #endif
 
     // Sound banks — only meaningful for VMusic; always emitted so UI can gate on audiohw
@@ -369,6 +395,16 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
         }
     }
     json += "]";
+
+    // Reassignable dome/drive serial ports (issue #147). Only meaningful
+    // when domehw/drivehw (above) indicate this build's dome/drive actually
+    // consumes a serial port -- always emitted regardless so config.txt
+    // stays portable across builds (same reasoning as pinRoles above).
+    json += ",\"domeserialport\":\"";
+    json += String(serialPortToString(p.domeSerialPort));
+    json += "\",\"driveserialport\":\"";
+    json += String(serialPortToString(p.driveSerialPort));
+    json += "\"";
 
     json += "}";
     return json;
