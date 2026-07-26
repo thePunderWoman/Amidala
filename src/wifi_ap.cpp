@@ -41,6 +41,13 @@ static uint8_t            sUserSerialCount = 0;
 // Gadget configuration
 // ---------------------------------------------------------------------------
 
+// mDNS hostname -- deliberately independent of params.wifiSSID. MDNS.begin()
+// used to be passed the AP's SSID directly, so renaming the WiFi network
+// silently renamed the mDNS address too (http://amidala.local only worked
+// if the SSID happened to still be "amidala"). The URL people actually type
+// should stay stable regardless of what the AP is named.
+static const char* kMdnsHostname = "amidala";
+
 static const uint8_t GADGET_COUNT   = 7;
 static const uint8_t GADGET_DISABLED = 0;
 static const uint8_t GADGET_ENABLED  = 1;
@@ -1584,6 +1591,16 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     Serial.print(F("\" @ "));
     Serial.print(ip);
     Serial.printf(" (softAP()=%s)\n", apOk ? "ok" : "FAILED");
+    {
+        // This whole block previously only went to the physical serial port
+        // -- with no laptop plugged in at a show, there was no way to tell
+        // after the fact whether the AP or mDNS actually came up. Mirror it
+        // to the web Monitor page too.
+        char buf[MON_LINE_LEN];
+        snprintf(buf, sizeof(buf), "WiFi AP \"%s\" @ %s (softAP()=%s)",
+                 ssid, ip.toString().c_str(), apOk ? "ok" : "FAILED");
+        monAppend(buf, 'i');
+    }
 
     wifi_config_t apConf;
     if (esp_wifi_get_config(WIFI_IF_AP, &apConf) == ESP_OK) {
@@ -1593,10 +1610,28 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
         );
     }
 
-    // mDNS: advertise <ssid>.local
-    if (MDNS.begin(ssid)) {
+    // mDNS: always advertise http://amidala.local, regardless of the AP's
+    // configured SSID (see kMdnsHostname above). ESP32 SoftAP multicast
+    // delivery to stations is known to be unreliable (client WiFi power-save
+    // can delay multicast frames until the next DTIM beacon, and some OSes
+    // just don't attempt <name>.local resolution on a network with no
+    // internet route) -- the IP address logged above always works and is
+    // the reliable fallback. This just makes sure we can tell, after the
+    // fact, whether MDNS.begin() itself ever actually started rather than
+    // the resolution simply not reaching the client.
+    if (MDNS.begin(kMdnsHostname)) {
         MDNS.addService("http", "tcp", 80);
-        Serial.printf("[WiFi] mDNS: http://%s.local\n", ssid);
+        Serial.printf("[WiFi] mDNS: http://%s.local\n", kMdnsHostname);
+        char buf[MON_LINE_LEN];
+        snprintf(buf, sizeof(buf), "mDNS started: http://%s.local (or use http://%s)",
+                 kMdnsHostname, ip.toString().c_str());
+        monAppend(buf, 'i');
+    } else {
+        Serial.println(F("[WiFi] mDNS: FAILED to start"));
+        char buf[MON_LINE_LEN];
+        snprintf(buf, sizeof(buf), "mDNS FAILED to start -- use http://%s instead",
+                 ip.toString().c_str());
+        monAppend(buf, 'i');
     }
 
     // Pages
