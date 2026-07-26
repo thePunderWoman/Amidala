@@ -116,6 +116,13 @@ def parse_example_config(path):
         "minpulse":      1000,
         "maxpulse":      2000,
         "domehw":        "roboclaw",
+        "drivehw":       "roboteq-pwm",
+        # Reassignable dome/drive serial ports (issue #147) -- mirrors
+        # params.h's defaultSerialPorts(): RoboClaw dome defaults to Serial1,
+        # driveSerialPort still gets a deterministic (if inert, since
+        # roboteq-pwm needs no serial port) default of Serial2.
+        "domeserialport":  "serial1",
+        "driveserialport": "serial2",
         # Reassignable GPIO pin roles (issue #133) -- mirrors params.h's
         # defaultPinRoles() and pin_assignment.h's kAssignablePins.
         # assignablePins is a fixed pool, not config.txt-driven; pinRoles is
@@ -336,6 +343,11 @@ _info = {
     "bt_connected": True,
     "dome_homed":   True,
     "dome_degrees": 127,
+    # Which role (issue #147) actually occupies each reassignable physical
+    # port -- mirrors wifi_ap.cpp's handleApiInfo() for the default build
+    # (RoboClaw dome on Serial1, Roboteq-PWM drive needs no serial port).
+    "serial1_role": "roboclaw",
+    "serial2_role": "unused",
 }
 
 _bt_state = {

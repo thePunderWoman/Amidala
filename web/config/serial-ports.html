@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Serial Ports — AMIDALA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/common.css">
+<script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; BACK</a>
+  <div class="page-title"><span class="dot"></span><span class="label">Serial Ports</span><span class="dot"></span></div>
+</div>
+<main>
+  <div id="status">LOADING&#8230;</div>
+</main>
+<script src="/assets/edit.js"></script>
+<script>
+// Reassigns which physical UART (issue #147) each serial-consuming
+// subsystem's link uses -- e.g. "move the RoboClaw dome link from Serial 3
+// to Serial 2" -- not a general "any port, any protocol" tool. Only the two
+// ports the firmware can already open (Serial 2 / Serial 3, silkscreen
+// numbering -- see below) are reassignable; Serial 1 (the fixed WCB/body-
+// controller main-out path) has its own destination toggle on the
+// Connectivity page and I2C is fixed. Hand-built (like pins.html) rather
+// than schema-driven, since each row's visibility and the OTHER row's
+// current value both depend on live server state.
+//
+// Silkscreen vs. firmware numbering: the physical header printed "Serial 2"
+// on this board is what the firmware/config keys call "Serial1"
+// (domeserialport=serial1/driveserialport=serial1), and the header printed
+// "Serial 3" is the firmware's "Serial2"/AUX_SERIAL. Labels below use the
+// silkscreen numbers a builder actually sees next to the pins they're
+// wiring; the config value strings ("serial1"/"serial2") are an internal
+// wire format shared with config.txt/serial_assignment.h and intentionally
+// don't change to match.
+
+var PORT_LABELS = {serial1: 'Serial 2 (GPIO17/18)', serial2: 'Serial 3 (GPIO21/38)'};
+
+function domeNeedsSerial(d) { return d.domehw === 'roboclaw' || d.domehw === 'saber'; }
+function driveNeedsSerial(d) {
+  return d.drivehw === 'sabertooth' || d.drivehw === 'roboteq-serial' || d.drivehw === 'roboteq-pwm-serial';
+}
+
+// domehw's "saber" value covers both Sabertooth (common on foot drives) and
+// Syren10 (its single-channel sibling, protocol-compatible -- the usual
+// choice for a dome since only one motor channel is needed there). Label it
+// accordingly so the dome row doesn't read as if only Sabertooth is supported.
+function domeLabel(d) {
+  return d.domehw === 'saber' ? 'Dome Drive Serial Port (Sabertooth / Syren10)' : 'Dome Drive Serial Port';
+}
+
+// otherActive: whether the OTHER consumer actually needs a serial port on
+// this build -- its stored port value is otherwise inert (e.g. drivehw
+// 'roboteq-pwm' needs no serial link at all, so driveserialport is just a
+// leftover default with nothing real behind it) and must NOT be labeled as
+// "in use" against the row being rendered here.
+function portOptions(otherKey, otherLabel, otherActive, d) {
+  return ['serial1', 'serial2'].map(function(v) {
+    var l = PORT_LABELS[v];
+    if (otherActive && d[otherKey] === v) l += ' — in use by ' + otherLabel;
+    return {v: v, l: l};
+  });
+}
+
+function domeRow(d) {
+  return buildRow({key: 'domeserialport', label: domeLabel(d), type: 'select',
+                   options: function(cd) { return portOptions('driveserialport', 'Drive', driveNeedsSerial(cd), cd); },
+                   restart: true}, d.domeserialport);
+}
+
+function driveRow(d) {
+  return buildRow({key: 'driveserialport', label: 'Drive Serial Port', type: 'select',
+                   options: function(cd) { return portOptions('domeserialport', 'Dome', domeNeedsSerial(cd), cd); },
+                   restart: true}, d.driveserialport);
+}
+
+function render() {
+  var d = _configData;
+  var rows = '';
+  if (domeNeedsSerial(d)) rows += domeRow(d);
+  if (driveNeedsSerial(d)) rows += driveRow(d);
+  if (!rows) {
+    rows = '<div class="row"><div class="row-label" style="color:var(--muted)">'
+         + 'No reassignable serial ports on this build — neither the dome nor drive system uses a serial link.'
+         + '</div></div>';
+  }
+  document.querySelector('main').innerHTML =
+    '<div class="section-label">Serial Ports</div>' + rows
+    + '<div class="section-label" style="margin-top:1.2rem">About</div>'
+    + '<div class="row"><div class="row-label" style="color:var(--muted);font-size:.8rem;line-height:1.5;font-weight:400">'
+    + 'Serial 1 (fixed) always carries the main serial-out / WCB mesh path — see Connectivity. '
+    + 'Serial 2 and Serial 3 above are the two ports available to split between the dome and drive links; '
+    + 'each can only be claimed by one of them at a time.'
+    + '</div></div>';
+}
+
+// Re-render after a successful save so the OTHER row's "in use by ..." label
+// reflects the just-changed value immediately, without a full page reload --
+// same reasoning as pins.html's renderUsage() hook.
+window._onConfigSaved = function(key) {
+  if (key === 'domeserialport' || key === 'driveserialport') render();
+};
+
+fetch('/api/config').then(function(r) { return r.json(); }).then(function(d) {
+  _configData = d;
+  render();
+}).catch(function() {
+  document.getElementById('status').textContent = 'Failed to load settings.';
+});
+</script>
+</body>
+</html>

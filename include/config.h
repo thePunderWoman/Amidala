@@ -17,6 +17,7 @@
 
 #include <stdint.h>
 #include "pin_assignment.h"
+#include "serial_assignment.h"
 
 class AmidalaController;
 class Print;
@@ -59,6 +60,15 @@ public:
   // to its compiled-in default (see params.h's defaultPinRoles()), logging
   // a warning.
   void validatePinAssignments();
+
+  // Called once from AmidalaController::setup(), right after
+  // validatePinAssignments(), to guarantee domeSerialPort/driveSerialPort
+  // don't both claim the same physical port when both subsystems are active
+  // in this build (same "config.txt parses in file order" reasoning as
+  // validatePinAssignments() above -- each line's own conflict check only
+  // sees whatever's been parsed so far). Resets dome's port back to its
+  // default on conflict and logs a warning.
+  void validateSerialPortAssignments();
 
 private:
   AmidalaController *fController = nullptr;

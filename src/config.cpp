@@ -56,6 +56,86 @@ static bool applyPinRoleParam(AmidalaParameters &params, const char *cmd,
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Reassignable dome/drive serial ports (issue #147) -- see
+// include/serial_assignment.h
+// ---------------------------------------------------------------------------
+
+// Whether the compiled-in dome/drive subsystem consumes a serial port at
+// all in this build. Shared by applySerialPortParam() and
+// AmidalaConfig::validateSerialPortAssignments() below so the two "does this
+// consumer even exist" checks can't drift apart.
+static constexpr bool domeNeedsSerialPort() {
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW || DOME_DRIVE == DOME_DRIVE_SABER
+  return true;
+#else
+  return false;
+#endif
+}
+
+static constexpr bool driveNeedsSerialPort() {
+#if DRIVE_SYSTEM == DRIVE_SYSTEM_SABER || \
+    DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_SERIAL || \
+    DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM_SERIAL
+  return true;
+#else
+  return false;
+#endif
+}
+
+// Parses "<match><port>" (e.g. "domeserialport=serial2"), validates the
+// requested port against whichever OTHER consumer (dome vs. drive) is
+// active in this build, and only writes params.<...>SerialPort on success.
+// Parsed unconditionally regardless of whether THIS consumer is active in
+// the compiled build -- same reasoning as the RoboClaw-specific params
+// above: keeps config.txt portable across builds. Whether the stored value
+// means anything is decided at the construction site in controller.cpp's
+// setup() (only consumed if this build's DOME_DRIVE/DRIVE_SYSTEM actually
+// needs a serial port) and in the web UI's visibility rules.
+static bool applySerialPortParam(AmidalaParameters &params, const char *cmd,
+                                  const char *match, SerialConsumer consumer,
+                                  Print *out) {
+  if (!startswith(cmd, match)) return false;
+  SerialPortId newPort;
+  if (!serialPortFromString(cmd, &newPort)) {
+    if (out) out->println(F("serial port rejected: unrecognized port"));
+    return false;
+  }
+  bool otherActive = (consumer == SerialConsumer::kDome) ? driveNeedsSerialPort()
+                                                          : domeNeedsSerialPort();
+  SerialPortId otherPort = (consumer == SerialConsumer::kDome) ? params.driveSerialPort
+                                                                : params.domeSerialPort;
+  SerialPortValidationResult r =
+      validateSerialPortChange(consumer, newPort, otherActive, otherPort);
+  if (!r.ok) {
+    if (out) {
+      out->print(F("serial port rejected: "));
+      out->println(r.reason);
+    }
+    return false;
+  }
+  if (consumer == SerialConsumer::kDome) params.domeSerialPort = newPort;
+  else params.driveSerialPort = newPort;
+  return true;
+}
+
+void AmidalaConfig::validateSerialPortAssignments() {
+  AmidalaParameters &params = fController->params;
+  if (domeNeedsSerialPort() && driveNeedsSerialPort() &&
+      params.domeSerialPort == params.driveSerialPort) {
+    // config.txt lines parse independently -- a conflicting pair could each
+    // have individually looked valid at parse time (re-selecting their own
+    // current port) before the other line landed. Reset dome back to its
+    // default and keep drive's most-recently-parsed value, same "reset the
+    // invalid one, log it" pattern as sanitizePinRoles().
+    SerialPortId defDome, defDrive;
+    defaultSerialPorts(defDome, defDrive);
+    if (fOutput)
+      fOutput->println(F("WARNING: dome/drive serial port conflict -- dome reset to default"));
+    params.domeSerialPort = defDome;
+  }
+}
+
 void AmidalaConfig::applyDomePositionParams() {
 #ifdef DOME_DRIVE
   AmidalaParameters &params = fController->params;
@@ -888,6 +968,10 @@ bool AmidalaConfig::processConfig(const char *cmd) {
   } else if (applyPinRoleParam(params, cmd, "pin42role=", 42, fOutput)) {
     return true;
   } else if (applyPinRoleParam(params, cmd, "pin47role=", 47, fOutput)) {
+    return true;
+  } else if (applySerialPortParam(params, cmd, "domeserialport=", SerialConsumer::kDome, fOutput)) {
+    return true;
+  } else if (applySerialPortParam(params, cmd, "driveserialport=", SerialConsumer::kDrive, fOutput)) {
     return true;
   } else if (strcmp(cmd, "reboot") == 0) {
     void (*resetArduino)() = NULL;
