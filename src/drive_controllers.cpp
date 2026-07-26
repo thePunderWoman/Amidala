@@ -127,17 +127,23 @@ void DomeController::notify() {
   uint32_t lagTime = millis() - lastPacket;
   if (lagTime > 5000) {
     DEBUG_PRINTLN("More than 5 seconds. Disconnect");
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
     // domeEmergencyStop() -> stop() unconditionally drops kStateRandom back
     // to kStateHomed; remember it so resumeIfInterrupted() can restore it
     // once the connection recovers (issue #143 -- random mode otherwise
     // never resumed on its own after any connection-loss safety stop).
+    // RoboClaw-only: DomeDriveSabertooth/DomeDrivePWM have no equivalent
+    // random-mode-resume concept to preserve across a safety stop.
     fDriver->fDomeDrive->noteConnectionLossStop();
+#endif
     fDriver->domeEmergencyStop();
     fSafetyStop.trip();
     disconnect();
   } else if (lagTime > 500) {
     DEBUG_PRINTLN("It has been 500ms. Shutdown motors");
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
     fDriver->fDomeDrive->noteConnectionLossStop();
+#endif
     fDriver->domeEmergencyStop();
     fSafetyStop.trip();
   } else {
@@ -154,7 +160,9 @@ void DomeController::notify() {
     if (fSafetyStop.recover() && !fGestureCollect) {
       DEBUG_PRINTLN("Signal recovered. Re-enabling dome");
       fDriver->enableDomeController();
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
       fDriver->fDomeDrive->resumeIfInterrupted();
+#endif
     }
     process();
   }
