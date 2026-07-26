@@ -695,8 +695,8 @@ static void handleApiInfo() {
                       sCtrl->fDomeStick.isConnected(),
                       gBTGamepad.isConnected(),
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-                      sCtrl->fDomeDrive.isHomed(),
-                      sCtrl->fDomeDrive.getCurrentDegrees()
+                      sCtrl->fDomeDrive->isHomed(),
+                      sCtrl->fDomeDrive->getCurrentDegrees()
 #else
                       false, 0
 #endif
@@ -1213,7 +1213,7 @@ static void handleApiEstop() {
         // A deliberate e-stop must always win, even if it lands while an
         // unresolved XBee drop is still waiting to auto-resume random mode
         // on reconnect (see DomeDriveRoboClaw::resumeIfInterrupted()).
-        sCtrl->fDomeDrive.cancelPendingRandomResume();
+        sCtrl->fDomeDrive->cancelPendingRandomResume();
 #endif
         for (uint8_t i = 0; i < sCtrl->params.estopCmdCount; i++)
             sCtrl->sendSerialString(sCtrl->params.EstopCmds[i].str);

@@ -169,26 +169,35 @@ public:
   RDHSerial fAutoDome;
 #endif
 
+// fTankDrive/fDomeDrive are constructed lazily in AmidalaController::setup()
+// (issue #147), not here in the class body's own default member initializer,
+// because their constructors need a HardwareSerial& resolved from params —
+// and params isn't loaded from flash until setup() runs. AmidalaController
+// itself is a global (see AmidalaFirmware.ino), so plain value members here
+// would be bound to a fixed serial port at C++ static-init time, before any
+// config value exists to choose one. Nothing dereferences these between
+// global construction and setup()'s "new" calls -- see setup()'s comment at
+// the construction site for the invariant this relies on.
 #if DRIVE_SYSTEM == DRIVE_SYSTEM_SABER
-  TankDriveSabertooth fTankDrive;
+  TankDriveSabertooth* fTankDrive = nullptr;
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_PWM
-  TankDrivePWM fTankDrive;
+  TankDrivePWM* fTankDrive = nullptr;
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM
-  TankDriveRoboteq fTankDrive;
+  TankDriveRoboteq* fTankDrive = nullptr;
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_SERIAL
-  TankDriveRoboteq fTankDrive;
+  TankDriveRoboteq* fTankDrive = nullptr;
 #elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM_SERIAL
-  TankDriveRoboteq fTankDrive;
+  TankDriveRoboteq* fTankDrive = nullptr;
 #elif defined(DRIVE_SYSTEM)
 #error Unsupported DRIVE_SYSTEM
 #endif
 
 #if DOME_DRIVE == DOME_DRIVE_SABER
-  DomeDriveSabertooth fDomeDrive;
+  DomeDriveSabertooth* fDomeDrive = nullptr;
 #elif DOME_DRIVE == DOME_DRIVE_PWM
-  DomeDrivePWM fDomeDrive;
+  DomeDrivePWM* fDomeDrive = nullptr;
 #elif DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-  DomeDriveRoboClaw fDomeDrive;
+  DomeDriveRoboClaw* fDomeDrive = nullptr;
 #endif
 
   bool checkRCMode() {
@@ -253,7 +262,7 @@ public:
 
   unsigned getDomePosition() {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    return fDomeDrive.getCurrentDegrees();
+    return fDomeDrive->getCurrentDegrees();
 #elif defined(RDH_SERIAL)
     return fAutoDome.getAngle();
 #else
@@ -293,20 +302,20 @@ public:
 
   void setTargetSteering(TargetSteering *steering) {
 #ifdef DRIVE_SYSTEM
-    fTankDrive.setTargetSteering(steering);
+    fTankDrive->setTargetSteering(steering);
 #endif
   }
 
   void enableController() {
 #ifdef DRIVE_SYSTEM
-    fTankDrive.setEnable(true);
+    fTankDrive->setEnable(true);
 #endif
   }
 
   void disableController() {
     emergencyStop();
 #ifdef DRIVE_SYSTEM
-    fTankDrive.setEnable(false);
+    fTankDrive->setEnable(false);
 #endif
   }
 
@@ -315,14 +324,14 @@ public:
 
   void enableDomeController() {
 #ifdef DOME_DRIVE
-    fDomeDrive.setEnable(true);
+    fDomeDrive->setEnable(true);
 #endif
   }
 
   void disableDomeController() {
 #ifdef DOME_DRIVE
     domeEmergencyStop();
-    fDomeDrive.setEnable(false);
+    fDomeDrive->setEnable(false);
 #endif
   }
 
@@ -423,7 +432,7 @@ private:
 
   void setDomeHomePosition() {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    fDomeDrive.startHoming();
+    fDomeDrive->startHoming();
 #elif defined(RDH_SERIAL)
     fAutoDome.setDomeHomePosition();
 #endif
@@ -431,10 +440,10 @@ private:
 
   void toggleRandomDome() {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    if (fDomeDrive.isHomed())
-        fDomeDrive.enableRandomMode();
+    if (fDomeDrive->isHomed())
+        fDomeDrive->enableRandomMode();
     else
-        fDomeDrive.disableAutoMode();
+        fDomeDrive->disableAutoMode();
 #elif defined(RDH_SERIAL)
     fAutoDome.toggleRandomDome();
 #endif

@@ -57,7 +57,7 @@ void xbeeSPIReceiveAll(XBeePocketRemote** remotes, unsigned count) {
 
     // Cap at 8 frames per animate() cycle. If xbeeReadFrame() returns 0
     // (ATTN LOW but no valid frame found), break immediately — the pin may be
-    // stuck, and looping forever would block fDomeDrive.animate() and prevent
+    // stuck, and looping forever would block fDomeDrive->animate() and prevent
     // the RoboClaw homing timeout from firing.
     for (int limit = 8; limit > 0 && digitalRead(XBEE_ATTN_PIN) == LOW; limit--) {
         SPI.beginTransaction(kXBeeSettings);
