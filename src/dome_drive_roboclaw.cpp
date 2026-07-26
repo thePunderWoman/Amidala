@@ -366,8 +366,13 @@ void DomeDriveRoboClaw::onHallTrigger() {
     uint32_t now = millis();
     if (now - fHallLastTriggerMs < kHallDebounceMs)
         return;  // debounce: ignore rapid re-triggers
-    fHallLastTriggerMs = now;
-    fHallTriggered     = true;
+    fHallLastTriggerMs      = now;
+    // Snapshot commanded speed at the true trigger instant, alongside the
+    // timestamp -- processHallTrigger() may not run until well after this,
+    // and fLastCommandedSpeed could have changed in the meantime (see
+    // dome_estimate_ticks_during_delay()'s caller).
+    fCommandedSpeedAtTrigger = fLastCommandedSpeed;
+    fHallTriggered           = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -433,11 +438,14 @@ void DomeDriveRoboClaw::updatePosition() {
 bool DomeDriveRoboClaw::processHallTrigger() {
     if (!fHallTriggered) return false;
 
-    // Atomically consume the flag and snapshot the ISR's trigger timestamp.
+    // Atomically consume the flag and snapshot the ISR's trigger timestamp
+    // and commanded speed (see onHallTrigger()).
     uint32_t triggerMs;
+    float    speedAtTrigger;
     noInterrupts();
     fHallTriggered = false;
-    triggerMs = fHallLastTriggerMs;
+    triggerMs      = fHallLastTriggerMs;
+    speedAtTrigger = fCommandedSpeedAtTrigger;
     interrupts();
 
     // The encoder can only be sampled here (reading it needs a blocking
@@ -445,10 +453,14 @@ bool DomeDriveRoboClaw::processHallTrigger() {
     // after the true trigger instant -- back out however far the dome
     // travelled in the meantime so home is registered at the position it was
     // actually at when the sensor fired, not wherever it drifted to by the
-    // time this got around to running. See dome_estimate_ticks_during_delay().
+    // time this got around to running. Uses the commanded speed AT the
+    // trigger instant (snapshotted above), not whatever's commanded now --
+    // otherwise a speed change during a long stall (exactly when this
+    // matters most) would apply the wrong speed to the whole delay window.
+    // See dome_estimate_ticks_during_delay().
     int32_t enc = readEncoder();
     uint32_t delayMs = millis() - triggerMs;
-    int32_t drift = dome_estimate_ticks_during_delay(fLastCommandedSpeed, fQPPS, delayMs);
+    int32_t drift = dome_estimate_ticks_during_delay(speedAtTrigger, fQPPS, delayMs);
     fHomeEncoderTick = enc - drift;
 #if defined(USE_HALL_DEBUG) && !defined(UNIT_TEST)
     Serial.print("HALL: fired encoder=");

@@ -1076,6 +1076,30 @@ void test_hall_trigger_reverse_direction_compensation() {
     TEST_ASSERT_EQUAL_INT32(1360, drive.getHomeEncoderTickForTest());
 }
 
+void test_hall_trigger_uses_speed_at_trigger_not_current_speed() {
+    // Regression: the drift estimate must use the commanded speed AT the
+    // trigger instant, not whatever's commanded by the time
+    // processHallTrigger() finally runs -- a speed change mid-delay (e.g.
+    // the dome decelerated/stopped during a long main-loop stall) must not
+    // change how much drift gets backed out for that already-elapsed delay.
+    auto drive = make_drive();
+    drive.setQPPS(3600);
+    drive.setLastCommandedSpeedForTest(1.0f);  // full speed at the true trigger
+    drive.setMockEncoderPosition(1000);
+
+    mock_millis_value = 1000;
+    drive.onHallTrigger();                     // snapshots speed = 1.0
+
+    drive.setLastCommandedSpeedForTest(0.0f);   // dome stopped during the stall
+    mock_millis_value = 1100;                   // 100ms stall before sampling
+
+    TEST_ASSERT_TRUE(drive.testProcessHallTrigger());
+    // Must use the snapshotted 1.0, not the live 0.0 -- same 360-tick drift
+    // as test_hall_trigger_compensates_for_processing_delay(), NOT the
+    // uncompensated 1000 a live read of fLastCommandedSpeed would produce.
+    TEST_ASSERT_EQUAL_INT32(640, drive.getHomeEncoderTickForTest());
+}
+
 void test_hall_trigger_without_pending_flag_returns_false() {
     auto drive = make_drive();
     drive.setMockEncoderPosition(1000);
@@ -1245,6 +1269,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_hall_trigger_compensation_scales_with_speed);
     RUN_TEST(test_hall_trigger_stationary_needs_no_compensation);
     RUN_TEST(test_hall_trigger_reverse_direction_compensation);
+    RUN_TEST(test_hall_trigger_uses_speed_at_trigger_not_current_speed);
     RUN_TEST(test_hall_trigger_without_pending_flag_returns_false);
 
     return UNITY_END();

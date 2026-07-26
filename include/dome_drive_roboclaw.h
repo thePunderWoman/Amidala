@@ -343,6 +343,13 @@ private:
 
     volatile bool     fHallTriggered      = false;
     volatile uint32_t fHallLastTriggerMs  = 0;
+    // Commanded speed at the ISR's true trigger instant, snapshotted
+    // alongside fHallLastTriggerMs -- processHallTrigger() uses this (not
+    // the live fLastCommandedSpeed) to estimate drift during the
+    // processing delay, since the live value may have already changed by
+    // the time the main loop gets around to running, especially after a
+    // long stall (issue #140) -- exactly when the estimate matters most.
+    volatile float    fCommandedSpeedAtTrigger = 0.0f;
     bool              fHallPinWasLow      = false; ///< For polling fallback
 
     static constexpr uint32_t kHallDebounceMs = DEFAULT_DOME_HALL_DEBOUNCE_MS;
