@@ -16,6 +16,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "pin_assignment.h"
 
 class AmidalaController;
 class Print;
@@ -47,6 +48,17 @@ public:
   // to the active dome drive.  Called whenever any of those config values
   // change so live updates via `*domefudge=...` take effect immediately.
   void applyDomePositionParams();
+
+  // Called once from AmidalaController::setup(), right after
+  // ensureConfigDefaults(), to guarantee params' 11 pin roles are mutually
+  // consistent (hardware ceilings not exceeded, Analog only on ADC1 pins)
+  // before any pinMode()/constructor call uses them. config.txt lines parse
+  // in file order, so a line's own conflict check only sees whatever's been
+  // parsed so far -- this final sweep re-checks the whole pinRole[] array
+  // with full context and resets any pin whose role is still invalid back
+  // to its compiled-in default (see params.h's defaultPinRoles()), logging
+  // a warning.
+  void validatePinAssignments();
 
 private:
   AmidalaController *fController = nullptr;

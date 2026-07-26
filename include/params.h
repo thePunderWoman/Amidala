@@ -9,8 +9,9 @@
 // Depends on: EEPROM (Arduino <EEPROM.h> / arduino_mock.h),
 //             button_actions.h (ButtonAction, GestureAction, SerialString),
 //             core.h           (Gesture),
-//             drive_config.h   (DEFAULT_DOME_* / DOME_MAXIMUM_SPEED),
+//             drive_config.h   (DEFAULT_DOME_* / DOME_MAXIMUM_SPEED, DOME_DRIVE),
 //             button_actions.h (HAPPY, EMOTE_MODERATE fallback constants),
+//             pin_assignment.h (PinRoleType, kMaxServoChannels)
 //             <math.h>         (ceil)
 
 #pragma once
@@ -18,6 +19,7 @@
 #include "core.h"
 #include "drive_config.h"
 #include "button_actions.h"
+#include "pin_assignment.h"
 
 // ---- Audio hardware selection -----------------------------------------------
 
@@ -27,6 +29,77 @@
 #endif
 
 // ---- Auxiliary string count -------------------------------------------------
+
+// ---- Default pin-role mapping (issue #133) ----------------------------------
+
+// Reproduces today's REAL (not just nominal) wiring, in kAssignablePins
+// order {1,2,3,4,5,6,39,40,41,42,47}:
+//   1,2       -> Analog (today's ANALOG1_PIN/ANALOG2_PIN)
+//   3,4,5,6   -> Servo  (today's SERVO1-4_PIN)
+//   39        -> Dout   (today's DOUT1_PIN)
+//   40        -> Hall if RoboClaw dome drive is compiled in, else Dout.
+//                GPIO40 is physically wired to the dome hall sensor;
+//                DomeDriveRoboClaw::setup()'s pinMode(INPUT_PULLUP) for it
+//                always runs after general pin setup and wins the "last
+//                pinMode() call wins" race, so this pin has never actually
+//                been a usable digital output on RoboClaw boards -- Hall
+//                reflects that honestly instead of nominally calling it
+//                Dout. See pin_assignment.h.
+//   41,42     -> Dout   (today's DOUT3_PIN/DOUT4_PIN)
+//   47        -> Ppm    (today's PPMIN_PIN)
+//
+// Pulled out of AmidalaParameters::init() into a standalone function so
+// AmidalaConfig::validatePinAssignments() (config.cpp) can get at the
+// defaults directly -- constructing a second AmidalaParameters and calling
+// .init() on it would silently no-op (init()'s sInited/sRAMInited guards
+// are function-local statics shared across every instance, not per-object),
+// so it needs a default source that doesn't depend on the singleton dance.
+inline void defaultPinRoles(PinRoleType out[11]) {
+  out[0] = PinRoleType::kAnalog;
+  out[1] = PinRoleType::kAnalog;
+  out[2] = PinRoleType::kServo;
+  out[3] = PinRoleType::kServo;
+  out[4] = PinRoleType::kServo;
+  out[5] = PinRoleType::kServo;
+  out[6] = PinRoleType::kDout;
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+  out[7] = PinRoleType::kHall;
+#else
+  out[7] = PinRoleType::kDout;
+#endif
+  out[8]  = PinRoleType::kDout;
+  out[9]  = PinRoleType::kDout;
+  out[10] = PinRoleType::kPpm;
+}
+
+// Sweeps all 11 pins, reverting any whose role is no longer valid (out of
+// the assignable pool, electrically invalid, or over a hardware ceiling --
+// e.g. from config.txt lines parsing in file order without full-array
+// context) back to its default. If `requireHall` is true and no pin ends
+// up with role Hall (its sole occupant got reassigned away), forces
+// kAssignablePins[7] (GPIO40) to Hall -- a RoboClaw dome drive needs
+// exactly one hall input; DomeDriveRoboClaw::setup() would otherwise be
+// handed kNoPin and call pinMode()/attachInterrupt() on it unconditionally,
+// not a graceful "no sensor" no-op. validateRoleChange() only ever enforces
+// a ceiling, never a floor, so this is the one role that needs a second,
+// explicit check.
+//
+// Pure function (no I/O, no AmidalaController dependency) so it's natively
+// testable -- callers that want to log what changed diff the array
+// themselves before/after calling this (see
+// AmidalaConfig::validatePinAssignments() in config.cpp).
+inline void sanitizePinRoles(PinRoleType allRoles[11], bool requireHall) {
+  PinRoleType defaults[11];
+  defaultPinRoles(defaults);
+  for (uint8_t i = 0; i < 11; i++) {
+    PinRoleValidationResult r =
+        validateRoleChange(kAssignablePins[i], allRoles[i], allRoles);
+    if (!r.ok) allRoles[i] = defaults[i];
+  }
+  if (requireHall && countPinsWithRole(allRoles, PinRoleType::kHall) == 0) {
+    allRoles[7] = PinRoleType::kHall;  // kAssignablePins[7] == GPIO40
+  }
+}
 
 // ---- AmidalaParameters ------------------------------------------------------
 
@@ -83,14 +156,27 @@ struct AmidalaParameters {
   uint8_t rcd;
   uint8_t rcj;
 
+  // ---- Runtime-reassignable GPIO pin roles (issue #133) ----------------------
+  // Each of the 11 pins already physically broken out on the board's headers
+  // (see pin_assignment.h's kAssignablePins) gets assigned a role type
+  // (DOUT/Analog/PPM/Servo/Hall) -- the count in each category is DERIVED
+  // from however many pins currently have that type, e.g. trading a DOUT
+  // pin for a 5th servo. pinRole[i] is the role for kAssignablePins[i].
+  // Defaults reproduce today's real (not just nominal) wiring -- see
+  // init() below and pin_assignment.h's header comment for the hall-sensor
+  // special case. Reassigning any of these requires a reboot (they're baked
+  // into pinMode()/constructor calls at boot) -- see controller.cpp setup().
+  PinRoleType pinRole[11];
+
   SoundBank SB[20];
-  Channel S[4];
+  Channel S[kMaxServoChannels];  // storage capacity, not live count -- see getServoCount()
   ButtonAction B[9];
   ButtonAction LB[9];
   ButtonAction AB[9];   // Alt-button layer (dispatched when altbtn is held)
   ButtonAction DB[9];   // Double-press layer
   GestureAction G[MAX_GESTURES];
-  DigitalOut D[8];
+  DigitalOut D[11];  // matches the assignable pool size -- no hardware ceiling on DOUT
+                     // count below that, unlike Servo's LEDC-channel limit
   SerialString Str[MAX_SERIAL_STRINGS];
   uint8_t serialcount;
   uint16_t nextSstrId; // monotonic counter; set to max(all IDs)+1 after config load
@@ -276,7 +362,11 @@ struct AmidalaParameters {
     return sizeof(SB) / sizeof(SB[0]);
   }
 
-  constexpr unsigned getServoCount() { return sizeof(S) / sizeof(S[0]); }
+  // Live count of servo-typed pins (0-kMaxServoChannels), NOT S[]'s fixed
+  // storage capacity -- issue #133, servo count is now derived from
+  // pinRole[] rather than compiled in. No longer constexpr: depends on
+  // runtime config, not just the type.
+  unsigned getServoCount() const { return countPinsWithRole(pinRole, PinRoleType::kServo); }
 
   constexpr unsigned getButtonCount() { return sizeof(B) / sizeof(B[0]); }
 
@@ -307,6 +397,8 @@ struct AmidalaParameters {
       mix12 = false;
       rcd = 30;
       rcj = 5;
+      // Default pin roles (issue #133) -- see defaultPinRoles() above.
+      defaultPinRoles(pinRole);
       myi2c = 0;
       serialbaud = 9600;
       serialdelim = ':';

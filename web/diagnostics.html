@@ -32,23 +32,28 @@
 </main>
 <script src="/assets/edit.js"></script>
 <script>
-var DOUT = [
-  {id:'dout0', label:'Digital 1', gpio:'GPIO39'},
-  {id:'dout1', label:'Digital 2', gpio:'GPIO40', note:'dome hall sensor'},
-  {id:'dout2', label:'Digital 3', gpio:'GPIO41'},
-  {id:'dout3', label:'Digital 4', gpio:'GPIO42'}
-];
-var AIN = [
-  {id:'ain0', label:'Analog 1', gpio:'GPIO1'},
-  {id:'ain1', label:'Analog 2', gpio:'GPIO2'}
-];
+// DOUT/AIN row COUNT and GPIO labels both come from /api/config's live
+// doutPins/analogPins arrays (see buildUI()) rather than being hardcoded
+// here -- issue #133 lets pins be traded between roles at runtime (e.g. a
+// DOUT pin becomes a 5th servo instead), so a fixed 4/2-row layout would
+// go stale -- or just be wrong -- the moment someone reassigns one.
 
 function connLed(ok) {
   return '<div class="pin-led ' + (ok ? 'high' : 'low') + '">&#9679;</div>'
        + '<div class="pin-state ' + (ok ? 'high' : 'low') + '">' + (ok ? 'CONNECTED' : 'OFFLINE') + '</div>';
 }
 
-function buildUI() {
+var DOUT = [];
+var AIN = [];
+
+function buildUI(cfg) {
+  DOUT = ((cfg && cfg.doutPins) || []).map(function(pin, i) {
+    return {id: 'dout' + i, label: 'Digital ' + (i + 1), pin: pin};
+  });
+  AIN = ((cfg && cfg.analogPins) || []).map(function(pin, i) {
+    return {id: 'ain' + i, label: 'Analog ' + (i + 1), pin: pin};
+  });
+
   var html = '<div class="section-label">Device</div>';
   html += '<div class="row"><div class="row-label">Restart Droid</div>'
         + '<button class="be-action" onclick="_doRestart(this)">Restart</button></div>';
@@ -70,10 +75,9 @@ function buildUI() {
 
   html += '<div class="section-label">Digital Outputs</div>';
   DOUT.forEach(function(d) {
-    var note = d.note ? '<span class="row-note">(' + d.note + ')</span>' : '';
     html += '<div class="row">'
-      + '<div class="row-label">' + d.label + note + '</div>'
-      + '<span class="gpio">' + d.gpio + '</span>'
+      + '<div class="row-label">' + d.label + '</div>'
+      + '<span class="gpio">GPIO' + d.pin + '</span>'
       + '<div class="pin-led low" id="' + d.id + '_led">&#9679;</div>'
       + '<div class="pin-state low" id="' + d.id + '_st">LOW</div>'
       + '</div>';
@@ -82,7 +86,7 @@ function buildUI() {
   AIN.forEach(function(a) {
     html += '<div class="row">'
       + '<div class="row-label">' + a.label + '</div>'
-      + '<span class="gpio">' + a.gpio + '</span>'
+      + '<span class="gpio">GPIO' + a.pin + '</span>'
       + '<div class="ain-val" id="' + a.id + '">&#8212;</div>'
       + '</div>';
   });
@@ -137,9 +141,19 @@ function refresh() {
     .catch(function(){});
 }
 
-buildUI();
-refresh();
-setInterval(refresh, 2000);
+// GPIO labels need the current pin assignments before the page can render
+// -- fetch /api/config once up front rather than hardcoding them (see the
+// DOUT/AIN comment above). Falls back to blank labels (still functional --
+// the live HIGH/LOW/analog values from /api/pins are unaffected) if the
+// fetch fails, rather than blocking the rest of the page.
+fetch('/api/config')
+  .then(function(r){ return r.json(); })
+  .then(function(cfg){ buildUI(cfg); })
+  .catch(function(){ buildUI(null); })
+  .then(function(){
+    refresh();
+    setInterval(refresh, 2000);
+  });
 </script>
 </body>
 </html>

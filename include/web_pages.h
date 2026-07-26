@@ -170,6 +170,10 @@ footer a:hover{opacity:1;}
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="2.2"/><line x1="12" y1="13" x2="18" y2="8"/><path d="M11 5 A8 8 0 0 1 19.5 10.5"/></svg>
       <div><div class="name">Servos</div><div class="sub">Channels · limits</div></div>
     </a>
+    <a class="card" href="/config/pins">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1.5"/><line x1="9" y1="3" x2="9" y2="7"/><line x1="15" y1="3" x2="15" y2="7"/><line x1="9" y1="17" x2="9" y2="21"/><line x1="15" y1="17" x2="15" y2="21"/><line x1="3" y1="9" x2="7" y2="9"/><line x1="3" y1="15" x2="7" y2="15"/><line x1="17" y1="9" x2="21" y2="9"/><line x1="17" y1="15" x2="21" y2="15"/></svg>
+      <div><div class="name">Pins</div><div class="sub">GPIO assignment</div></div>
+    </a>
     <a class="card" href="/config/connectivity">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 10.5 a10 10 0 0 1 14 0"/><path d="M8 13.5 a6 6 0 0 1 8 0"/><circle cx="12" cy="16.8" r="1.2" fill="var(--accent)" stroke="none"/><line x1="12" y1="16.8" x2="7" y2="5"/><line x1="12" y1="16.8" x2="17" y2="5"/></svg>
       <div><div class="name">Connectivity</div><div class="sub">XBee · WiFi · Bluetooth</div></div>
@@ -690,6 +694,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -728,10 +733,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -748,7 +763,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -1001,6 +1016,23 @@ function _applyWhenVisibility() {
     if (s.section || !s.when) return;
     var row = document.querySelector('[data-key="' + s.key + '"]');
     if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
   });
 }
 </script>
@@ -1435,6 +1467,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -1473,10 +1506,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -1493,7 +1536,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -1746,6 +1789,23 @@ function _applyWhenVisibility() {
     if (s.section || !s.when) return;
     var row = document.querySelector('[data-key="' + s.key + '"]');
     if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
   });
 }
 </script>
@@ -2381,6 +2441,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -2419,10 +2480,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -2439,7 +2510,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -2692,6 +2763,23 @@ function _applyWhenVisibility() {
     if (s.section || !s.when) return;
     var row = document.querySelector('[data-key="' + s.key + '"]');
     if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
   });
 }
 </script>
@@ -3117,6 +3205,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -3155,10 +3244,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -3175,7 +3274,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -3428,6 +3527,23 @@ function _applyWhenVisibility() {
     if (s.section || !s.when) return;
     var row = document.querySelector('[data-key="' + s.key + '"]');
     if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
   });
 }
 </script>
@@ -3862,6 +3978,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -3900,10 +4017,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -3920,7 +4047,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -4173,6 +4300,23 @@ function _applyWhenVisibility() {
     if (s.section || !s.when) return;
     var row = document.querySelector('[data-key="' + s.key + '"]');
     if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
   });
 }
 </script>
@@ -4702,6 +4846,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -4740,10 +4885,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -4760,7 +4915,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -5013,6 +5168,23 @@ function _applyWhenVisibility() {
     if (s.section || !s.when) return;
     var row = document.querySelector('[data-key="' + s.key + '"]');
     if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
   });
 }
 </script>
@@ -5456,6 +5628,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -5494,10 +5667,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -5514,7 +5697,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -5767,6 +5950,23 @@ function _applyWhenVisibility() {
     if (s.section || !s.when) return;
     var row = document.querySelector('[data-key="' + s.key + '"]');
     if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
   });
 }
 </script>
@@ -6257,6 +6457,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -6295,10 +6496,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -6315,7 +6526,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -6568,6 +6779,23 @@ function _applyWhenVisibility() {
     if (s.section || !s.when) return;
     var row = document.querySelector('[data-key="' + s.key + '"]');
     if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
   });
 }
 </script>
@@ -7313,6 +7541,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -7351,10 +7580,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -7371,7 +7610,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -7624,6 +7863,23 @@ function _applyWhenVisibility() {
     if (s.section || !s.when) return;
     var row = document.querySelector('[data-key="' + s.key + '"]');
     if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
   });
 }
 </script>
@@ -8280,6 +8536,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -8318,10 +8575,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -8338,7 +8605,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -8593,6 +8860,23 @@ function _applyWhenVisibility() {
     if (row) row.hidden = !s.when(_configData);
   });
 }
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
+  });
+}
 </script>
 <script>
 var _d = [];
@@ -8680,6 +8964,841 @@ function saveRow(i) {
 }
 
 load();
+</script>
+</body>
+</html>
+)html";
+
+static const char WEB_PAGE_PINS[] = R"html(<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pins — AMIDALA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Amidala web UI — shared styles.
+   Embed script inlines this into every page's <style> block.
+   In dev mode (scripts/web_dev.py) it's served as a real file from /assets/common.css. */
+
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+
+:root {
+  --accent:      #8f2d3b;
+  --bg:          #e9edf1;
+  --surface:     #ffffff;
+  --surface2:    #f4f7f9;
+  --border:      #dce3e9;
+  --text:        #2b333b;
+  --muted:       #707b85;
+  --danger:      #a8323a;
+  --danger-soft: rgba(168,50,58,.08);
+  --tex:         rgba(43,51,59,.07);
+  --glow:        rgba(143,45,59,.10);
+  /* legacy aliases — pages referencing --gold / --dim / --fg still work */
+  --gold: var(--accent);
+  --dim:  var(--muted);
+  --fg:   var(--text);
+}
+
+body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(120% 62% at 50% -12%, var(--glow), transparent 58%),
+    radial-gradient(var(--tex) .9px, transparent 1.2px),
+    radial-gradient(var(--tex) .9px, transparent 1.2px);
+  background-size: auto, 14px 14px, 23px 23px;
+  background-position: center top, 0 0, 7px 11px;
+  color: var(--text);
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100vh;
+  padding: 24px 22px 80px;
+}
+
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: inherit; }
+.hidden { display: none !important; }
+[hidden] { display: none !important; }
+
+/* ---- page shell ---- */
+
+.page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 4px 0 18px; border-bottom: 1px solid var(--border);
+  max-width: 820px; margin: 0 auto;
+}
+
+.back {
+  display: inline-flex; align-items: center; gap: 8px;
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .18em; color: var(--muted); transition: color .15s;
+  flex-shrink: 0; white-space: nowrap;
+}
+.back:hover { color: var(--accent); }
+
+.page-title {
+  display: flex; align-items: center; gap: 13px;
+}
+.page-title .dot {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+  display: inline-block; flex-shrink: 0;
+}
+.page-title .label {
+  font: 600 20px/1 'Cormorant Garamond', Georgia, serif;
+  letter-spacing: .16em; color: var(--text); text-transform: uppercase;
+}
+
+main {
+  max-width: 820px; margin: 0 auto; padding-top: 28px;
+}
+
+#status {
+  text-align: center; padding: 2rem; color: var(--muted);
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: .2em;
+}
+
+/* ---- section labels ---- */
+
+.section-label {
+  margin: 26px 0 4px; border-bottom: 1px solid var(--border); padding-bottom: 10px;
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .22em; text-transform: uppercase; color: var(--muted);
+}
+
+/* ---- settings rows ---- */
+
+.row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--border);
+}
+.row-label {
+  font: 400 15px/1.3 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: var(--text); flex: 1;
+}
+.rv {
+  font: 500 14px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  color: var(--accent);
+}
+.ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.ri input, .ri select {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); padding: .3rem .5rem; border-radius: 4px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: .82rem;
+  min-width: 80px;
+}
+.ri input:focus, .ri select:focus { outline: none; border-color: var(--accent); }
+
+/* edit / save / cancel */
+.be {
+  background: none; border: none; padding: 4px; color: var(--muted);
+  cursor: pointer; display: flex; align-items: center;
+  opacity: .7; transition: opacity .15s, color .15s; flex-shrink: 0;
+}
+.be:hover { opacity: 1; color: var(--accent); }
+.bs {
+  background: var(--accent); border: none; border-radius: 4px;
+  padding: 5px 12px; font: 600 10px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .1em; color: #fff; cursor: pointer;
+  flex-shrink: 0; transition: opacity .15s;
+}
+.bs:hover { opacity: .85; }
+.bc {
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  padding: 4px 10px; font: 500 10px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  color: var(--muted); cursor: pointer; flex-shrink: 0; transition: border-color .15s;
+}
+.bc:hover { border-color: var(--muted); }
+
+/* action-type row button */
+.be-action {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+  padding: 6px 16px; font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .1em; color: var(--text); cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.be-action:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- tabs (used on controllers + droid-control) ---- */
+
+.tabs {
+  display: flex; border-bottom: 1px solid var(--border);
+  max-width: 820px; margin: 0 auto;
+}
+.tab {
+  flex: 1; background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--muted); font-family: inherit; font-size: .72rem;
+  letter-spacing: .1em; text-transform: uppercase; padding: .85rem 1rem; cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ---- toast ---- */
+
+.toast {
+  position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); padding: .55rem 1.4rem;
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: .08em;
+  pointer-events: none; white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(30,45,55,.12);
+  animation: _tfi .15s ease, _tfo .3s 1.9s ease forwards; z-index: 9999;
+}
+.toast-err { border-color: var(--danger); color: var(--danger); }
+@keyframes _tfi {
+  from { opacity:0; transform:translateX(-50%) translateY(6px) }
+  to   { opacity:1; transform:translateX(-50%) translateY(0) }
+}
+@keyframes _tfo { from{opacity:1} to{opacity:0} }
+
+/* ---- E-Stop (injected into page-header by edit.js) ---- */
+
+#estop {
+  display: inline-flex; align-items: center; gap: 9px;
+  background: var(--danger-soft); border: 1px solid var(--danger); border-radius: 6px;
+  padding: 8px 14px; font: 600 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .2em; color: var(--danger); cursor: pointer;
+  transition: background .15s, color .15s; flex-shrink: 0;
+}
+#estop:hover { background: var(--danger); color: #fff; }
+#estop .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: inline-block; }
+
+/* ---- shared page utilities ---- */
+
+.info-banner {
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--muted); padding: .7rem 1rem; font-size: .75rem;
+  line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
+}
+
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
+/* sub-section heading used in droid-control + controllers */
+.sec-hdr {
+  font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--muted); padding: .55rem 0 .35rem;
+  border-bottom: 1px solid var(--border); margin: .6rem 0 0;
+}
+.sub-hdr {
+  font-size: .65rem; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); padding: .4rem 0 .25rem;
+  border-bottom: 1px solid var(--border); margin: .6rem 0 0;
+}
+
+/* touch-control buttons */
+.dc-btn, .angle-btn, .grid-btn {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); padding: .85rem .5rem; border-radius: 4px;
+  cursor: pointer; font-size: .88rem; text-align: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .12s, border-color .12s;
+}
+.dc-btn:hover, .dc-btn:active,
+.angle-btn:hover, .angle-btn:active,
+.grid-btn:hover, .grid-btn:active { background: var(--surface2); border-color: var(--accent); }
+.grid-btn { line-height: 1.3; min-height: 3.5rem; }
+.grid-btn.full { grid-column: 1/-1; }
+
+/* ---- footer (injected by edit.js on sub-pages) ---- */
+
+footer {
+  max-width: 820px; margin: 48px auto 0; padding-bottom: 32px;
+  text-align: center;
+  font: 500 10px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .24em; color: var(--muted); opacity: .7;
+}
+footer a {
+  color: inherit; text-decoration: none;
+  border-bottom: 1px solid currentColor; padding-bottom: 1px;
+  transition: opacity .15s;
+}
+footer a:hover { opacity: 1; }
+
+/* ---- dark mode (colors from design system renderVals()) ---- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --accent:      #cf6470;
+    --bg:          #0f1216;
+    --surface:     #161b21;
+    --surface2:    #1c232a;
+    --border:      #283139;
+    --text:        #e7ecf0;
+    --muted:       #828e98;
+    --danger:      #d05b63;
+    --danger-soft: rgba(208,91,99,.14);
+    --tex:         rgba(231,236,240,.06);
+    --glow:        rgba(207,100,112,.17);
+  }
+}
+:root[data-theme="dark"] {
+  --accent:      #cf6470;
+  --bg:          #0f1216;
+  --surface:     #161b21;
+  --surface2:    #1c232a;
+  --border:      #283139;
+  --text:        #e7ecf0;
+  --muted:       #828e98;
+  --danger:      #d05b63;
+  --danger-soft: rgba(208,91,99,.14);
+  --tex:         rgba(231,236,240,.06);
+  --glow:        rgba(207,100,112,.17);
+}
+
+/* ---- right header group (theme toggle + e-stop, injected by edit.js) ---- */
+.hdr-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* ---- theme toggle button ---- */
+#theme-toggle {
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  padding: 5px 9px; color: var(--muted); cursor: pointer; flex-shrink: 0;
+  font-size: .85rem; line-height: 1; transition: border-color .15s, color .15s;
+}
+#theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+<style>
+.usage-wrap{display:flex;flex-wrap:wrap;gap:.5rem;padding:.6rem 0 1rem}
+.usage-chip{font:500 11px/1 ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.04em;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:.35rem .7rem}
+.usage-chip.full{color:var(--accent);border-color:var(--accent)}
+</style>
+<script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; BACK</a>
+  <div class="page-title"><span class="dot"></span><span class="label">Pins</span><span class="dot"></span></div>
+</div>
+<main>
+  <div id="status">LOADING&#8230;</div>
+</main>
+<script>
+/* Amidala web UI — edit-in-place widget + shared config page helpers.
+   Embed script inlines this into every config sub-page.
+   In dev mode (scripts/web_dev.py) it's served as /assets/edit.js. */
+
+// ----------------------------------------------------------------- theme ----
+
+function _toggleTheme() {
+  var t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem('amidala-theme', t);
+  var btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = t === 'dark' ? '☀' : '☾';
+}
+
+// ------------------------------------------------------------------ toast ---
+
+function showToast(msg, isErr) {
+  var t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' toast-err' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
+}
+
+// -------------------------------------------------------- edit-in-place -----
+
+function startEdit(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
+  row.querySelector('.rv').hidden = true;
+  row.querySelector('.ri').hidden = false;
+  btn.hidden = true;
+  row.querySelector('.bs').hidden = false;
+  row.querySelector('.bc').hidden = false;
+}
+
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
+  row.querySelector('.rv').hidden = false;
+  row.querySelector('.ri').hidden = true;
+  row.querySelector('.be').hidden = false;
+  row.querySelector('.bs').hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
+}
+
+async function doSave(btn) {
+  var row = btn.closest('.row');
+  var key = row.dataset.key;
+  var rt  = row.dataset.type;
+  var inp = row.querySelector('input,select');
+  var val = inp.value;
+  var prev = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
+  try {
+    var r = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'key=' + encodeURIComponent(key) + '&value=' + encodeURIComponent(val)
+    });
+    if (r.ok) {
+      var dv = row.querySelector('.rv');
+      if (rt === 'bool' || rt === 'select') {
+        var sel = row.querySelector('select');
+        dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
+      } else if (rt === 'password') {
+        dv.textContent = '••••••••';
+      } else {
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
+      }
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      _refreshDynamicOptions();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
+      showToast('Saved');
+    } else {
+      showToast('Save failed: ' + await r.text(), true);
+    }
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+// ------------------------------------------------ schema-driven row builder --
+
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
+function dispValue(s, val) {
+  if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
+  if (s.type === 'select') {
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
+    return found ? found.l : val;
+  }
+  if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
+  return String(val);
+}
+
+function buildInput(s, val) {
+  if (s.type === 'bool') {
+    return '<select>'
+      + '<option value="y"' + (val === 'y' ? ' selected' : '') + '>On</option>'
+      + '<option value="n"' + (val === 'n' ? ' selected' : '') + '>Off</option>'
+      + '</select>';
+  }
+  if (s.type === 'select') {
+    var opts = _resolveOptions(s).map(function(op) {
+      return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
+    }).join('');
+    return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
+  }
+  if (s.type === 'number') {
+    return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
+  }
+  if (s.type === 'password') {
+    return '<input type="password" value="' + val + '" maxlength="' + (s.maxlength || 64) + '">';
+  }
+  return '<input type="text" value="' + val + '"' + (s.maxlength ? ' maxlength="' + s.maxlength + '"' : '') + '>';
+}
+
+async function doAction(btn) {
+  var cmd      = btn.dataset.cmd;
+  var endpoint = btn.dataset.endpoint || '/api/monitor';
+  var prev = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
+  try {
+    var r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'cmd=' + encodeURIComponent(cmd)
+    });
+    showToast(r.ok ? 'Sent' : 'Failed', !r.ok);
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
+
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
+  if (s.type === 'action') {
+    return '<div class="row"' + hiddenAttr + '>'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
+      + (s.btnLabel || 'Send') + '</button>'
+      + '</div>';
+  }
+  var disp = dispValue(s, val);
+  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  if (s.readOnly) {
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<div class="rv">' + disp + '</div>'
+      + '</div>';
+  }
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+    + '<div class="row-label">' + s.label + '</div>'
+    + '<div class="rv">' + disp + '</div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
+    + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + '</div>';
+}
+
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var hdr = document.querySelector('.page-header');
+
+  // right-side group keeps the header at 3 flex children: [BACK] [TITLE] [GROUP]
+  var rg = document.createElement('div');
+  rg.className = 'hdr-right';
+
+  // theme toggle
+  var tt = document.createElement('button');
+  tt.id = 'theme-toggle';
+  tt.title = 'Toggle dark / light mode';
+  tt.textContent = document.documentElement.dataset.theme === 'dark' ? '☀' : '☾';
+  tt.onclick = _toggleTheme;
+  rg.appendChild(tt);
+
+  // e-stop
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.innerHTML = '<span class="dot"></span>E-STOP';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  rg.appendChild(b);
+
+  if (hdr) hdr.appendChild(rg);
+  else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
+// --------------------------------------------------------------- footer -------
+
+(function() {
+  if (location.pathname.indexOf('monitor') !== -1) return;
+  var f = document.createElement('footer');
+  f.innerHTML = '<a href="https://github.com/thePunderWoman/Amidala/wiki" target="_blank" rel="noopener">DOCUMENTATION</a>';
+  document.body.appendChild(f);
+})();
+
+// ------------------------------------------------- hash-based tab nav --------
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
+
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
+function buildPage(SCHEMA, endpoint, callback) {
+  fetch(endpoint)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
+      var html = '';
+      var sectionSkip = false;
+      SCHEMA.forEach(function(s) {
+        if (s.section) {
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
+          return;
+        }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
+        var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
+        html += buildRow(s, val, rowHidden);
+      });
+      document.querySelector('main').innerHTML = html;
+      if (callback) callback(d);
+    })
+    .catch(function() {
+      var el = document.getElementById('status');
+      if (el) el.textContent = 'Failed to load settings.';
+    });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
+  });
+}
+</script>
+<script>
+// Reassigns the ROLE of each of the 11 physical pins already broken out on
+// this board's headers (issue #133) -- e.g. "GPIO39 does Servo instead of
+// Digital Out" -- not a general "pick any GPIO" tool. Trading a pin's role
+// changes the COUNT in each category (fewer DOUT, more Servo), unlike the
+// old fixed-count design; see include/pin_assignment.h for the
+// authoritative pool/ceiling logic this page's dropdowns and the server
+// both defer to. Hand-built (like servos.html) rather than schema-driven,
+// since each row needs a per-pin-computed option list plus the live usage
+// summary below has no equivalent in buildPage()/SCHEMA.
+
+var ROLE_LABELS = {dout:'Digital Out', analog:'Analog In', ppm:'PPM In', servo:'Servo', hall:'Hall Sensor'};
+var CEILINGS = {servo:8, analog:6, ppm:1, hall:1};  // see pin_assignment.h
+
+var _pins = [];   // assignablePins, e.g. [1,2,3,4,5,6,39,40,41,42,47]
+var _roles = [];  // pinRoles, same order/indexing as _pins
+var _domehw = '';
+
+function rolesFor(pin) {
+  var roles = ['dout', 'ppm', 'servo'];
+  if (pin <= 10) roles.splice(1, 0, 'analog');  // ADC1-capable pins only
+  if (_domehw === 'roboclaw') roles.push('hall');
+  return roles;
+}
+
+function pinRow(i) {
+  var pin = _pins[i];
+  var opts = rolesFor(pin).map(function(r) { return {v: r, l: ROLE_LABELS[r]}; });
+  return buildRow({key: 'pin' + pin + 'role', label: 'GPIO ' + pin, type: 'select',
+                   options: opts, restart: true}, _roles[i]);
+}
+
+function renderUsage() {
+  var counts = {dout: 0, analog: 0, ppm: 0, servo: 0, hall: 0};
+  _roles.forEach(function(r) { if (counts[r] !== undefined) counts[r]++; });
+  var order = ['servo', 'analog', 'dout', 'ppm'];
+  if (_domehw === 'roboclaw') order.push('hall');
+  var html = order.map(function(r) {
+    var ceiling = CEILINGS[r];
+    var text = ROLE_LABELS[r] + ' ' + counts[r] + (ceiling ? '/' + ceiling : '');
+    var full = ceiling && counts[r] >= ceiling;
+    return '<div class="usage-chip' + (full ? ' full' : '') + '">' + text + '</div>';
+  }).join('');
+  document.getElementById('usage').innerHTML = html;
+}
+
+function render() {
+  var rows = _pins.map(function(pin, i) { return pinRow(i); }).join('');
+  document.querySelector('main').innerHTML =
+    '<div class="usage-wrap" id="usage"></div>'
+    + '<div class="section-label">Physical Pins</div>'
+    + rows;
+  renderUsage();
+}
+
+// Re-render the usage summary (and keep _roles in sync) after a successful
+// per-pin save -- edit.js's doSave() calls this hook once the POST to
+// /api/config succeeds, same extensibility point connectivity.html's WCB
+// panel uses for its own stateful restart-required logic.
+window._onConfigSaved = function(key) {
+  var m = /^pin(\d+)role$/.exec(key);
+  if (!m) return;
+  var i = _pins.indexOf(parseInt(m[1], 10));
+  if (i >= 0) _roles[i] = _configData[key];
+  renderUsage();
+};
+
+fetch('/api/config').then(function(r) { return r.json(); }).then(function(d) {
+  _configData = d;
+  _pins = d.assignablePins || [];
+  _roles = d.pinRoles || [];
+  _domehw = d.domehw || '';
+  render();
+}).catch(function() {
+  document.getElementById('status').textContent = 'Failed to load settings.';
+});
 </script>
 </body>
 </html>
@@ -9122,6 +10241,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -9160,10 +10280,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -9180,7 +10310,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -9433,6 +10563,23 @@ function _applyWhenVisibility() {
     if (s.section || !s.when) return;
     var row = document.querySelector('[data-key="' + s.key + '"]');
     if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
   });
 }
 </script>
@@ -10178,6 +11325,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -10216,10 +11364,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -10236,7 +11394,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -10489,6 +11647,23 @@ function _applyWhenVisibility() {
     if (s.section || !s.when) return;
     var row = document.querySelector('[data-key="' + s.key + '"]');
     if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
   });
 }
 </script>
@@ -11303,6 +12478,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -11341,10 +12517,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -11361,7 +12547,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -11614,6 +12800,23 @@ function _applyWhenVisibility() {
     if (s.section || !s.when) return;
     var row = document.querySelector('[data-key="' + s.key + '"]');
     if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
   });
 }
 </script>
@@ -12255,6 +13458,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -12293,10 +13497,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -12313,7 +13527,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -12566,6 +13780,23 @@ function _applyWhenVisibility() {
     if (s.section || !s.when) return;
     var row = document.querySelector('[data-key="' + s.key + '"]');
     if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
   });
 }
 </script>
@@ -13248,6 +14479,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -13286,10 +14518,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -13306,7 +14548,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -13559,6 +14801,23 @@ function _applyWhenVisibility() {
     if (s.section || !s.when) return;
     var row = document.querySelector('[data-key="' + s.key + '"]');
     if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
   });
 }
 </script>
@@ -14397,6 +15656,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -14435,10 +15695,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -14455,7 +15725,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -14710,25 +15980,47 @@ function _applyWhenVisibility() {
     if (row) row.hidden = !s.when(_configData);
   });
 }
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
+  });
+}
 </script>
 <script>
-var DOUT = [
-  {id:'dout0', label:'Digital 1', gpio:'GPIO39'},
-  {id:'dout1', label:'Digital 2', gpio:'GPIO40', note:'dome hall sensor'},
-  {id:'dout2', label:'Digital 3', gpio:'GPIO41'},
-  {id:'dout3', label:'Digital 4', gpio:'GPIO42'}
-];
-var AIN = [
-  {id:'ain0', label:'Analog 1', gpio:'GPIO1'},
-  {id:'ain1', label:'Analog 2', gpio:'GPIO2'}
-];
+// DOUT/AIN row COUNT and GPIO labels both come from /api/config's live
+// doutPins/analogPins arrays (see buildUI()) rather than being hardcoded
+// here -- issue #133 lets pins be traded between roles at runtime (e.g. a
+// DOUT pin becomes a 5th servo instead), so a fixed 4/2-row layout would
+// go stale -- or just be wrong -- the moment someone reassigns one.
 
 function connLed(ok) {
   return '<div class="pin-led ' + (ok ? 'high' : 'low') + '">&#9679;</div>'
        + '<div class="pin-state ' + (ok ? 'high' : 'low') + '">' + (ok ? 'CONNECTED' : 'OFFLINE') + '</div>';
 }
 
-function buildUI() {
+var DOUT = [];
+var AIN = [];
+
+function buildUI(cfg) {
+  DOUT = ((cfg && cfg.doutPins) || []).map(function(pin, i) {
+    return {id: 'dout' + i, label: 'Digital ' + (i + 1), pin: pin};
+  });
+  AIN = ((cfg && cfg.analogPins) || []).map(function(pin, i) {
+    return {id: 'ain' + i, label: 'Analog ' + (i + 1), pin: pin};
+  });
+
   var html = '<div class="section-label">Device</div>';
   html += '<div class="row"><div class="row-label">Restart Droid</div>'
         + '<button class="be-action" onclick="_doRestart(this)">Restart</button></div>';
@@ -14750,10 +16042,9 @@ function buildUI() {
 
   html += '<div class="section-label">Digital Outputs</div>';
   DOUT.forEach(function(d) {
-    var note = d.note ? '<span class="row-note">(' + d.note + ')</span>' : '';
     html += '<div class="row">'
-      + '<div class="row-label">' + d.label + note + '</div>'
-      + '<span class="gpio">' + d.gpio + '</span>'
+      + '<div class="row-label">' + d.label + '</div>'
+      + '<span class="gpio">GPIO' + d.pin + '</span>'
       + '<div class="pin-led low" id="' + d.id + '_led">&#9679;</div>'
       + '<div class="pin-state low" id="' + d.id + '_st">LOW</div>'
       + '</div>';
@@ -14762,7 +16053,7 @@ function buildUI() {
   AIN.forEach(function(a) {
     html += '<div class="row">'
       + '<div class="row-label">' + a.label + '</div>'
-      + '<span class="gpio">' + a.gpio + '</span>'
+      + '<span class="gpio">GPIO' + a.pin + '</span>'
       + '<div class="ain-val" id="' + a.id + '">&#8212;</div>'
       + '</div>';
   });
@@ -14817,9 +16108,19 @@ function refresh() {
     .catch(function(){});
 }
 
-buildUI();
-refresh();
-setInterval(refresh, 2000);
+// GPIO labels need the current pin assignments before the page can render
+// -- fetch /api/config once up front rather than hardcoding them (see the
+// DOUT/AIN comment above). Falls back to blank labels (still functional --
+// the live HIGH/LOW/analog values from /api/pins are unaffected) if the
+// fetch fails, rather than blocking the rest of the page.
+fetch('/api/config')
+  .then(function(r){ return r.json(); })
+  .then(function(cfg){ buildUI(cfg); })
+  .catch(function(){ buildUI(null); })
+  .then(function(){
+    refresh();
+    setInterval(refresh, 2000);
+  });
 </script>
 </body>
 </html>

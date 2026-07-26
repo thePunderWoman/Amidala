@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pins — AMIDALA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/common.css">
+<style>
+.usage-wrap{display:flex;flex-wrap:wrap;gap:.5rem;padding:.6rem 0 1rem}
+.usage-chip{font:500 11px/1 ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.04em;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:.35rem .7rem}
+.usage-chip.full{color:var(--accent);border-color:var(--accent)}
+</style>
+<script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; BACK</a>
+  <div class="page-title"><span class="dot"></span><span class="label">Pins</span><span class="dot"></span></div>
+</div>
+<main>
+  <div id="status">LOADING&#8230;</div>
+</main>
+<script src="/assets/edit.js"></script>
+<script>
+// Reassigns the ROLE of each of the 11 physical pins already broken out on
+// this board's headers (issue #133) -- e.g. "GPIO39 does Servo instead of
+// Digital Out" -- not a general "pick any GPIO" tool. Trading a pin's role
+// changes the COUNT in each category (fewer DOUT, more Servo), unlike the
+// old fixed-count design; see include/pin_assignment.h for the
+// authoritative pool/ceiling logic this page's dropdowns and the server
+// both defer to. Hand-built (like servos.html) rather than schema-driven,
+// since each row needs a per-pin-computed option list plus the live usage
+// summary below has no equivalent in buildPage()/SCHEMA.
+
+var ROLE_LABELS = {dout:'Digital Out', analog:'Analog In', ppm:'PPM In', servo:'Servo', hall:'Hall Sensor'};
+var CEILINGS = {servo:8, analog:6, ppm:1, hall:1};  // see pin_assignment.h
+
+var _pins = [];   // assignablePins, e.g. [1,2,3,4,5,6,39,40,41,42,47]
+var _roles = [];  // pinRoles, same order/indexing as _pins
+var _domehw = '';
+
+function rolesFor(pin) {
+  var roles = ['dout', 'ppm', 'servo'];
+  if (pin <= 10) roles.splice(1, 0, 'analog');  // ADC1-capable pins only
+  if (_domehw === 'roboclaw') roles.push('hall');
+  return roles;
+}
+
+function pinRow(i) {
+  var pin = _pins[i];
+  var opts = rolesFor(pin).map(function(r) { return {v: r, l: ROLE_LABELS[r]}; });
+  return buildRow({key: 'pin' + pin + 'role', label: 'GPIO ' + pin, type: 'select',
+                   options: opts, restart: true}, _roles[i]);
+}
+
+function renderUsage() {
+  var counts = {dout: 0, analog: 0, ppm: 0, servo: 0, hall: 0};
+  _roles.forEach(function(r) { if (counts[r] !== undefined) counts[r]++; });
+  var order = ['servo', 'analog', 'dout', 'ppm'];
+  if (_domehw === 'roboclaw') order.push('hall');
+  var html = order.map(function(r) {
+    var ceiling = CEILINGS[r];
+    var text = ROLE_LABELS[r] + ' ' + counts[r] + (ceiling ? '/' + ceiling : '');
+    var full = ceiling && counts[r] >= ceiling;
+    return '<div class="usage-chip' + (full ? ' full' : '') + '">' + text + '</div>';
+  }).join('');
+  document.getElementById('usage').innerHTML = html;
+}
+
+function render() {
+  var rows = _pins.map(function(pin, i) { return pinRow(i); }).join('');
+  document.querySelector('main').innerHTML =
+    '<div class="usage-wrap" id="usage"></div>'
+    + '<div class="section-label">Physical Pins</div>'
+    + rows;
+  renderUsage();
+}
+
+// Re-render the usage summary (and keep _roles in sync) after a successful
+// per-pin save -- edit.js's doSave() calls this hook once the POST to
+// /api/config succeeds, same extensibility point connectivity.html's WCB
+// panel uses for its own stateful restart-required logic.
+window._onConfigSaved = function(key) {
+  var m = /^pin(\d+)role$/.exec(key);
+  if (!m) return;
+  var i = _pins.indexOf(parseInt(m[1], 10));
+  if (i >= 0) _roles[i] = _configData[key];
+  renderUsage();
+};
+
+fetch('/api/config').then(function(r) { return r.json(); }).then(function(d) {
+  _configData = d;
+  _pins = d.assignablePins || [];
+  _roles = d.pinRoles || [];
+  _domehw = d.domehw || '';
+  render();
+}).catch(function() {
+  document.getElementById('status').textContent = 'Failed to load settings.';
+});
+</script>
+</body>
+</html>

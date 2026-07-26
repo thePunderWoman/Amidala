@@ -90,6 +90,7 @@ async function doSave(btn) {
       // full page reload.
       if (_configData) _configData[key] = val;
       _applyWhenVisibility();
+      _refreshDynamicOptions();
       if (row.dataset.restart === '1') _flagRestartRequired();
       // Optional page-defined hook for keys whose "needs restart" status is
       // stateful rather than a fixed schema property (e.g. WCB identity
@@ -128,10 +129,20 @@ function _asciiDisp(val) {
   return String(n);
 }
 
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
 function dispValue(s, val) {
   if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
   if (s.type === 'select') {
-    var found = (s.options || []).find(function(op) { return op.v === String(val); });
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
     return found ? found.l : val;
   }
   if (s.type === 'password') return '••••••••';
@@ -148,7 +159,7 @@ function buildInput(s, val) {
       + '</select>';
   }
   if (s.type === 'select') {
-    var opts = (s.options || []).map(function(op) {
+    var opts = _resolveOptions(s).map(function(op) {
       return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
     }).join('');
     return '<select>' + opts + '</select>';
@@ -401,5 +412,22 @@ function _applyWhenVisibility() {
     if (s.section || !s.when) return;
     var row = document.querySelector('[data-key="' + s.key + '"]');
     if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
   });
 }

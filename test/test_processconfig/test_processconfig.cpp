@@ -14,6 +14,7 @@
 #include "arduino_mock.h"
 #include "core.h"
 #include "params.h"
+#include "pin_assignment.h"
 #include <unity.h>
 #include <string.h>
 
@@ -889,6 +890,55 @@ void test_outboundserial_defaults_to_uart0() {
 // defaults. Every other *_defaults_to_* test in this file happens to check
 // a value that's already 0/false after memset(), which masks this; 1 is not.
 
+// ---- Reassignable GPIO pin roles (issue #133) -------------------------------
+// config.cpp's applyPinRoleParam() parses "pin<N>role=<type>", calls
+// pin_assignment.h's validateRoleChange(), and only writes
+// params.pinRole[pinIndexOf(pin)] on success. These mirror that
+// parse+validate+conditionally-write shape directly against pin_assignment.h's
+// public API (already exhaustively covered in isolation by
+// test_pin_assignment.cpp) to catch a wiring bug specifically -- e.g. a key
+// routed to the wrong pin or role string parsed wrong.
+
+static bool mirrorApplyPinRoleParam(const char *roleStr, uint8_t pin,
+                                    PinRoleType allRoles[11]) {
+    PinRoleType newRole;
+    if (!pinRoleFromString(roleStr, &newRole)) return false;
+    PinRoleValidationResult r = validateRoleChange(pin, newRole, allRoles);
+    if (!r.ok) return false;
+    allRoles[pinIndexOf(pin)] = newRole;
+    return true;
+}
+
+void test_pin_role_param_accepts_valid_role_change() {
+    // GPIO39 starts DOUT (all-zero == kDout); trading it for a servo has no
+    // conflicting pins here, so it should succeed.
+    PinRoleType roles[11];
+    memset(roles, 0, sizeof(roles));
+    bool ok = mirrorApplyPinRoleParam("servo", 39, roles);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_TRUE(PinRoleType::kServo == roles[pinIndexOf(39)]);
+}
+
+void test_pin_role_param_rejects_analog_on_non_adc1_pin() {
+    // GPIO39 is a pool pin but not ADC1-capable.
+    PinRoleType roles[11];
+    memset(roles, 0, sizeof(roles));
+    bool ok = mirrorApplyPinRoleParam("analog", 39, roles);
+    TEST_ASSERT_FALSE(ok);
+    TEST_ASSERT_TRUE(PinRoleType::kDout == roles[pinIndexOf(39)]);  // unchanged
+}
+
+void test_pin_role_param_rejects_servo_at_ledc_ceiling() {
+    PinRoleType roles[11];
+    for (int i = 0; i < 8; i++) roles[i] = PinRoleType::kServo;
+    roles[8]  = PinRoleType::kDout;
+    roles[9]  = PinRoleType::kDout;
+    roles[10] = PinRoleType::kPpm;
+    bool ok = mirrorApplyPinRoleParam("servo", 41 /* roles[8] */, roles);
+    TEST_ASSERT_FALSE(ok);
+    TEST_ASSERT_TRUE(PinRoleType::kDout == roles[pinIndexOf(41)]);  // unchanged
+}
+
 void test_wifichannel_intparam_parses() {
     AmidalaParameters p;
     memset(&p, 0, sizeof(p));
@@ -1057,6 +1107,9 @@ int main(int argc, char **argv) {
     RUN_TEST(test_wifichannel_clamps_below_minimum);
     RUN_TEST(test_wifichannel_clamps_above_maximum);
     RUN_TEST(test_wifichannel_accepts_boundary_13);
+    RUN_TEST(test_pin_role_param_accepts_valid_role_change);
+    RUN_TEST(test_pin_role_param_rejects_analog_on_non_adc1_pin);
+    RUN_TEST(test_pin_role_param_rejects_servo_at_ledc_ceiling);
     RUN_TEST(test_wcbpassword_parse_stores_value);
     RUN_TEST(test_wcbpassword_parse_truncates_to_39_chars);
     RUN_TEST(test_wcbpassword_defaults_to_empty_string);

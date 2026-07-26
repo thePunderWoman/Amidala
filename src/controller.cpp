@@ -89,6 +89,11 @@ void AmidalaController::setup() {
   if (configLoaded)
     ensureConfigDefaults(params);
 #endif
+  // Guarantee the 11 reassignable pins (issue #133) are mutually consistent
+  // -- config.txt lines parse in file order, so a line's own conflict check
+  // only sees whatever's been parsed so far -- before anything below reads
+  // them into a pinMode()/constructor call.
+  fConfig.validatePinAssignments();
   fConfig.showCurrentConfiguration();
 
   // WiFi AP must come up BEFORE WCB Client's begin() -- WCB_Client detects
@@ -154,32 +159,32 @@ void AmidalaController::setup() {
   pinMode(STATUS_S4_PIN, OUTPUT);
 #endif
 
-  pinMode(DOUT1_PIN, OUTPUT);
-  pinMode(DOUT2_PIN, OUTPUT);
-  pinMode(DOUT3_PIN, OUTPUT);
-  pinMode(DOUT4_PIN, OUTPUT);
-#ifdef DOUT7_PIN
-  pinMode(DOUT7_PIN, OUTPUT);
-#endif
-#ifdef DOUT8_PIN
-  pinMode(DOUT8_PIN, OUTPUT);
-#endif
+  // Pins are derived from params.pinRole (issue #133) -- validatePinAssignments()
+  // above already guaranteed these are mutually consistent and within the
+  // assignable pool. Counts per role type are however many pool pins
+  // currently have that role, not a fixed number.
+  uint8_t doutCount = countPinsWithRole(params.pinRole, PinRoleType::kDout);
+  for (uint8_t i = 0; i < doutCount; i++) {
+    pinMode(nthPinWithRole(params.pinRole, PinRoleType::kDout, i), OUTPUT);
+  }
 
-  pinMode(ANALOG2_PIN, INPUT);
+  uint8_t analogCount = countPinsWithRole(params.pinRole, PinRoleType::kAnalog);
+  for (uint8_t i = 0; i < analogCount; i++) {
+    pinMode(nthPinWithRole(params.pinRole, PinRoleType::kAnalog, i), INPUT);
+  }
 
-  pinMode(PPMIN_PIN, INPUT);
+  uint8_t ppmPin = nthPinWithRole(params.pinRole, PinRoleType::kPpm, 0);
+  if (ppmPin != kNoPin) {
+    fPPMDecoder.setPin(ppmPin);
+    pinMode(ppmPin, INPUT);
+  }
 
 #ifdef SEL2_PIN
   pinMode(SEL2_PIN, INPUT_PULLUP);
 #endif
-  setDigitalPin(1, false);
-  setDigitalPin(2, false);
-  setDigitalPin(3, false);
-  setDigitalPin(4, false);
-  setDigitalPin(5, false);
-  setDigitalPin(6, false);
-  setDigitalPin(7, false);
-  setDigitalPin(8, false);
+  for (uint8_t i = 1; i <= doutCount; i++) {
+    setDigitalPin(i, false);
+  }
 
   fTankDrive.setMaxSpeed(MAXIMUM_SPEED);
   fTankDrive.setThrottleAccelerationScale(ACCELERATION_SCALE);
@@ -209,16 +214,34 @@ void AmidalaController::setup() {
       params.domeseekl,   params.domeseekr,
       params.domefudge,
       DEFAULT_DOME_SPEED_TARGET, params.domespeedmin);
+  // Hall is a selectable role type (issue #133), defaulting to GPIO40 (see
+  // pin_assignment.h) but reassignable if the sensor's been physically
+  // rewired to a different pool pin. Must be called before setup() -- that's
+  // where pinMode()/attachInterrupt() on the hall pin actually happen.
+  // fConfig.validatePinAssignments() (called earlier in setup(), above)
+  // already guarantees exactly one pin has role Hall whenever RoboClaw dome
+  // drive is compiled in, so this is never kNoPin here.
+  fDomeDrive.setHallPin(nthPinWithRole(params.pinRole, PinRoleType::kHall, 0));
   // setup() is called explicitly here (after config is applied) rather than
   // via the ReelTwo SetupEvent pool, so homing starts with correct parameters.
   fDomeDrive.setup();
 #endif
 #endif
 
-  static const uint8_t kServoPins[] = {
-      SERVO1_PIN, SERVO2_PIN, SERVO3_PIN,
-  };
-  for (unsigned i = 0; i < sizeof(kServoPins) / sizeof(kServoPins[0]); i++) {
+  // Pins derived from params.pinRole (issue #133) -- servoSettings[] in
+  // globals.cpp seeds compiled-in defaults for all 8 LEDC channels at
+  // global-init time (before config loads); this re-applies the
+  // config-derived pin for each live channel, and disables (pin=0) any
+  // channel at or beyond the current live servo count, same double-init
+  // pattern used throughout setup().
+  uint8_t servoCount = params.getServoCount();
+  for (uint8_t i = 0; i < kMaxServoChannels; i++) {
+    if (i >= servoCount) {
+      servoDispatch.setServo(i, 0, params.minpulse, params.maxpulse,
+                             params.minpulse, 0);
+      continue;
+    }
+    uint8_t pin = nthPinWithRole(params.pinRole, PinRoleType::kServo, i);
     uint16_t minpulse =
         params.S[i].minpulse ? params.S[i].minpulse : params.minpulse;
     uint16_t maxpulse =
@@ -238,8 +261,7 @@ void AmidalaController::setup() {
                    (int32_t)(neutral_percent *
                              ((int32_t)maxpulse - (int32_t)minpulse)));
 
-    servoDispatch.setServo(i, kServoPins[i], minpulse, maxpulse,
-                           neutralpulse, 0);
+    servoDispatch.setServo(i, pin, minpulse, maxpulse, neutralpulse, 0);
   }
 }
 
@@ -264,13 +286,12 @@ void AmidalaController::animate() {
 #if DRIVE_SYSTEM == DRIVE_SYSTEM_PWM || DRIVE_SYSTEM == DRIVE_SYSTEM_SABER
   if (servoDispatch.currentPos(0) != 1450 ||
       servoDispatch.currentPos(1) != 1500) {
-    // digital out 7
     if (fDriveStateMillis + 1000 < millis()) {
-      setDigitalPin(7, true);
+      fDriveActiveIndicator = true;
       fDriveStateMillis = millis();
     }
-  } else if (getDigitalPin(7) && fDriveStateMillis + 1000 < millis()) {
-    setDigitalPin(7, false);
+  } else if (fDriveActiveIndicator && fDriveStateMillis + 1000 < millis()) {
+    fDriveActiveIndicator = false;
     fDriveStateMillis = millis();
   }
 #endif
@@ -278,21 +299,21 @@ void AmidalaController::animate() {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
   if (fabsf(fDomeDrive.getLastCommandedSpeed()) > 0.01f) {
     if (fDomeStateMillis + 1000 < millis()) {
-      setDigitalPin(8, true);
+      fDomeActiveIndicator = true;
       fDomeStateMillis = millis();
     }
-  } else if (getDigitalPin(8)) {
-    setDigitalPin(8, false);
+  } else if (fDomeActiveIndicator) {
+    fDomeActiveIndicator = false;
     fDomeStateMillis = millis();
   }
 #else
   if (fDomeDrive.isMoving()) {
     if (fDomeStateMillis + 1000 < millis()) {
-      setDigitalPin(8, true);
+      fDomeActiveIndicator = true;
       fDomeStateMillis = millis();
     }
-  } else if (getDigitalPin(8)) {
-    setDigitalPin(8, false);
+  } else if (fDomeActiveIndicator) {
+    fDomeActiveIndicator = false;
     fDomeStateMillis = millis();
   }
 #endif

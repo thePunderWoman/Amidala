@@ -529,6 +529,10 @@ void test_full_config_json_servos_array() {
 
 void test_full_config_json_servos_channel_fields() {
     AmidalaParameters p = makeParams();
+    // makeParams() leaves pinRole[] all-zero (kDout), so getServoCount()
+    // would be 0 and the servos array empty (issue #133, live-truncated) --
+    // give channel 0 a servo-typed pin so it's actually emitted.
+    p.pinRole[0] = PinRoleType::kServo;  // GPIO1
     p.S[0].min = 10;
     p.S[0].max = 170;
     p.S[0].n   = 90;
@@ -542,6 +546,38 @@ void test_full_config_json_servos_channel_fields() {
     TEST_ASSERT_TRUE(contains(s, "\"max\":170"));
     TEST_ASSERT_TRUE(contains(s, "\"sp\":75"));
     TEST_ASSERT_TRUE(contains(s, "\"r\":1"));
+}
+
+void test_full_config_json_assignable_pins_array() {
+    // Fixed constant (pin_assignment.h's kAssignablePins) -- exact match.
+    AmidalaParameters p = makeParams();
+    String json = buildFullConfigJson(p);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"assignablePins\":[1,2,3,4,5,6,39,40,41,42,47]"));
+}
+
+void test_full_config_json_pin_role_fields() {
+    // makeParams() leaves pinRole[] all-zero -- every pin defaults to kDout
+    // (enum value 0) -- so doutPins should list the whole pool by default.
+    AmidalaParameters p = makeParams();
+    String json = buildFullConfigJson(p);
+    const char* s = json.c_str();
+    TEST_ASSERT_TRUE(contains(s, "\"pinRoles\":[\"dout\",\"dout\",\"dout\",\"dout\",\"dout\","
+                              "\"dout\",\"dout\",\"dout\",\"dout\",\"dout\",\"dout\"]"));
+    TEST_ASSERT_TRUE(contains(s, "\"doutPins\":[1,2,3,4,5,6,39,40,41,42,47]"));
+    TEST_ASSERT_TRUE(contains(s, "\"analogPins\":[]"));
+}
+
+void test_full_config_json_pin_role_fields_reflect_reassignment() {
+    AmidalaParameters p = makeParams();
+    p.pinRole[0] = PinRoleType::kServo;   // GPIO1
+    p.pinRole[1] = PinRoleType::kAnalog;  // GPIO2
+    p.pinRole[7] = PinRoleType::kHall;    // GPIO40
+    String json = buildFullConfigJson(p);
+    const char* s = json.c_str();
+    TEST_ASSERT_TRUE(contains(s, "\"pinRoles\":[\"servo\",\"analog\",\"dout\",\"dout\",\"dout\","
+                              "\"dout\",\"dout\",\"hall\",\"dout\",\"dout\",\"dout\"]"));
+    TEST_ASSERT_TRUE(contains(s, "\"doutPins\":[3,4,5,6,39,41,42,47]"));
+    TEST_ASSERT_TRUE(contains(s, "\"analogPins\":[2]"));
 }
 
 void test_full_config_json_sstr_empty_array() {
@@ -957,6 +993,9 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_full_config_json_reflects_changed_serialbaud);
     RUN_TEST(test_full_config_json_servos_array);
     RUN_TEST(test_full_config_json_servos_channel_fields);
+    RUN_TEST(test_full_config_json_assignable_pins_array);
+    RUN_TEST(test_full_config_json_pin_role_fields);
+    RUN_TEST(test_full_config_json_pin_role_fields_reflect_reassignment);
     RUN_TEST(test_full_config_json_sstr_empty_array);
     RUN_TEST(test_full_config_json_sstr_with_entries);
     RUN_TEST(test_full_config_json_gadgets_overload_valid_json);

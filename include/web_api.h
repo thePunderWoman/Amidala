@@ -10,6 +10,7 @@
 
 #include "params.h"
 #include "version.h"
+#include "pin_assignment.h"
 
 // ---------------------------------------------------------------------------
 // Hex string helper (8 uppercase hex digits, no prefix)
@@ -185,7 +186,7 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     // Servos — abbreviated keys to save flash; "sp" = speed to distinguish
     // from sstr "s" (serial string value)
     json += "\"servos\":[";
-    for (uint8_t i = 0; i < sizeof(p.S)/sizeof(p.S[0]); i++) {
+    for (uint8_t i = 0; i < p.getServoCount(); i++) {
         if (i > 0) json += ",";
         json += "{\"min\":"; json += String(p.S[i].min);
         json += ",\"max\":"; json += String(p.S[i].max);
@@ -330,6 +331,42 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
         default: break;
         }
         json += "}";
+    }
+    json += "]";
+
+    // Reassignable GPIO pin roles (issue #133). assignablePins is the single
+    // source of truth for the pool of physical pins; pinRoles is the
+    // current role (string-encoded, see pin_assignment.h's
+    // pinRoleToString()) of each, same order/indexing as assignablePins --
+    // drives the Pins config page's per-pin dropdowns. doutPins/analogPins
+    // are the derived, ordered GPIO lists for however many pins currently
+    // have that role -- the Droid Status page's row count tracks live
+    // reassignment rather than a fixed 4/2.
+    json += ",\"assignablePins\":[";
+    for (uint8_t i = 0; i < sizeof(kAssignablePins) / sizeof(kAssignablePins[0]); i++) {
+        if (i > 0) json += ",";
+        json += String(kAssignablePins[i]);
+    }
+    json += "],\"pinRoles\":[";
+    for (uint8_t i = 0; i < 11; i++) {
+        if (i > 0) json += ",";
+        json += "\""; json += String(pinRoleToString(p.pinRole[i])); json += "\"";
+    }
+    json += "],\"doutPins\":[";
+    {
+        uint8_t doutCount = countPinsWithRole(p.pinRole, PinRoleType::kDout);
+        for (uint8_t i = 0; i < doutCount; i++) {
+            if (i > 0) json += ",";
+            json += String(nthPinWithRole(p.pinRole, PinRoleType::kDout, i));
+        }
+    }
+    json += "],\"analogPins\":[";
+    {
+        uint8_t analogCount = countPinsWithRole(p.pinRole, PinRoleType::kAnalog);
+        for (uint8_t i = 0; i < analogCount; i++) {
+            if (i > 0) json += ",";
+            json += String(nthPinWithRole(p.pinRole, PinRoleType::kAnalog, i));
+        }
     }
     json += "]";
 
