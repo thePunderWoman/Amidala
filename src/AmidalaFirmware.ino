@@ -69,20 +69,19 @@ void setup() {
 #ifdef VMUSIC_SERIAL
   VMUSIC_SERIAL.begin(9600);
 #endif
-#ifdef DRIVE_SERIAL
-  DRIVE_SERIAL.begin(DRIVE_BAUD_RATE, SERIAL_8N1, SERIAL0_RX_PIN, SERIAL0_TX_PIN);
-#elif defined(DOME_DRIVE_SERIAL)
-  DOME_DRIVE_SERIAL.begin(DRIVE_BAUD_RATE, SERIAL_8N1, SERIAL0_RX_PIN, SERIAL0_TX_PIN);
-#elif defined(RDH_SERIAL)
+  // DRIVE_SERIAL/DOME_DRIVE_SERIAL (AUX_SERIAL) and ROBOCLAW_SERIAL are no
+  // longer opened here (issue #147) -- both are now begin()'d in
+  // AmidalaController::setup() (src/controller.cpp), at the point where
+  // fTankDrive/fDomeDrive are constructed, since that's the earliest point
+  // config has loaded and (eventually) the port each subsystem uses becomes
+  // a runtime choice rather than a fixed macro. RDH_SERIAL shares Serial0's
+  // own pins by design (see pin_config.h) and is unrelated to that work, so
+  // it keeps its own early begin() here; the previous plain "SERIAL" fallback
+  // branch is dropped as redundant with controller.cpp's later
+  // SERIAL.begin(params.serialbaud, ...) call, which fires at the correct,
+  // config-loaded baud rather than this hardcoded 115200.
+#ifdef RDH_SERIAL
   RDH_SERIAL.begin(RDH_BAUD_RATE, SERIAL_8N1, SERIAL0_RX_PIN, SERIAL0_TX_PIN);
-#else
-  SERIAL.begin(115200, SERIAL_8N1, SERIAL0_RX_PIN, SERIAL0_TX_PIN);
-#endif
-#if defined(ROBOCLAW_SERIAL) && DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-  // ROBOCLAW_SERIAL (Serial1) is separate from DRIVE_SERIAL (Serial0) and must
-  // be initialized independently. Explicit pins required: ESP32-S3 UART1 has no
-  // hardware-fixed pins and will not default to GPIO17/18 without them.
-  ROBOCLAW_SERIAL.begin(ROBOCLAW_BAUD_RATE, SERIAL_8N1, ROBOCLAW_RX_PIN, ROBOCLAW_TX_PIN);
 #endif
 
   // ESP32 EEPROM emulation requires an explicit begin() before any read/write.

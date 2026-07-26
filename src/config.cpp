@@ -60,7 +60,7 @@ void AmidalaConfig::applyDomePositionParams() {
 #ifdef DOME_DRIVE
   AmidalaParameters &params = fController->params;
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-  fController->fDomeDrive.applyDomePositionParams(
+  fController->fDomeDrive->applyDomePositionParams(
       params.domeseekmin, params.domeseekmax,
       params.domeseekl,   params.domeseekr,
       params.domefudge,
@@ -440,7 +440,7 @@ bool AmidalaConfig::processConfig(const char *cmd) {
 #ifdef RDH_SERIAL
   RDHSerial &autoDome = fController->fAutoDome;
 #endif
-  auto *domeDrive = &fController->fDomeDrive;
+  auto *domeDrive = fController->fDomeDrive;
   if (startswith(cmd, "sb=")) {
     if (params.sbcount < params.getSoundBankCount()) {
       AmidalaParameters::SoundBank *sb =

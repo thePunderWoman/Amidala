@@ -131,13 +131,13 @@ void DomeController::notify() {
     // to kStateHomed; remember it so resumeIfInterrupted() can restore it
     // once the connection recovers (issue #143 -- random mode otherwise
     // never resumed on its own after any connection-loss safety stop).
-    fDriver->fDomeDrive.noteConnectionLossStop();
+    fDriver->fDomeDrive->noteConnectionLossStop();
     fDriver->domeEmergencyStop();
     fSafetyStop.trip();
     disconnect();
   } else if (lagTime > 500) {
     DEBUG_PRINTLN("It has been 500ms. Shutdown motors");
-    fDriver->fDomeDrive.noteConnectionLossStop();
+    fDriver->fDomeDrive->noteConnectionLossStop();
     fDriver->domeEmergencyStop();
     fSafetyStop.trip();
   } else {
@@ -154,7 +154,7 @@ void DomeController::notify() {
     if (fSafetyStop.recover() && !fGestureCollect) {
       DEBUG_PRINTLN("Signal recovered. Re-enabling dome");
       fDriver->enableDomeController();
-      fDriver->fDomeDrive.resumeIfInterrupted();
+      fDriver->fDomeDrive->resumeIfInterrupted();
     }
     process();
   }
@@ -192,14 +192,14 @@ void DomeController::process() {
   if (fDriver->params.altbtn != 0 && fDriver->params.altdomestick == 1) {
     bool altHeld = fDriver->isAltHeld();
     if (altHeld && !fAltEngagedAbsStick
-        && fDriver->fDomeDrive.isHomed()
-        && fDriver->fDomeDrive.isCalibrated()
-        && !fDriver->fDomeDrive.isAbsoluteStickMode()
-        && !fDriver->fDomeDrive.isRandomMode()) {
-      fDriver->fDomeDrive.enableAbsoluteStickMode();
+        && fDriver->fDomeDrive->isHomed()
+        && fDriver->fDomeDrive->isCalibrated()
+        && !fDriver->fDomeDrive->isAbsoluteStickMode()
+        && !fDriver->fDomeDrive->isRandomMode()) {
+      fDriver->fDomeDrive->enableAbsoluteStickMode();
       fAltEngagedAbsStick = true;
     } else if (!altHeld && fAltEngagedAbsStick) {
-      fDriver->fDomeDrive.disableAbsoluteStickMode();
+      fDriver->fDomeDrive->disableAbsoluteStickMode();
       fAltEngagedAbsStick = false;
     }
   }
@@ -299,7 +299,7 @@ void DomeController::onDisconnect() {
     fDriver->resetMutePressTimer();
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
   if (fAltEngagedAbsStick) {
-    fDriver->fDomeDrive.disableAbsoluteStickMode();
+    fDriver->fDomeDrive->disableAbsoluteStickMode();
     fAltEngagedAbsStick = false;
   }
 #endif

@@ -19,37 +19,18 @@ AmidalaController::AmidalaController()
 #ifdef RDH_SERIAL
       fAutoDome(RDH_SERIAL),
 #endif
-#if DRIVE_SYSTEM == DRIVE_SYSTEM_SABER
-      fTankDrive(128, DRIVE_SERIAL, fDriveStick),
-#elif DRIVE_SYSTEM == DRIVE_SYSTEM_PWM
-      fTankDrive(servoDispatch, 1, 0, 2, fDriveStick),
-#elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM
-      fTankDrive(servoDispatch, 1, 0, 2, fDriveStick),
-#elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_SERIAL
-      fTankDrive(DRIVE_SERIAL, fDriveStick),
-#elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM_SERIAL
-      fTankDrive(DRIVE_SERIAL, servoDispatch, 1, 0, 4, fDriveStick),
-#elif defined(DRIVE_SYSTEM)
-#error Unsupported DRIVE_SYSTEM
-#endif
-#if DOME_DRIVE == DOME_DRIVE_SABER
-      fDomeDrive(129, DOME_DRIVE_SERIAL, fDomeStick),
-#elif DOME_DRIVE == DOME_DRIVE_PWM
-      fDomeDrive(servoDispatch, 3, fDomeStick),
-#elif DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-      fDomeDrive(ROBOCLAW_SERIAL,
-                 DEFAULT_DOME_ROBOCLAW_ADDRESS,
-                 DEFAULT_DOME_ROBOCLAW_CHANNEL,
-                 DOME_HALL_PIN,
-                 fDomeStick),
-#endif
       fPPMDecoder(PPMIN_PIN, params.getRadioChannelCount()) {
+  // fTankDrive/fDomeDrive are NOT constructed here (issue #147) -- see their
+  // declaration in controller.h and the "new" calls in setup() below. This
+  // constructor runs at C++ global static-init time (AmidalaController is a
+  // global -- see AmidalaFirmware.ino), before params is loaded from flash,
+  // so nothing here can depend on a config-driven serial port choice yet.
 }
 
 void AmidalaController::emergencyStop() {
 #ifdef DRIVE_SYSTEM
-  fTankDrive.stop();
-  fTankDrive.setEnable(false);
+  fTankDrive->stop();
+  fTankDrive->setEnable(false);
   // Force neutral PWM signals as a safety backup
   servoDispatch.moveTo(1, 0.5); // Drive Left
   servoDispatch.moveTo(0, 0.5); // Drive Right
@@ -59,8 +40,8 @@ void AmidalaController::emergencyStop() {
 
 void AmidalaController::domeEmergencyStop() {
 #ifdef DOME_DRIVE
-  fDomeDrive.stop();
-  fDomeDrive.setEnable(false);
+  fDomeDrive->stop();
+  fDomeDrive->setEnable(false);
 #if DOME_DRIVE != DOME_DRIVE_ROBOCLAW
   // Force neutral PWM signal as a safety backup (PWM/Sabertooth only).
   servoDispatch.moveTo(3, 0.5); // Dome
@@ -96,6 +77,52 @@ void AmidalaController::setup() {
   fConfig.validatePinAssignments();
   fConfig.showCurrentConfiguration();
 
+  // fTankDrive/fDomeDrive construction is deferred to here (issue #147),
+  // rather than living in AmidalaController's own constructor -- see
+  // controller.h's member declarations. This is the earliest point after
+  // config has loaded, and strictly before the first live use of either
+  // (fTankDrive->setGuestStick() below). Each branch also opens its serial
+  // port on the correct pins/baud before constructing -- previously done in
+  // AmidalaFirmware.ino's setup(), before config was even loaded, and (for
+  // AUX_SERIAL/Serial2 users) on the WRONG pins (SERIAL0_RX_PIN/TX_PIN,
+  // i.e. GPIO43/44, meant for Serial0/WCB-out) since neither
+  // TankDriveRoboteq/TankDriveSabertooth/DomeDriveSabertooth ever begin()
+  // their own serial port themselves -- fixed here incidentally while this
+  // code is being relocated anyway.
+#if DRIVE_SYSTEM == DRIVE_SYSTEM_SABER
+  AUX_SERIAL.begin(DRIVE_BAUD_RATE, SERIAL_8N1, AUX_SERIAL_RX_PIN, AUX_SERIAL_TX_PIN);
+  fTankDrive = new TankDriveSabertooth(128, DRIVE_SERIAL, fDriveStick);
+#elif DRIVE_SYSTEM == DRIVE_SYSTEM_PWM
+  fTankDrive = new TankDrivePWM(servoDispatch, 1, 0, 2, fDriveStick);
+#elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM
+  fTankDrive = new TankDriveRoboteq(servoDispatch, 1, 0, 2, fDriveStick);
+#elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_SERIAL
+  AUX_SERIAL.begin(DRIVE_BAUD_RATE, SERIAL_8N1, AUX_SERIAL_RX_PIN, AUX_SERIAL_TX_PIN);
+  fTankDrive = new TankDriveRoboteq(DRIVE_SERIAL, fDriveStick);
+#elif DRIVE_SYSTEM == DRIVE_SYSTEM_ROBOTEQ_PWM_SERIAL
+  AUX_SERIAL.begin(DRIVE_BAUD_RATE, SERIAL_8N1, AUX_SERIAL_RX_PIN, AUX_SERIAL_TX_PIN);
+  fTankDrive = new TankDriveRoboteq(DRIVE_SERIAL, servoDispatch, 1, 0, 4, fDriveStick);
+#endif
+
+#if DOME_DRIVE == DOME_DRIVE_SABER
+  AUX_SERIAL.begin(DRIVE_BAUD_RATE, SERIAL_8N1, AUX_SERIAL_RX_PIN, AUX_SERIAL_TX_PIN);
+  fDomeDrive = new DomeDriveSabertooth(129, DOME_DRIVE_SERIAL, fDomeStick);
+#elif DOME_DRIVE == DOME_DRIVE_PWM
+  fDomeDrive = new DomeDrivePWM(servoDispatch, 3, fDomeStick);
+#elif DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+  // Explicit pins required: ESP32-S3 UART1 has no hardware-fixed pins and
+  // will not default to GPIO17/18 without them. DomeDriveRoboClaw::setup()
+  // re-begin()s this same port later (dome_drive_roboclaw.cpp) without pin
+  // args, which is fine -- the ESP32 Arduino core keeps a UART's
+  // already-attached pins across a re-begin() that doesn't specify new ones.
+  ROBOCLAW_SERIAL.begin(ROBOCLAW_BAUD_RATE, SERIAL_8N1, ROBOCLAW_RX_PIN, ROBOCLAW_TX_PIN);
+  fDomeDrive = new DomeDriveRoboClaw(ROBOCLAW_SERIAL,
+                                     DEFAULT_DOME_ROBOCLAW_ADDRESS,
+                                     DEFAULT_DOME_ROBOCLAW_CHANNEL,
+                                     DOME_HALL_PIN,
+                                     fDomeStick);
+#endif
+
   // WiFi AP must come up BEFORE WCB Client's begin() -- WCB_Client detects
   // an already-active SoftAP and switches to WIFI_AP_STA instead of forcing
   // WIFI_STA, so the mesh and the AP can coexist on the same radio channel.
@@ -110,13 +137,13 @@ void AmidalaController::setup() {
 #endif
 
   // BT gamepad left stick drives when the primary XBee stick is absent.
-  fTankDrive.setGuestStick(gBTGamepad);
+  fTankDrive->setGuestStick(gBTGamepad);
   // BT gamepad right stick steers the dome when the XBee dome stick is absent.
   // setAltDomeStick() only exists on our DomeDriveRoboclaw class — Reeltwo's
   // DomeDrive base (used by DomeDrivePWM/DomeDriveSabertooth) has no
   // alt-stick concept, so this degrades gracefully to unavailable there.
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-  fDomeDrive.setAltDomeStick(&gBTGamepad);
+  fDomeDrive->setAltDomeStick(&gBTGamepad);
 #endif
   if (params.btcontrolleron) {
     gBTGamepad.setup();
@@ -186,30 +213,30 @@ void AmidalaController::setup() {
     setDigitalPin(i, false);
   }
 
-  fTankDrive.setMaxSpeed(MAXIMUM_SPEED);
-  fTankDrive.setThrottleAccelerationScale(ACCELERATION_SCALE);
-  fTankDrive.setThrottleDecelerationScale(DECELRATION_SCALE);
-  fTankDrive.setTurnAccelerationScale(ACCELERATION_SCALE * 2);
-  fTankDrive.setTurnDecelerationScale(DECELRATION_SCALE);
-  fTankDrive.setGuestSpeedModifier(MAXIMUM_GUEST_SPEED);
-  fTankDrive.setScaling(SCALING);
-  fTankDrive.setChannelMixing(CHANNEL_MIXING);
+  fTankDrive->setMaxSpeed(MAXIMUM_SPEED);
+  fTankDrive->setThrottleAccelerationScale(ACCELERATION_SCALE);
+  fTankDrive->setThrottleDecelerationScale(DECELRATION_SCALE);
+  fTankDrive->setTurnAccelerationScale(ACCELERATION_SCALE * 2);
+  fTankDrive->setTurnDecelerationScale(DECELRATION_SCALE);
+  fTankDrive->setGuestSpeedModifier(MAXIMUM_GUEST_SPEED);
+  fTankDrive->setScaling(SCALING);
+  fTankDrive->setChannelMixing(CHANNEL_MIXING);
 
 #ifdef DOME_DRIVE
-  fDomeDrive.setMaxSpeed(DOME_MAXIMUM_SPEED);
-  fDomeDrive.setInverted(params.domeflip);
-  fDomeDrive.setScaling(false);
-  fDomeDrive.setThrottleAccelerationScale(DEFAULT_DOME_ACCELERATION_SCALE);
-  fDomeDrive.setThrottleDecelerationScale(DEFAULT_DOME_DECELERATION_SCALE);
+  fDomeDrive->setMaxSpeed(DOME_MAXIMUM_SPEED);
+  fDomeDrive->setInverted(params.domeflip);
+  fDomeDrive->setScaling(false);
+  fDomeDrive->setThrottleAccelerationScale(DEFAULT_DOME_ACCELERATION_SCALE);
+  fDomeDrive->setThrottleDecelerationScale(DEFAULT_DOME_DECELERATION_SCALE);
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
   // Apply runtime-configurable RoboClaw parameters from the loaded config.
-  fDomeDrive.setAddress(params.domercaddr);
-  fDomeDrive.setChannel(params.domercchan);
-  fDomeDrive.setFrontOffset(params.domefront);
-  fDomeDrive.setQPPS(params.domercqpps);
-  fDomeDrive.setStallTimeout(params.domestall);
-  fDomeDrive.setMaxSpeedPct(float(params.domespeed) / 100.0f);
-  fDomeDrive.applyDomePositionParams(
+  fDomeDrive->setAddress(params.domercaddr);
+  fDomeDrive->setChannel(params.domercchan);
+  fDomeDrive->setFrontOffset(params.domefront);
+  fDomeDrive->setQPPS(params.domercqpps);
+  fDomeDrive->setStallTimeout(params.domestall);
+  fDomeDrive->setMaxSpeedPct(float(params.domespeed) / 100.0f);
+  fDomeDrive->applyDomePositionParams(
       params.domeseekmin, params.domeseekmax,
       params.domeseekl,   params.domeseekr,
       params.domefudge,
@@ -221,10 +248,10 @@ void AmidalaController::setup() {
   // fConfig.validatePinAssignments() (called earlier in setup(), above)
   // already guarantees exactly one pin has role Hall whenever RoboClaw dome
   // drive is compiled in, so this is never kNoPin here.
-  fDomeDrive.setHallPin(nthPinWithRole(params.pinRole, PinRoleType::kHall, 0));
+  fDomeDrive->setHallPin(nthPinWithRole(params.pinRole, PinRoleType::kHall, 0));
   // setup() is called explicitly here (after config is applied) rather than
   // via the ReelTwo SetupEvent pool, so homing starts with correct parameters.
-  fDomeDrive.setup();
+  fDomeDrive->setup();
 #endif
 #endif
 
@@ -267,7 +294,7 @@ void AmidalaController::setup() {
 
 void AmidalaController::animate() {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-  fDomeDrive.animate();
+  fDomeDrive->animate();
 #endif
   if (params.btcontrolleron) gBTGamepad.animate();
   fWCB.poll(params);
@@ -297,7 +324,7 @@ void AmidalaController::animate() {
 #endif
 
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-  if (fabsf(fDomeDrive.getLastCommandedSpeed()) > 0.01f) {
+  if (fabsf(fDomeDrive->getLastCommandedSpeed()) > 0.01f) {
     if (fDomeStateMillis + 1000 < millis()) {
       fDomeActiveIndicator = true;
       fDomeStateMillis = millis();
@@ -307,7 +334,7 @@ void AmidalaController::animate() {
     fDomeStateMillis = millis();
   }
 #else
-  if (fDomeDrive.isMoving()) {
+  if (fDomeDrive->isMoving()) {
     if (fDomeStateMillis + 1000 < millis()) {
       fDomeActiveIndicator = true;
       fDomeStateMillis = millis();
@@ -394,34 +421,34 @@ void AmidalaController::executeDomeAction(uint8_t subcmd, int arg) {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
   switch (subcmd) {
   case ButtonAction::kDomeRand:
-    fDomeDrive.toggleRandomMode();
+    fDomeDrive->toggleRandomMode();
     break;
   case ButtonAction::kDomeStop:
     // Deliberate stop -- always wins, even over an unresolved connection-
     // loss drop still waiting to auto-resume random mode on reconnect.
-    fDomeDrive.cancelPendingRandomResume();
-    fDomeDrive.stop();
+    fDomeDrive->cancelPendingRandomResume();
+    fDomeDrive->stop();
     break;
   case ButtonAction::kDomeFront:
-    fDomeDrive.goToAngle(0);
+    fDomeDrive->goToAngle(0);
     break;
   case ButtonAction::kDomeHome:
-    fDomeDrive.startHoming();
+    fDomeDrive->startHoming();
     break;
   case ButtonAction::kDomeCalibrate:
-    fDomeDrive.startCalibration();
+    fDomeDrive->startCalibration();
     break;
   case ButtonAction::kDomeGotoAbs:
-    fDomeDrive.goToAngle(arg);
+    fDomeDrive->goToAngle(arg);
     break;
   case ButtonAction::kDomeRelPos:
-    fDomeDrive.goToRelative(arg);
+    fDomeDrive->goToRelative(arg);
     break;
   case ButtonAction::kDomeRelNeg:
-    fDomeDrive.goToRelative(-arg);
+    fDomeDrive->goToRelative(-arg);
     break;
   case ButtonAction::kDomeAbsStick:
-    fDomeDrive.toggleAbsoluteStickMode();
+    fDomeDrive->toggleAbsoluteStickMode();
     break;
   default:
     break;
@@ -467,7 +494,7 @@ void AmidalaController::processDomeCommand(const char* cmd) {
   } else if (strcmp(cmd, "abstick") == 0) {
     executeDomeAction(ButtonAction::kDomeAbsStick, 0);
   } else if (strcmp(cmd, "status") == 0) {
-    fDomeDrive.printStatus(fConsole);
+    fDomeDrive->printStatus(fConsole);
   } else if (strcmp(cmd, "seqon") == 0 || strncmp(cmd, "seqon,", 6) == 0) {
     // Suspend auto dome behaviors while an external controller runs a sequence.
     // Optional comma-argument gives the pause duration in seconds; omitted or
@@ -475,9 +502,9 @@ void AmidalaController::processDomeCommand(const char* cmd) {
     int argSec = (cmd[5] == ',') ? atoi(cmd + 6) : 0;
     uint32_t durationMs = dome_sequence_pause_duration_ms(
         argSec, DEFAULT_DOME_SEQUENCE_PAUSE_MS, DOME_SEQUENCE_PAUSE_MAX_MS);
-    fDomeDrive.startSequencePause(durationMs);
+    fDomeDrive->startSequencePause(durationMs);
   } else if (strcmp(cmd, "seqoff") == 0) {
-    fDomeDrive.endSequencePause();
+    fDomeDrive->endSequencePause();
   } else if (cmd[0] == '+' && cmd[1] != '\0') {
     executeDomeAction(ButtonAction::kDomeRelPos, atoi(cmd + 1));
   } else if (cmd[0] == '-' && cmd[1] != '\0') {
