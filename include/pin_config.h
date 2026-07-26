@@ -47,7 +47,7 @@
 
 #define SD_CS_PIN   10
 
-// ---- Serial1 (UART1 / Serial 2 header) --------------------------------------
+// ---- Serial1 (UART1 / Serial 1 header) --------------------------------------
 // GPIO17 TX / GPIO18 RX. Real hardware UART1; explicit pins required since
 // ESP32-S3 UART1 has no hardware-fixed default pins. Reassignable (issue
 // #147) between the dome and drive serial links -- see serial_assignment.h.
@@ -57,7 +57,7 @@
 #define SERIAL1_TX_PIN  17
 #define SERIAL1_RX_PIN  18
 
-// ---- AUX serial (UART2 / Serial 3 header) -----------------------------------
+// ---- AUX serial (UART2 / Serial 2 header) -----------------------------------
 // GPIO21 TX / GPIO38 RX.  Always compiled in; enabled at runtime via auxserial3=.
 
 #define AUX_SERIAL         Serial2
