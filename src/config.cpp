@@ -140,12 +140,18 @@ void AmidalaConfig::applyDomePositionParams() {
 #ifdef DOME_DRIVE
   AmidalaParameters &params = fController->params;
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-  fController->fDomeDrive->applyDomePositionParams(
-      params.domeseekmin, params.domeseekmax,
-      params.domeseekl,   params.domeseekr,
-      params.domefudge,
-      DEFAULT_DOME_SPEED_TARGET, params.domespeedmin,
-      params.domedecelzone);
+  // fDomeDrive isn't constructed yet when config.txt is parsed at boot
+  // (AmidalaController::setup() loads config before constructing it) --
+  // params is already updated by the intparam()/boolparam() match above, and
+  // setup() re-applies it to the drive once constructed, so skipping the
+  // live-apply here is safe. Only a live (post-boot) config change needs it.
+  if (fController->fDomeDrive)
+    fController->fDomeDrive->applyDomePositionParams(
+        params.domeseekmin, params.domeseekmax,
+        params.domeseekl,   params.domeseekr,
+        params.domefudge,
+        DEFAULT_DOME_SPEED_TARGET, params.domespeedmin,
+        params.domedecelzone);
 #endif
 #endif
 }
@@ -806,18 +812,27 @@ bool AmidalaConfig::processConfig(const char *cmd) {
     params.domeimu = boolarg;
     return true;
   } else if (boolparam(cmd, "domeflip=", params.domeflip)) {
-    domeDrive->setInverted(params.domeflip);
+    // domeDrive is still null when config.txt is parsed at boot (it's
+    // constructed later in AmidalaController::setup(), which re-applies
+    // params.domeflip to it once it exists) -- only a live post-boot change
+    // needs to apply it here immediately.
+    if (domeDrive)
+      domeDrive->setInverted(params.domeflip);
     return true;
   } else if (intparam(cmd, "domespeed=", params.domespeed, 0, 100)) {
     // setMaxSpeed()/setMaxSpeedPct() expect a 0.0-1.0 fraction, not the raw
     // 0-100 UI value -- matches what boot-time setup() already does
     // (src/controller.cpp). setMaxSpeedPct() is a RoboClaw-only convenience
     // wrapper; other dome-drive variants only have the base setMaxSpeed().
+    // domeDrive is null when config.txt is parsed at boot -- setup() applies
+    // params.domespeed to the drive once it's constructed, so skip here.
+    if (domeDrive) {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    static_cast<DomeDriveRoboClaw*>(domeDrive)->setMaxSpeedPct(float(params.domespeed) / 100.0f);
+      static_cast<DomeDriveRoboClaw*>(domeDrive)->setMaxSpeedPct(float(params.domespeed) / 100.0f);
 #else
-    domeDrive->setMaxSpeed(float(params.domespeed) / 100.0f);
+      domeDrive->setMaxSpeed(float(params.domespeed) / 100.0f);
 #endif
+    }
     return true;
   } else if (sintparam(cmd, "domepos=", sintarg)) {
 #ifdef RDH_SERIAL
@@ -876,29 +891,37 @@ bool AmidalaConfig::processConfig(const char *cmd) {
     return true;
   // ---- RoboClaw dome drive parameters (parsed regardless of active dome
   //      drive so config.txt is portable between builds) ---------------------
+  // domeDrive is null when config.txt is parsed at boot (constructed later
+  // in AmidalaController::setup(), which re-applies each of these params to
+  // it once it exists) -- only a live post-boot change needs to apply here.
   } else if (intparam(cmd, "domercaddr=", params.domercaddr, 128, 135)) {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    static_cast<DomeDriveRoboClaw*>(domeDrive)->setAddress(params.domercaddr);
+    if (domeDrive)
+      static_cast<DomeDriveRoboClaw*>(domeDrive)->setAddress(params.domercaddr);
 #endif
     return true;
   } else if (intparam(cmd, "domercchan=", params.domercchan, 1, 2)) {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    static_cast<DomeDriveRoboClaw*>(domeDrive)->setChannel(params.domercchan);
+    if (domeDrive)
+      static_cast<DomeDriveRoboClaw*>(domeDrive)->setChannel(params.domercchan);
 #endif
     return true;
   } else if (intparam(cmd, "domercqpps=", params.domercqpps, 1, 65535)) {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    static_cast<DomeDriveRoboClaw*>(domeDrive)->setQPPS(params.domercqpps);
+    if (domeDrive)
+      static_cast<DomeDriveRoboClaw*>(domeDrive)->setQPPS(params.domercqpps);
 #endif
     return true;
   } else if (intparam(cmd, "domefront=", params.domefront, 0, 359)) {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    static_cast<DomeDriveRoboClaw*>(domeDrive)->setFrontOffset(params.domefront);
+    if (domeDrive)
+      static_cast<DomeDriveRoboClaw*>(domeDrive)->setFrontOffset(params.domefront);
 #endif
     return true;
   } else if (intparam(cmd, "domestall=", params.domestall, 100, 5000)) {
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    static_cast<DomeDriveRoboClaw*>(domeDrive)->setStallTimeout(params.domestall);
+    if (domeDrive)
+      static_cast<DomeDriveRoboClaw*>(domeDrive)->setStallTimeout(params.domestall);
 #endif
     return true;
   } else if (intparam(cmd, "altbtn=", params.altbtn, 0, 9)) {
