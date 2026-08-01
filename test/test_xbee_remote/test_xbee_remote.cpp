@@ -27,6 +27,47 @@ void DomeController::onDisconnect() {}
 void setUp(void) {}
 void tearDown(void) {}
 
+// ---- DomeController: gesture buffer reset (issue #163) ----------------------
+// process() itself needs a fully-constructed AmidalaController and isn't
+// exercised natively (see stub above), so these tests reach the protected
+// gesture-collection members directly through a thin exposing subclass.
+
+class TestDomeController : public DomeController {
+public:
+    TestDomeController() : DomeController(nullptr) {}
+    using DomeController::addGesture;
+    using DomeController::resetGestureBuffer;
+    using DomeController::fGestureBuffer;
+};
+
+void test_dome_gesture_buffer_starts_empty() {
+    TestDomeController dc;
+    TEST_ASSERT_EQUAL(0, strlen(dc.fGestureBuffer));
+}
+
+void test_dome_gesture_reset_clears_leftover_text() {
+    TestDomeController dc;
+    // Simulate a completed gesture leaving text in the buffer, as a real
+    // stroke sequence would via addGesture().
+    dc.addGesture('6');
+    TEST_ASSERT_EQUAL_STRING("6", dc.fGestureBuffer);
+
+    // Starting the next gesture collection (or a timeout) must clear it —
+    // a zero-stroke click never calls addGesture() again to overwrite it.
+    dc.resetGestureBuffer();
+    TEST_ASSERT_EQUAL(0, strlen(dc.fGestureBuffer));
+}
+
+void test_dome_gesture_click_after_reset_is_empty_not_stale() {
+    TestDomeController dc;
+    dc.addGesture('6');
+    dc.resetGestureBuffer();
+
+    // A zero-stroke "click" gesture: nothing calls addGesture() before the
+    // buffer is read. It must read back empty, not the previous gesture.
+    TEST_ASSERT_EQUAL_STRING("", dc.fGestureBuffer);
+}
+
 // ---- XBeePocketRemote: initial state ----------------------------------------
 
 void test_xbee_type_enum_values() {
@@ -218,6 +259,10 @@ int main(int argc, char **argv) {
     RUN_TEST(test_drive_controller_is_xbee_remote);
     RUN_TEST(test_dome_controller_is_xbee_remote);
     RUN_TEST(test_dome_controller_failsafe_settable);
+
+    RUN_TEST(test_dome_gesture_buffer_starts_empty);
+    RUN_TEST(test_dome_gesture_reset_clears_leftover_text);
+    RUN_TEST(test_dome_gesture_click_after_reset_is_empty_not_stale);
 
     return UNITY_END();
 }
