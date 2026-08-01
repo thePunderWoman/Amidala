@@ -217,9 +217,16 @@ void DomeController::process() {
   if (!fGestureCollect) {
     if (event.button_up.l3) {
       DEBUG_PRINTLN("GESTURE START COLLECTING");
+      // Also always-on (not just DEBUG_PRINTLN, which needs USE_DEBUG) --
+      // start/timeout transitions previously left no trace in the field, so
+      // there was no way to tell a real 2s idle timeout apart from the main
+      // loop just having been busy long enough to blow through the window
+      // mid-draw, silently ending collection and shifting every start/end
+      // click pairing after it by one (reported after #163 shipped).
+      fDriver->fConsole.println("GESTURE: start");
       fDriver->disableDomeController();
       fGestureCollect = true;
-      resetGestureBuffer();
+      resetGestureState();
       fGestureTimeOut = millis() + GESTURE_TIMEOUT_MS;
     } else {
       bool altHeld = fDriver->isAltHeld();
@@ -242,8 +249,14 @@ void DomeController::process() {
     return;
   } else if (fGestureTimeOut < millis()) {
     DEBUG_PRINTLN("GESTURE TIMEOUT");
+    // overshoot = how far past the deadline this check actually landed.
+    // Small (roughly one animate() cycle) means a genuine ~2s idle timeout.
+    // Large means something blocked the main loop for a while mid-draw --
+    // the desync symptom this is here to confirm or rule out.
+    fDriver->fConsole.println("GESTURE: timeout (had \"" + String(fGestureBuffer) +
+                              "\", overshoot " + String(millis() - fGestureTimeOut) + "ms)");
     fDriver->enableDomeController();
-    resetGestureBuffer();
+    resetGestureState();
     fGestureCollect = false;
   } else {
     if (event.button_up.l3) {
@@ -253,6 +266,26 @@ void DomeController::process() {
         fGestureBuffer[glen - 1] = 0;
       fDriver->enableDomeController();
       fGestureCollect = false;
+      // A gesture is allowed to end while the stick is still deflected (it's
+      // whatever happened between the two L3 presses, not required to end
+      // centered) -- so fGestureAxis can't rely on the stick recentering to
+      // get cleared. Clear it unconditionally right here, the instant
+      // collection ends, rather than deferring to the next resetGestureState()
+      // -- left stuck, the very next gesture's direction detection (gated on
+      // `!fGestureAxis`) would never fire and it would always submit empty.
+      //
+      // Diagnostic: if fGestureAxis is still set here, the stick was never
+      // observed centered after the last stroke -- direction detection below
+      // has been gated off (blocking any further strokes) for however long
+      // that's been true, which would silently collapse a multi-stroke
+      // gesture down to just its first stroke. Log it so the field data
+      // shows how close the stick actually got.
+      if (fGestureAxis) {
+        fDriver->fConsole.println("GESTURE: ended mid-stroke '" + String(fGestureAxis) +
+                                  "' (never recentered; min|lx|=" + String(fGestureMinAbsLx) +
+                                  " min|ly|=" + String(fGestureMinAbsLy) + ")");
+      }
+      fGestureAxis = 0;
       fDriver->processGesture(fGestureBuffer);
       return;
     }
@@ -274,20 +307,34 @@ void DomeController::process() {
         else
           fGestureAxis = (state.analog.stick.ly < 0) ? '3' : '9';
         addGesture(fGestureAxis);
+        fGestureMinAbsLx = abs(state.analog.stick.lx);
+        fGestureMinAbsLy = abs(state.analog.stick.ly);
       } else if (abs(state.analog.stick.lx) > 100) {
         // Horizontal
         fGestureAxis = (state.analog.stick.lx < 0) ? '4' : '6';
         addGesture(fGestureAxis);
+        fGestureMinAbsLx = abs(state.analog.stick.lx);
+        fGestureMinAbsLy = abs(state.analog.stick.ly);
       } else if (abs(state.analog.stick.ly) > 100) {
         // Vertical
         fGestureAxis = (state.analog.stick.ly < 0) ? '2' : '8';
         addGesture(fGestureAxis);
+        fGestureMinAbsLx = abs(state.analog.stick.lx);
+        fGestureMinAbsLy = abs(state.analog.stick.ly);
       }
     }
-    if (fGestureAxis && abs(state.analog.stick.lx) < 10 &&
-        abs(state.analog.stick.ly) < 10) {
-      addGesture('5');
-      fGestureAxis = 0;
+    if (fGestureAxis) {
+      // Track the closest approach to center seen while waiting to close out
+      // this stroke -- diagnostic only, read by the "ended mid-stroke" log
+      // line above if a recenter is never actually observed.
+      int absLx = abs(state.analog.stick.lx);
+      int absLy = abs(state.analog.stick.ly);
+      if (absLx < fGestureMinAbsLx) fGestureMinAbsLx = absLx;
+      if (absLy < fGestureMinAbsLy) fGestureMinAbsLy = absLy;
+      if (absLx < GESTURE_CENTER_DEADZONE && absLy < GESTURE_CENTER_DEADZONE) {
+        addGesture('5');
+        fGestureAxis = 0;
+      }
     }
   }
 }

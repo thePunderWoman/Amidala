@@ -33,6 +33,21 @@
 #define LONG_PRESS_TIME 3000
 #endif
 
+// How close to true center (per axis, 0-127 scale) counts as "recentered"
+// for gesture capture -- closes out the current stroke so the next
+// direction change can register. Real hardware doesn't reliably report
+// true zero at rest: pot tolerance/calibration drift on a given remote can
+// put its resting reading right at the edge of a naive small deadzone
+// (measured as high as 10 on one axis in the field, consistently across
+// many gesture attempts -- not sampling noise, a real per-remote floor), so
+// this needs real margin above that. Still comfortably below the >50/>100
+// thresholds that detect a genuine new stroke direction
+// (drive_controllers.cpp), so there's no risk of this reading as
+// "centered" while actually mid-deflection.
+#ifndef GESTURE_CENTER_DEADZONE
+#define GESTURE_CENTER_DEADZONE 20
+#endif
+
 // ---- Forward declaration ----------------------------------------------------
 
 class AmidalaController;
@@ -213,6 +228,13 @@ protected:
   char *fGesturePtr = fGestureBuffer;
   char fGestureAxis = 0;
   uint32_t fGestureTimeOut = 0;
+  // Diagnostic only (see process()): closest the stick has come to dead
+  // center (both axes) since fGestureAxis was last set, i.e. while waiting
+  // for a recenter to close out the current stroke. Lets a log line show
+  // whether a centered sample was ever actually observed, rather than just
+  // inferring it from the captured gesture text after the fact.
+  int fGestureMinAbsLx = 999;
+  int fGestureMinAbsLy = 999;
 
   void addGesture(char ch) {
     if (size_t(fGesturePtr - fGestureBuffer) < sizeof(fGestureBuffer) - 1) {
@@ -228,8 +250,23 @@ protected:
   // timeout) never calls addGesture() at all, leaving the previous gesture's
   // text sitting in the buffer. Without clearing it here, that stale text
   // gets replayed as if it were the new gesture (issue #163).
-  void resetGestureBuffer() {
+  //
+  // fGestureAxis must be reset here too: it tracks "mid-stroke, waiting for
+  // the stick to pass back through center before the next direction change
+  // counts," and is normally cleared only when the stick recenters. If a
+  // gesture ends (L3 released) while the stick is still deflected -- a very
+  // natural way to finish a real gesture -- it's left stuck nonzero. Since
+  // new direction detection in process() is gated on `!fGestureAxis`, the
+  // *next* gesture attempt then can't register any strokes at all and always
+  // submits empty, regardless of what was actually drawn. This bug predates
+  // #163 but was masked by it: the stale gesture buffer #163 fixed used to
+  // silently replay the old string instead of submitting empty, so it read
+  // as "wrong gesture" rather than "no gesture ever registers again."
+  void resetGestureState() {
     fGesturePtr = fGestureBuffer;
     fGestureBuffer[0] = '\0';
+    fGestureAxis = 0;
+    fGestureMinAbsLx = 999;
+    fGestureMinAbsLy = 999;
   }
 };
