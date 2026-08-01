@@ -518,513 +518,999 @@ static bool parseButtonLine(const char *cmd, AmidalaParameters &params,
   return true;
 }
 
-// Dome/RoboClaw config.txt keys -- split out of processConfig() to keep that
-// function's compiled size down (see the declaration in include/config.h for
-// why: a link-time "windowed longcall crosses 1GB boundary" error on the
-// ESP32-S3/Xtensa toolchain once processConfig() grew large enough). Same
-// keys, same effects as before -- just called as a sub-dispatch now instead
-// of being inlined into the main chain.
-bool AmidalaConfig::processDomeConfig(const char *cmd) {
-  bool boolarg;
-  int32_t sintarg;
-  int32_t sintarg2;
+// ---------------------------------------------------------------------------
+// config.txt key dispatch (issue #171)
+//
+// processConfig() used to be one large if/else-if chain matching every key,
+// which grew large enough on the ESP32-S3/Xtensa toolchain to trip a
+// link-time "dangerous relocation: windowed longcall crosses 1GB boundary"
+// error -- a hard limit on a single function's compiled body size, not a
+// logic bug (compiler-flag workarounds were tried and ruled out; only the
+// function's own size matters). #170 bought headroom by splitting
+// dome/RoboClaw keys into a separate processDomeConfig() sub-dispatch, but
+// that was always a stopgap -- nothing stopped the same error from
+// resurfacing once either function grew again.
+//
+// The real fix: one handler function per key (or per key-variant, e.g.
+// domepos='s two comma-count overloads), referenced from kConfigHandlers
+// below. processConfig() itself is now a fixed-size loop over that table --
+// its compiled size no longer grows with the number of config keys, so this
+// class of link error can't recur no matter how many settings get added
+// later. processDomeConfig() as a separate concept is retired: its keys are
+// just more entries in the same table now.
+//
+// Each handler is a mechanical extraction of what used to be one branch (or
+// one `||`-chained arm) of the old chain -- same key string, same helper
+// call, same bounds, same side effects. A few keys' original branches had no
+// explicit `return true;` on their success path and relied on falling
+// through to the chain's single shared `return false;` at the very end --
+// preserved exactly below (noted per-function) rather than "fixed", since
+// wifi_ap.cpp's `POST /api/config` genuinely branches on this return value
+// today and changing it would be an observable behavior change out of scope
+// for this refactor.
+// ---------------------------------------------------------------------------
+
+// ---- Sound banks / servos / buttons ----------------------------------------
+
+bool AmidalaConfig::cfg_sb(const char *cmd) {
+  if (!startswith(cmd, "sb="))
+    return false;
   AmidalaParameters &params = fController->params;
-#ifdef RDH_SERIAL
-  RDHSerial &autoDome = fController->fAutoDome;
-#endif
-  auto *domeDrive = fController->fDomeDrive;
-  if (boolparam(cmd, "domeimu=", boolarg)) {
-    params.domeimu = boolarg;
-    return true;
-  } else if (boolparam(cmd, "domeflip=", params.domeflip)) {
-    // domeDrive is still null when config.txt is parsed at boot (it's
-    // constructed later in AmidalaController::setup(), which re-applies
-    // params.domeflip to it once it exists) -- only a live post-boot change
-    // needs to apply it here immediately.
-    if (domeDrive)
-      domeDrive->setInverted(params.domeflip);
-    return true;
-  } else if (intparam(cmd, "domespeed=", params.domespeed, 0, 100)) {
-    // setMaxSpeed()/setMaxSpeedPct() expect a 0.0-1.0 fraction, not the raw
-    // 0-100 UI value -- matches what boot-time setup() already does
-    // (src/controller.cpp). setMaxSpeedPct() is a RoboClaw-only convenience
-    // wrapper; other dome-drive variants only have the base setMaxSpeed().
-    // domeDrive is null when config.txt is parsed at boot -- setup() applies
-    // params.domespeed to the drive once it's constructed, so skip here.
-    if (domeDrive) {
-#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-      static_cast<DomeDriveRoboClaw*>(domeDrive)->setMaxSpeedPct(float(params.domespeed) / 100.0f);
-#else
-      domeDrive->setMaxSpeed(float(params.domespeed) / 100.0f);
-#endif
+  if (params.sbcount < params.getSoundBankCount()) {
+    AmidalaParameters::SoundBank *sb = &params.SB[params.sbcount];
+    char *dirname = sb->dir;
+    memset(sb, '\0', sizeof(*sb));
+    for (unsigned i = 0;
+         *cmd != '\0' && *cmd != ',' && i < sizeof(sb->dir) - 1; i++) {
+      dirname[i] = *cmd++;
+      dirname[i + 1] = '\0';
     }
-    return true;
-  } else if (sintparam(cmd, "domepos=", sintarg)) {
-#ifdef RDH_SERIAL
-    Serial.print("NEWPOS: ");
-    Serial.println(sintarg);
-    autoDome.setAbsolutePosition(sintarg);
-    return true;
-#else
+    if (*cmd == ',') {
+      sb->numfiles = strtolu(++cmd, &cmd);
+      if (*cmd == ',') {
+        if (cmd[1] == 's')
+          sb->random = false;
+        else if (cmd[1] == 'r')
+          sb->random = true;
+        else
+          return false;
+      } else {
+        sb->random = true;
+      }
+      if (*cmd == '\0') {
+        params.sbcount++;
+        return true;
+      }
+    }
+  }
+  // Falls through to false on a full table or malformed input -- matches
+  // the original chain's shared trailing `return false;`.
+  return false;
+}
+
+bool AmidalaConfig::cfg_s(const char *cmd) {
+  if (!startswith(cmd, "s="))
     return false;
-#endif
-  } else if (sintparam2(cmd, "domepos=", sintarg, sintarg2)) {
-#ifdef RDH_SERIAL
-    Serial.print("NEWPOS: ");
-    Serial.println(sintarg);
-    autoDome.setAbsolutePosition(sintarg, sintarg2);
+  AmidalaParameters &params = fController->params;
+  uint8_t argcount;
+  int args[10];
+  memset(args, '\0', sizeof(args));
+  AmidalaParameters::Channel *s = params.S;
+  if (numberparams(cmd, argcount, args, sizeof(args)) && argcount >= 3 &&
+      args[0] >= 1 && args[0] <= int(params.getServoCount())) {
+    unsigned num = args[0] - 1;
+    s += num;
+    s->min = min(max(args[1], 0), 180);
+    s->max = max(min(args[2], 180), 0);
+    s->n = (argcount >= 4) ? max(min(args[3], 180), 0)
+                           : (s->min + (s->max - s->min) / 2);
+    s->d = (argcount >= 5) ? max(min(args[4], 180), 0) : 0;
+    s->t = (argcount >= 6) ? args[5] : 0;
+    s->s = (argcount >= 7) ? max(min(args[6], 100), 0) : 100;
+    s->r = (argcount >= 8) ? max(min(args[7], 1), 0) : 0;
+    s->minpulse =
+        (argcount >= 9) ? min(max(args[8], 800), 2400) : params.minpulse;
+    s->maxpulse =
+        (argcount >= 10) ? min(max(args[9], 800), 2400) : params.maxpulse;
+
+    float neutral = float(s->n) / float(s->max);
+    uint16_t minpulse = s->minpulse;
+    uint16_t maxpulse = s->maxpulse;
+    if (s->r) {
+      maxpulse = s->minpulse;
+      minpulse = s->maxpulse;
+    }
+    applyServoConfig(num, minpulse, maxpulse, neutral);
     return true;
-#else
+  }
+  // Falls through to false on malformed input -- matches the original
+  // chain's shared trailing `return false;`.
+  return false;
+}
+
+bool AmidalaConfig::cfg_b(const char *cmd) {
+  if (!startswith(cmd, "b="))
     return false;
-#endif
-  } else if (sintparam(cmd, "domerpos=", sintarg)) {
-#ifdef RDH_SERIAL
-    Serial.print("NEWPOS: ");
-    Serial.println(sintarg);
-    autoDome.setRelativePosition(sintarg);
-    return true;
-#else
+  return parseButtonLine(cmd, fController->params, fController->params.B);
+}
+
+bool AmidalaConfig::cfg_lb(const char *cmd) {
+  if (!startswith(cmd, "lb="))
     return false;
-#endif
-  } else if (sintparam2(cmd, "domerpos=", sintarg, sintarg2)) {
-#ifdef RDH_SERIAL
-    Serial.print("NEWPOS: ");
-    Serial.println(sintarg);
-    autoDome.setRelativePosition(sintarg, sintarg2);
-    return true;
-#else
+  return parseButtonLine(cmd, fController->params, fController->params.LB);
+}
+
+bool AmidalaConfig::cfg_ab(const char *cmd) {
+  if (!startswith(cmd, "ab="))
     return false;
-#endif
-  } else if (intparam(cmd, "domehome=", params.domehome, 0, 360)) {
-#ifdef RDH_SERIAL
-    autoDome.setDomeHomePosition(params.domehome);
-#endif
-    return true;
-  } else if (intparam(cmd, "domemode=", params.domemode, 1, 5)) {
-#ifdef RDH_SERIAL
-    autoDome.setDomeDefaultMode(params.domemode);
-#endif
-    return true;
-  } else if (intparam(cmd, "domeseekr=",    params.domeseekr,    1,   180) ||
-             intparam(cmd, "domeseekl=",    params.domeseekl,    1,   180) ||
-             intparam(cmd, "domefudge=",    params.domefudge,    1,    45) ||
-             intparam(cmd, "domespeedhome=",params.domespeedhome,1,   100) ||
-             intparam(cmd, "domespeedseek=",params.domespeedseek,1,   100) ||
-             intparam(cmd, "domespeedmin=", params.domespeedmin, 0,    30) ||
-             intparam(cmd, "domedecelzone=",params.domedecelzone,5,    90)) {
-    applyDomePositionParams();
-    return true;
-  // ---- RoboClaw dome drive parameters (parsed regardless of active dome
-  //      drive so config.txt is portable between builds) ---------------------
-  // domeDrive is null when config.txt is parsed at boot (constructed later
-  // in AmidalaController::setup(), which re-applies each of these params to
-  // it once it exists) -- only a live post-boot change needs to apply here.
-  } else if (intparam(cmd, "domercaddr=", params.domercaddr, 128, 135)) {
-#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    if (domeDrive)
-      static_cast<DomeDriveRoboClaw*>(domeDrive)->setAddress(params.domercaddr);
-#endif
-    return true;
-  } else if (intparam(cmd, "domercchan=", params.domercchan, 1, 2)) {
-#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    if (domeDrive)
-      static_cast<DomeDriveRoboClaw*>(domeDrive)->setChannel(params.domercchan);
-#endif
-    return true;
-  } else if (intparam(cmd, "domercqpps=", params.domercqpps, 1, 65535)) {
-#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    if (domeDrive)
-      static_cast<DomeDriveRoboClaw*>(domeDrive)->setQPPS(params.domercqpps);
-#endif
-    return true;
-  } else if (intparam(cmd, "domefront=", params.domefront, 0, 359)) {
-#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    if (domeDrive)
-      static_cast<DomeDriveRoboClaw*>(domeDrive)->setFrontOffset(params.domefront);
-#endif
-    return true;
-  } else if (intparam(cmd, "domestall=", params.domestall, 100, 5000)) {
-#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    if (domeDrive)
-      static_cast<DomeDriveRoboClaw*>(domeDrive)->setStallTimeout(params.domestall);
-#endif
-    return true;
-  } else if (boolparam(cmd, "domeerrlog=", params.domeerrlog)) {
-#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    if (domeDrive)
-      static_cast<DomeDriveRoboClaw*>(domeDrive)->setErrorLogging(params.domeerrlog);
-#endif
-    return true;
+  return parseButtonLine(cmd, fController->params, fController->params.AB);
+}
+
+bool AmidalaConfig::cfg_db(const char *cmd) {
+  if (!startswith(cmd, "db="))
+    return false;
+  return parseButtonLine(cmd, fController->params, fController->params.DB);
+}
+
+// ---- Serial strings / favorites / categories / safety commands ------------
+
+bool AmidalaConfig::cfg_sstr(const char *cmd) {
+  if (!startswith(cmd, "sstr="))
+    return false;
+  AmidalaParameters &params = fController->params;
+  if (params.serialcount >= params.getSerialStringCount())
+    return true; // silently ignore when full
+  SerialString *a = &params.Str[params.serialcount];
+  const char* val = cmd; // startswith already advanced past "sstr="
+  // Format: ID|Name|command
+  // Parse the leading numeric ID
+  const char *end;
+  uint16_t id = (uint16_t)strtolu(val, &end);
+  if (end > val && *end == '|') {
+    // New format: ID|Name|command
+    a->id = id;
+    val = end + 1; // skip past first '|'
+  } else {
+    a->id = 0; // will be assigned below after all strings are loaded
+  }
+  const char* pipe = strchr(val, '|');
+  if (pipe) {
+    size_t nlen = (size_t)(pipe - val);
+    if (nlen >= sizeof(a->name)) nlen = sizeof(a->name) - 1;
+    memcpy(a->name, val, nlen);
+    a->name[nlen] = '\0';
+    strncpy(a->str, pipe + 1, sizeof(a->str) - 1);
+    a->str[sizeof(a->str) - 1] = '\0';
+  } else {
+    a->name[0] = '\0';
+    strncpy(a->str, val, sizeof(a->str) - 1);
+    a->str[sizeof(a->str) - 1] = '\0';
+  }
+  params.serialcount++;
+  // Track the highest ID seen so nextSstrId stays above it
+  if (a->id >= params.nextSstrId)
+    params.nextSstrId = a->id + 1;
+  // No explicit return on the success path in the original branch -- falls
+  // through to the chain's shared `return false;`. Preserved exactly:
+  // wifi_ap.cpp's POST /api/config genuinely returns an error response for
+  // a successful sstr= today, and changing that is out of scope here.
+  return false;
+}
+
+bool AmidalaConfig::cfg_fav(const char *cmd) {
+  if (!startswith(cmd, "f="))
+    return false;
+  AmidalaParameters &params = fController->params;
+  // Favorites: f=1,3,5 (comma-separated 1-based sstr indices)
+  const char* p = cmd; // past "f="
+  params.sstr_fav_cnt = 0;
+  while (*p && params.sstr_fav_cnt < MAX_SSTR_FAVS) {
+    uint16_t v = 0;
+    while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
+    if (v > 0) params.sstr_favs[params.sstr_fav_cnt++] = v;
+    if (*p == ',') p++;
+  }
+  // No explicit return in the original branch -- preserved fall-through to
+  // false (see cfg_sstr()'s comment).
+  return false;
+}
+
+bool AmidalaConfig::cfg_hidden(const char *cmd) {
+  if (!startswith(cmd, "hidden="))
+    return false;
+  AmidalaParameters &params = fController->params;
+  // Hidden: hidden=2,4 (comma-separated 1-based sstr indices hidden from Droid Control)
+  const char* p = cmd; // past "hidden="
+  params.sstr_hidden_cnt = 0;
+  while (*p && params.sstr_hidden_cnt < MAX_SSTR_HIDDEN) {
+    uint16_t v = 0;
+    while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
+    if (v > 0) params.sstr_hidden[params.sstr_hidden_cnt++] = v;
+    if (*p == ',') p++;
+  }
+  // No explicit return in the original branch -- preserved fall-through to
+  // false (see cfg_sstr()'s comment).
+  return false;
+}
+
+bool AmidalaConfig::cfg_cat(const char *cmd) {
+  if (!startswith(cmd, "cat="))
+    return false;
+  AmidalaParameters &params = fController->params;
+  // Category: cat=Name|1,3,5
+  if (params.sstr_cat_count >= MAX_SSTR_CATS) return true;
+  const char* val = cmd; // past "cat="
+  const char* pipe = strchr(val, '|');
+  if (!pipe) return true;
+  AmidalaParameters::SstrCat* cat = &params.sstr_cats[params.sstr_cat_count];
+  size_t nlen = (size_t)(pipe - val);
+  if (nlen >= sizeof(cat->name)) nlen = sizeof(cat->name) - 1;
+  memcpy(cat->name, val, nlen);
+  cat->name[nlen] = '\0';
+  cat->cnt = 0;
+  const char* p = pipe + 1;
+  while (*p && cat->cnt < MAX_SSTR_CAT_ENTRIES) {
+    uint16_t v = 0;
+    while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
+    if (v > 0) cat->idx[cat->cnt++] = v;
+    if (*p == ',') p++;
+  }
+  params.sstr_cat_count++;
+  // The original branch returns true on its two early-exit paths above
+  // (table full, malformed/no '|') but falls through to false here on a
+  // genuinely successful parse -- preserved exactly, not "fixed" (see
+  // cfg_sstr()'s comment).
+  return false;
+}
+
+bool AmidalaConfig::cfg_estopstr(const char *cmd) {
+  if (!startswith(cmd, "estopstr="))
+    return false;
+  AmidalaParameters &params = fController->params;
+  if (params.estopCmdCount < MAX_SAFETY_CMDS && *cmd) {
+    strncpy(params.EstopCmds[params.estopCmdCount].str, cmd, sizeof(AmidalaParameters::SafetyCmd::str) - 1);
+    params.EstopCmds[params.estopCmdCount].str[sizeof(AmidalaParameters::SafetyCmd::str) - 1] = '\0';
+    params.estopCmdCount++;
+  }
+  // No explicit return in the original branch -- preserved fall-through to
+  // false (see cfg_sstr()'s comment).
+  return false;
+}
+
+bool AmidalaConfig::cfg_resumestr(const char *cmd) {
+  if (!startswith(cmd, "resumestr="))
+    return false;
+  AmidalaParameters &params = fController->params;
+  if (params.resumeCmdCount < MAX_SAFETY_CMDS && *cmd) {
+    strncpy(params.ResumeCmds[params.resumeCmdCount].str, cmd, sizeof(AmidalaParameters::SafetyCmd::str) - 1);
+    params.ResumeCmds[params.resumeCmdCount].str[sizeof(AmidalaParameters::SafetyCmd::str) - 1] = '\0';
+    params.resumeCmdCount++;
+  }
+  // No explicit return in the original branch -- preserved fall-through to
+  // false (see cfg_sstr()'s comment).
+  return false;
+}
+
+// ---- Gestures ---------------------------------------------------------------
+
+bool AmidalaConfig::cfg_gesture(const char *cmd) {
+  if (!startswith(cmd, "g="))
+    return false;
+  AmidalaParameters &params = fController->params;
+  char gesture[MAX_GESTURE_LENGTH + 1];
+  char *gesture_end = &gesture[sizeof(gesture) - 1];
+  char *gest = gesture;
+  while (*cmd != ',' && *cmd != '\0') {
+    if (gest <= gesture_end) {
+      *gest++ = *cmd;
+      *gest = '\0';
+    }
+    cmd++;
+  }
+  if (*cmd == ',')
+    cmd++;
+  GestureAction *g =
+      &params.G[min((unsigned)params.gcount, params.getGestureCount() - 1)];
+  ButtonAction *b = &g->action;
+  g->gesture.setGesture(gesture);
+  if (!g->gesture.isEmpty()) {
+    uint16_t args[5] = {};
+    uint8_t argcount = parseUintArgs(cmd, args, 5);
+    if (argcount >= 1) {
+      memset(b, '\0', sizeof(*b));
+      b->action = (uint8_t)args[0];
+      switch (args[0]) {
+      case ButtonAction::kSound:
+        b->sound.soundbank = (uint8_t)max(1, (int)min((int)args[1], (int)params.sbcount));
+        b->sound.sound = (argcount >= 3) ? (uint8_t)args[2] : 0;
+        b->serialid = (argcount >= 4) ? args[3] : 0;
+        break;
+      case ButtonAction::kServo:
+        b->servo.num = (uint8_t)max(1, min((int)args[1], 8));
+        b->servo.pos = (argcount >= 3) ? (uint8_t)min(max((int)args[2], 0), 180) : 0;
+        b->serialid = (argcount >= 4) ? args[3] : 0;
+        break;
+      case ButtonAction::kDigitalOut:
+        b->dout.num   = (uint8_t)max(1, min((int)args[1], 8));
+        b->dout.state = (argcount >= 3) ? (uint8_t)min(2, (int)args[2]) : 0;
+        b->serialid = (argcount >= 4) ? args[3] : 0;
+        break;
+      case ButtonAction::kI2CCmd:
+        b->i2ccmd.target = (uint8_t)min((int)args[1], 100);
+        b->i2ccmd.cmd    = (argcount >= 3) ? (uint8_t)args[2] : 0;
+        b->serialid = (argcount >= 4) ? args[3] : 0;
+        break;
+      case ButtonAction::kSerialStr:
+        b->serialid = args[1];
+        DEBUG_PRINT("GESTURE SERIAL ID: ");
+        DEBUG_PRINTLN(b->serialid);
+        break;
+      case ButtonAction::kI2CStr:
+        b->i2cstr.target = (uint8_t)min((int)args[1], 100);
+        b->serialid = args[2];
+        break;
+      case ButtonAction::kHCREmote:
+        b->emote.emotion = (uint8_t)min((int)args[1], 4);
+        b->emote.level   = (argcount >= 3) ? (uint8_t)min((int)args[2], 1) : 0;
+        b->serialid = (argcount >= 4) ? args[3] : 0;
+        break;
+      case ButtonAction::kHCRMuse:
+        b->serialid = (argcount >= 2) ? args[1] : 0;
+        break;
+      case ButtonAction::kDomeCmd:
+        b->dome.subcmd = (uint8_t)args[1];
+        b->dome.arg    = (argcount >= 3) ? (uint8_t)args[2] : 0;
+        b->serialid = (argcount >= 4) ? args[3] : 0;
+        break;
+      default:
+        b->action = 0;
+        break;
+      }
+      if (params.gcount < params.getGestureCount())
+        params.gcount++;
+      return true;
+    }
   }
   return false;
 }
 
-bool AmidalaConfig::processConfig(const char *cmd) {
-  AmidalaParameters &params = fController->params;
-  if (startswith(cmd, "sb=")) {
-    if (params.sbcount < params.getSoundBankCount()) {
-      AmidalaParameters::SoundBank *sb =
-          &params.SB[params.sbcount];
-      char *dirname = sb->dir;
-      memset(sb, '\0', sizeof(*sb));
-      for (unsigned i = 0;
-           *cmd != '\0' && *cmd != ',' && i < sizeof(sb->dir) - 1; i++) {
-        dirname[i] = *cmd++;
-        dirname[i + 1] = '\0';
-      }
-      if (*cmd == ',') {
-        sb->numfiles = strtolu(++cmd, &cmd);
-        if (*cmd == ',') {
-          if (cmd[1] == 's')
-            sb->random = false;
-          else if (cmd[1] == 'r')
-            sb->random = true;
-          else
-            return false;
-        } else {
-          sb->random = true;
-        }
-        if (*cmd == '\0') {
-          params.sbcount++;
-          return true;
-        }
-      }
-    }
-  } else if (startswith(cmd, "s=")) {
-    uint8_t argcount;
-    int args[10];
-    memset(args, '\0', sizeof(args));
-    AmidalaParameters::Channel *s = params.S;
-    if (numberparams(cmd, argcount, args, sizeof(args)) && argcount >= 3 &&
-        args[0] >= 1 && args[0] <= int(params.getServoCount())) {
-      unsigned num = args[0] - 1;
-      s += num;
-      s->min = min(max(args[1], 0), 180);
-      s->max = max(min(args[2], 180), 0);
-      s->n = (argcount >= 4) ? max(min(args[3], 180), 0)
-                             : (s->min + (s->max - s->min) / 2);
-      s->d = (argcount >= 5) ? max(min(args[4], 180), 0) : 0;
-      s->t = (argcount >= 6) ? args[5] : 0;
-      s->s = (argcount >= 7) ? max(min(args[6], 100), 0) : 100;
-      s->r = (argcount >= 8) ? max(min(args[7], 1), 0) : 0;
-      s->minpulse =
-          (argcount >= 9) ? min(max(args[8], 800), 2400) : params.minpulse;
-      s->maxpulse =
-          (argcount >= 10) ? min(max(args[9], 800), 2400) : params.maxpulse;
+// ---- Audio hardware selection ------------------------------------------------
 
-      float neutral = float(s->n) / float(s->max);
-      uint16_t minpulse = s->minpulse;
-      uint16_t maxpulse = s->maxpulse;
-      if (s->r) {
-        maxpulse = s->minpulse;
-        minpulse = s->maxpulse;
-      }
-      applyServoConfig(num, minpulse, maxpulse, neutral);
-      return true;
-    }
-  } else if (startswith(cmd, "b=")) {
-    return parseButtonLine(cmd, params, params.B);
-  } else if (startswith(cmd, "lb=")) {
-    return parseButtonLine(cmd, params, params.LB);
-  } else if (startswith(cmd, "ab=")) {
-    return parseButtonLine(cmd, params, params.AB);
-  } else if (startswith(cmd, "db=")) {
-    return parseButtonLine(cmd, params, params.DB);
-  } else if (startswith(cmd, "sstr=")) {
-    if (params.serialcount >= params.getSerialStringCount())
-      return true; // silently ignore when full
-    SerialString *a = &params.Str[params.serialcount];
-    const char* val = cmd; // startswith already advanced past "sstr="
-    // Format: ID|Name|command
-    // Parse the leading numeric ID
-    const char *end;
-    uint16_t id = (uint16_t)strtolu(val, &end);
-    if (end > val && *end == '|') {
-      // New format: ID|Name|command
-      a->id = id;
-      val = end + 1; // skip past first '|'
-    } else {
-      a->id = 0; // will be assigned below after all strings are loaded
-    }
-    const char* pipe = strchr(val, '|');
-    if (pipe) {
-      size_t nlen = (size_t)(pipe - val);
-      if (nlen >= sizeof(a->name)) nlen = sizeof(a->name) - 1;
-      memcpy(a->name, val, nlen);
-      a->name[nlen] = '\0';
-      strncpy(a->str, pipe + 1, sizeof(a->str) - 1);
-      a->str[sizeof(a->str) - 1] = '\0';
-    } else {
-      a->name[0] = '\0';
-      strncpy(a->str, val, sizeof(a->str) - 1);
-      a->str[sizeof(a->str) - 1] = '\0';
-    }
-    params.serialcount++;
-    // Track the highest ID seen so nextSstrId stays above it
-    if (a->id >= params.nextSstrId)
-      params.nextSstrId = a->id + 1;
-  } else if (startswith(cmd, "f=")) {
-    // Favorites: f=1,3,5 (comma-separated 1-based sstr indices)
-    const char* p = cmd; // past "f="
-    params.sstr_fav_cnt = 0;
-    while (*p && params.sstr_fav_cnt < MAX_SSTR_FAVS) {
-      uint16_t v = 0;
-      while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
-      if (v > 0) params.sstr_favs[params.sstr_fav_cnt++] = v;
-      if (*p == ',') p++;
-    }
-  } else if (startswith(cmd, "hidden=")) {
-    // Hidden: hidden=2,4 (comma-separated 1-based sstr indices hidden from Droid Control)
-    const char* p = cmd; // past "hidden="
-    params.sstr_hidden_cnt = 0;
-    while (*p && params.sstr_hidden_cnt < MAX_SSTR_HIDDEN) {
-      uint16_t v = 0;
-      while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
-      if (v > 0) params.sstr_hidden[params.sstr_hidden_cnt++] = v;
-      if (*p == ',') p++;
-    }
-  } else if (startswith(cmd, "cat=")) {
-    // Category: cat=Name|1,3,5
-    if (params.sstr_cat_count >= MAX_SSTR_CATS) return true;
-    const char* val = cmd; // past "cat="
-    const char* pipe = strchr(val, '|');
-    if (!pipe) return true;
-    AmidalaParameters::SstrCat* cat = &params.sstr_cats[params.sstr_cat_count];
-    size_t nlen = (size_t)(pipe - val);
-    if (nlen >= sizeof(cat->name)) nlen = sizeof(cat->name) - 1;
-    memcpy(cat->name, val, nlen);
-    cat->name[nlen] = '\0';
-    cat->cnt = 0;
-    const char* p = pipe + 1;
-    while (*p && cat->cnt < MAX_SSTR_CAT_ENTRIES) {
-      uint16_t v = 0;
-      while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
-      if (v > 0) cat->idx[cat->cnt++] = v;
-      if (*p == ',') p++;
-    }
-    params.sstr_cat_count++;
-  } else if (startswith(cmd, "estopstr=")) {
-    if (params.estopCmdCount < MAX_SAFETY_CMDS && *cmd) {
-      strncpy(params.EstopCmds[params.estopCmdCount].str, cmd, sizeof(AmidalaParameters::SafetyCmd::str) - 1);
-      params.EstopCmds[params.estopCmdCount].str[sizeof(AmidalaParameters::SafetyCmd::str) - 1] = '\0';
-      params.estopCmdCount++;
-    }
-  } else if (startswith(cmd, "resumestr=")) {
-    if (params.resumeCmdCount < MAX_SAFETY_CMDS && *cmd) {
-      strncpy(params.ResumeCmds[params.resumeCmdCount].str, cmd, sizeof(AmidalaParameters::SafetyCmd::str) - 1);
-      params.ResumeCmds[params.resumeCmdCount].str[sizeof(AmidalaParameters::SafetyCmd::str) - 1] = '\0';
-      params.resumeCmdCount++;
-    }
-  } else if (startswith(cmd, "g=")) {
-    char gesture[MAX_GESTURE_LENGTH + 1];
-    char *gesture_end = &gesture[sizeof(gesture) - 1];
-    char *gest = gesture;
-    while (*cmd != ',' && *cmd != '\0') {
-      if (gest <= gesture_end) {
-        *gest++ = *cmd;
-        *gest = '\0';
-      }
-      cmd++;
-    }
-    if (*cmd == ',')
-      cmd++;
-    GestureAction *g =
-        &params.G[min((unsigned)params.gcount, params.getGestureCount() - 1)];
-    ButtonAction *b = &g->action;
-    g->gesture.setGesture(gesture);
-    if (!g->gesture.isEmpty()) {
-      uint16_t args[5] = {};
-      uint8_t argcount = parseUintArgs(cmd, args, 5);
-      if (argcount >= 1) {
-        memset(b, '\0', sizeof(*b));
-        b->action = (uint8_t)args[0];
-        switch (args[0]) {
-        case ButtonAction::kSound:
-          b->sound.soundbank = (uint8_t)max(1, (int)min((int)args[1], (int)params.sbcount));
-          b->sound.sound = (argcount >= 3) ? (uint8_t)args[2] : 0;
-          b->serialid = (argcount >= 4) ? args[3] : 0;
-          break;
-        case ButtonAction::kServo:
-          b->servo.num = (uint8_t)max(1, min((int)args[1], 8));
-          b->servo.pos = (argcount >= 3) ? (uint8_t)min(max((int)args[2], 0), 180) : 0;
-          b->serialid = (argcount >= 4) ? args[3] : 0;
-          break;
-        case ButtonAction::kDigitalOut:
-          b->dout.num   = (uint8_t)max(1, min((int)args[1], 8));
-          b->dout.state = (argcount >= 3) ? (uint8_t)min(2, (int)args[2]) : 0;
-          b->serialid = (argcount >= 4) ? args[3] : 0;
-          break;
-        case ButtonAction::kI2CCmd:
-          b->i2ccmd.target = (uint8_t)min((int)args[1], 100);
-          b->i2ccmd.cmd    = (argcount >= 3) ? (uint8_t)args[2] : 0;
-          b->serialid = (argcount >= 4) ? args[3] : 0;
-          break;
-        case ButtonAction::kSerialStr:
-          b->serialid = args[1];
-          DEBUG_PRINT("GESTURE SERIAL ID: ");
-          DEBUG_PRINTLN(b->serialid);
-          break;
-        case ButtonAction::kI2CStr:
-          b->i2cstr.target = (uint8_t)min((int)args[1], 100);
-          b->serialid = args[2];
-          break;
-        case ButtonAction::kHCREmote:
-          b->emote.emotion = (uint8_t)min((int)args[1], 4);
-          b->emote.level   = (argcount >= 3) ? (uint8_t)min((int)args[2], 1) : 0;
-          b->serialid = (argcount >= 4) ? args[3] : 0;
-          break;
-        case ButtonAction::kHCRMuse:
-          b->serialid = (argcount >= 2) ? args[1] : 0;
-          break;
-        case ButtonAction::kDomeCmd:
-          b->dome.subcmd = (uint8_t)args[1];
-          b->dome.arg    = (argcount >= 3) ? (uint8_t)args[2] : 0;
-          b->serialid = (argcount >= 4) ? args[3] : 0;
-          break;
-        default:
-          b->action = 0;
-          break;
-        }
-        if (params.gcount < params.getGestureCount())
-          params.gcount++;
-        return true;
-      }
-    }
+bool AmidalaConfig::cfg_audiohw(const char *cmd) {
+  if (!startswith(cmd, "audiohw="))
     return false;
-  } else if (startswith(cmd, "audiohw=")) {
-    if (startswith(cmd, "hcr"))    params.audiohw = AUDIO_HW_HCR;
-    else if (startswith(cmd, "vmusic")) params.audiohw = AUDIO_HW_VMUSIC;
-    return true;
-  } else if (charparam(cmd, "acktype=", "gadsr", params.acktype) ||
-             charparam(cmd, "b9=", "ynksdb", params.b9) ||
-             intparam(cmd, "volume=", params.volume, 0, 100) ||
-             intparam(cmd, "volumeChA=", params.volumeChA, 0, 100) ||
-             intparam(cmd, "volumeChB=", params.volumeChB, 0, 100) ||
-             intparam(cmd, "volumewheel=", params.volumewheel, 0, 4) ||
-             intparam(cmd, "altvolumewheel=", params.altvolumewheel, 0, 4) ||
-             intparam(cmd, "startupem=", params.startupem, 0, 4) ||
-             intparam(cmd, "startuplvl=", params.startuplvl, 0, 1) ||
-             intparam(cmd, "ackem=", params.ackem, 0, 4) ||
-             intparam(cmd, "acklvl=", params.acklvl, 0, 1) ||
-             intparam(cmd, "mindelay=", params.mindelay, 0, 1000) ||
-             intparam(cmd, "maxdelay=", params.maxdelay, 0, 1000) ||
-             intparam(cmd, "rvrmin=", params.rvrmin, 0, 100) ||
-             intparam(cmd, "rvrmax=", params.rvrmax, 900, 1023) ||
-             intparam(cmd, "rvlmin=", params.rvlmin, 0, 100) ||
-             intparam(cmd, "rvlmax=", params.rvlmax, 900, 1023) ||
-             intparam(cmd, "minpulse=", params.minpulse, 0, 2500) ||
-             intparam(cmd, "maxpulse=", params.maxpulse, 0, 2500) ||
-             intparam(cmd, "rcchn=", params.rcchn, 6, 8) ||
-             intparam(cmd, "rcd=", params.rcd, 1, 50) ||
-             intparam(cmd, "rcj=", params.rcj, 1, 40) ||
-             intparam(cmd, "myi2c=", params.myi2c, 0, 100) ||
-             intparam(cmd, "serialbaud=", params.serialbaud, 300, 115200) ||
-             intparam(cmd, "serialdelim=", params.serialdelim, 0, 255) ||
-             intparam(cmd, "serialeol=", params.serialeol, 0, 255) ||
-             intparam(cmd, "fst=", params.fst, 1000, 3000) ||
-             intparam(cmd, "j1adjv=", params.j1adjv, 0, 80) ||
-             intparam(cmd, "j1adjh=", params.j1adjh, 0, 80) ||
-             gestureparam(cmd, "rnd=", params.rnd) ||
-             gestureparam(cmd, "ackgest=", params.ackgest) ||
-             gestureparam(cmd, "slowgest=", params.slowgest) ||
-             gestureparam(cmd, "domegest=", params.domegest) ||
-             boolparam(cmd, "startup=", params.startup) ||
-             boolparam(cmd, "rndon=", params.rndon) ||
-             boolparam(cmd, "ackon=", params.ackon) ||
-             boolparam(cmd, "mix12=", params.mix12) ||
-             boolparam(cmd, "auto=", params.autocorrect) ||
-             boolparam(cmd, "goslow=", params.goslow) ||
-             boolparam(cmd, "domech6=", params.domech6)) {
-    return true;
-  } else if (startswith(cmd, "xbr=")) {
-    params.xbr = strtoul(cmd, NULL, 16);
-    return true;
-  } else if (startswith(cmd, "xbl=")) {
-    params.xbl = strtoul(cmd, NULL, 16);
-    return true;
-  } else if (processDomeConfig(cmd)) {
-    return true;
-  } else if (intparam(cmd, "altbtn=", params.altbtn, 0, 9)) {
-    return true;
-  } else if (intparam(cmd, "altdomestick=", params.altdomestick, 0, 1)) {
-    return true;
-  } else if (intparam(cmd, "mutebutton=", params.mutebutton, 0, 9)) {
-    return true;
-  } else if (intparam(cmd, "dbtimeout=", params.dbtimeout, 0, 5000)) {
-    return true;
-  } else if (boolparam(cmd, "auxserial3=", params.auxserial3)) {
-    return true;
-  } else if (boolparam(cmd, "btcontrolleron=", params.btcontrolleron)) {
-    return true;
-  } else if (startswith(cmd, "btaddr=")) {
-    strncpy(params.btaddr, cmd, sizeof(params.btaddr) - 1);
-    params.btaddr[sizeof(params.btaddr) - 1] = '\0';
-    return true;
-  } else if (boolparam(cmd, "wcbenable=", params.wcbenable)) {
-    return true;
-  } else if (startswith(cmd, "wcboct2=")) {
-    params.wcboct2 = (uint8_t)strtoul(cmd, NULL, 16);
-    return true;
-  } else if (startswith(cmd, "wcboct3=")) {
-    params.wcboct3 = (uint8_t)strtoul(cmd, NULL, 16);
-    return true;
-  } else if (startswith(cmd, "wcbpassword=")) {
-    strncpy(params.wcbpassword, cmd, sizeof(params.wcbpassword) - 1);
-    params.wcbpassword[sizeof(params.wcbpassword) - 1] = '\0';
-    return true;
-  } else if (intparam(cmd, "wcbquantity=", params.wcbquantity, 0, 19)) {
-    return true;
-  } else if (intparam(cmd, "wcbid=", params.wcbid, 0, 20)) {
-    return true;
-  } else if (intparam(cmd, "outboundserial=", params.outboundserial, 0, 1)) {
-    return true;
-  } else if (boolparam(cmd, "wifion=", params.wifion)) {
-    return true;
-  } else if (startswith(cmd, "wifissid=")) {
-    strncpy(params.wifiSSID, cmd, sizeof(params.wifiSSID) - 1);
-    params.wifiSSID[sizeof(params.wifiSSID) - 1] = '\0';
-    return true;
-  } else if (startswith(cmd, "wifipassword=")) {
-    strncpy(params.wifiPassword, cmd, sizeof(params.wifiPassword) - 1);
-    params.wifiPassword[sizeof(params.wifiPassword) - 1] = '\0';
-    return true;
-  } else if (intparam(cmd, "wifichannel=", params.wifichannel, 1, 13)) {
-    return true;
-  } else if (applyPinRoleParam(params, cmd, "pin1role=", 1, fOutput)) {
-    return true;
-  } else if (applyPinRoleParam(params, cmd, "pin2role=", 2, fOutput)) {
-    return true;
-  } else if (applyPinRoleParam(params, cmd, "pin3role=", 3, fOutput)) {
-    return true;
-  } else if (applyPinRoleParam(params, cmd, "pin4role=", 4, fOutput)) {
-    return true;
-  } else if (applyPinRoleParam(params, cmd, "pin5role=", 5, fOutput)) {
-    return true;
-  } else if (applyPinRoleParam(params, cmd, "pin6role=", 6, fOutput)) {
-    return true;
-  } else if (applyPinRoleParam(params, cmd, "pin39role=", 39, fOutput)) {
-    return true;
-  } else if (applyPinRoleParam(params, cmd, "pin40role=", 40, fOutput)) {
-    return true;
-  } else if (applyPinRoleParam(params, cmd, "pin41role=", 41, fOutput)) {
-    return true;
-  } else if (applyPinRoleParam(params, cmd, "pin42role=", 42, fOutput)) {
-    return true;
-  } else if (applyPinRoleParam(params, cmd, "pin47role=", 47, fOutput)) {
-    return true;
-  } else if (applySerialPortParam(params, cmd, "domeserialport=", SerialConsumer::kDome, fOutput)) {
-    return true;
-  } else if (applySerialPortParam(params, cmd, "driveserialport=", SerialConsumer::kDrive, fOutput)) {
-    return true;
-  } else if (strcmp(cmd, "reboot") == 0) {
-    void (*resetArduino)() = NULL;
-    resetArduino();
+  AmidalaParameters &params = fController->params;
+  if (startswith(cmd, "hcr"))    params.audiohw = AUDIO_HW_HCR;
+  else if (startswith(cmd, "vmusic")) params.audiohw = AUDIO_HW_VMUSIC;
+  return true;
+}
+
+// ---- Simple scalar settings (single key -> single params field) ------------
+
+bool AmidalaConfig::cfg_acktype(const char *cmd) {
+  return charparam(cmd, "acktype=", "gadsr", fController->params.acktype);
+}
+bool AmidalaConfig::cfg_b9(const char *cmd) {
+  return charparam(cmd, "b9=", "ynksdb", fController->params.b9);
+}
+bool AmidalaConfig::cfg_volume(const char *cmd) {
+  return intparam(cmd, "volume=", fController->params.volume, 0, 100);
+}
+bool AmidalaConfig::cfg_volumeChA(const char *cmd) {
+  return intparam(cmd, "volumeChA=", fController->params.volumeChA, 0, 100);
+}
+bool AmidalaConfig::cfg_volumeChB(const char *cmd) {
+  return intparam(cmd, "volumeChB=", fController->params.volumeChB, 0, 100);
+}
+bool AmidalaConfig::cfg_volumewheel(const char *cmd) {
+  return intparam(cmd, "volumewheel=", fController->params.volumewheel, 0, 4);
+}
+bool AmidalaConfig::cfg_altvolumewheel(const char *cmd) {
+  return intparam(cmd, "altvolumewheel=", fController->params.altvolumewheel, 0, 4);
+}
+bool AmidalaConfig::cfg_startupem(const char *cmd) {
+  return intparam(cmd, "startupem=", fController->params.startupem, 0, 4);
+}
+bool AmidalaConfig::cfg_startuplvl(const char *cmd) {
+  return intparam(cmd, "startuplvl=", fController->params.startuplvl, 0, 1);
+}
+bool AmidalaConfig::cfg_ackem(const char *cmd) {
+  return intparam(cmd, "ackem=", fController->params.ackem, 0, 4);
+}
+bool AmidalaConfig::cfg_acklvl(const char *cmd) {
+  return intparam(cmd, "acklvl=", fController->params.acklvl, 0, 1);
+}
+bool AmidalaConfig::cfg_mindelay(const char *cmd) {
+  return intparam(cmd, "mindelay=", fController->params.mindelay, 0, 1000);
+}
+bool AmidalaConfig::cfg_maxdelay(const char *cmd) {
+  return intparam(cmd, "maxdelay=", fController->params.maxdelay, 0, 1000);
+}
+bool AmidalaConfig::cfg_rvrmin(const char *cmd) {
+  return intparam(cmd, "rvrmin=", fController->params.rvrmin, 0, 100);
+}
+bool AmidalaConfig::cfg_rvrmax(const char *cmd) {
+  return intparam(cmd, "rvrmax=", fController->params.rvrmax, 900, 1023);
+}
+bool AmidalaConfig::cfg_rvlmin(const char *cmd) {
+  return intparam(cmd, "rvlmin=", fController->params.rvlmin, 0, 100);
+}
+bool AmidalaConfig::cfg_rvlmax(const char *cmd) {
+  return intparam(cmd, "rvlmax=", fController->params.rvlmax, 900, 1023);
+}
+bool AmidalaConfig::cfg_minpulse(const char *cmd) {
+  return intparam(cmd, "minpulse=", fController->params.minpulse, 0, 2500);
+}
+bool AmidalaConfig::cfg_maxpulse(const char *cmd) {
+  return intparam(cmd, "maxpulse=", fController->params.maxpulse, 0, 2500);
+}
+bool AmidalaConfig::cfg_rcchn(const char *cmd) {
+  return intparam(cmd, "rcchn=", fController->params.rcchn, 6, 8);
+}
+bool AmidalaConfig::cfg_rcd(const char *cmd) {
+  return intparam(cmd, "rcd=", fController->params.rcd, 1, 50);
+}
+bool AmidalaConfig::cfg_rcj(const char *cmd) {
+  return intparam(cmd, "rcj=", fController->params.rcj, 1, 40);
+}
+bool AmidalaConfig::cfg_myi2c(const char *cmd) {
+  return intparam(cmd, "myi2c=", fController->params.myi2c, 0, 100);
+}
+bool AmidalaConfig::cfg_serialbaud(const char *cmd) {
+  return intparam(cmd, "serialbaud=", fController->params.serialbaud, 300, 115200);
+}
+bool AmidalaConfig::cfg_serialdelim(const char *cmd) {
+  return intparam(cmd, "serialdelim=", fController->params.serialdelim, 0, 255);
+}
+bool AmidalaConfig::cfg_serialeol(const char *cmd) {
+  return intparam(cmd, "serialeol=", fController->params.serialeol, 0, 255);
+}
+bool AmidalaConfig::cfg_fst(const char *cmd) {
+  return intparam(cmd, "fst=", fController->params.fst, 1000, 3000);
+}
+bool AmidalaConfig::cfg_j1adjv(const char *cmd) {
+  return intparam(cmd, "j1adjv=", fController->params.j1adjv, 0, 80);
+}
+bool AmidalaConfig::cfg_j1adjh(const char *cmd) {
+  return intparam(cmd, "j1adjh=", fController->params.j1adjh, 0, 80);
+}
+bool AmidalaConfig::cfg_rnd(const char *cmd) {
+  return gestureparam(cmd, "rnd=", fController->params.rnd);
+}
+bool AmidalaConfig::cfg_ackgest(const char *cmd) {
+  return gestureparam(cmd, "ackgest=", fController->params.ackgest);
+}
+bool AmidalaConfig::cfg_slowgest(const char *cmd) {
+  return gestureparam(cmd, "slowgest=", fController->params.slowgest);
+}
+bool AmidalaConfig::cfg_domegest(const char *cmd) {
+  return gestureparam(cmd, "domegest=", fController->params.domegest);
+}
+bool AmidalaConfig::cfg_startup(const char *cmd) {
+  return boolparam(cmd, "startup=", fController->params.startup);
+}
+bool AmidalaConfig::cfg_rndon(const char *cmd) {
+  return boolparam(cmd, "rndon=", fController->params.rndon);
+}
+bool AmidalaConfig::cfg_ackon(const char *cmd) {
+  return boolparam(cmd, "ackon=", fController->params.ackon);
+}
+bool AmidalaConfig::cfg_mix12(const char *cmd) {
+  return boolparam(cmd, "mix12=", fController->params.mix12);
+}
+bool AmidalaConfig::cfg_autocorrect(const char *cmd) {
+  return boolparam(cmd, "auto=", fController->params.autocorrect);
+}
+bool AmidalaConfig::cfg_goslow(const char *cmd) {
+  return boolparam(cmd, "goslow=", fController->params.goslow);
+}
+bool AmidalaConfig::cfg_domech6(const char *cmd) {
+  return boolparam(cmd, "domech6=", fController->params.domech6);
+}
+
+// ---- XBee addresses -----------------------------------------------------
+
+bool AmidalaConfig::cfg_xbr(const char *cmd) {
+  if (!startswith(cmd, "xbr="))
+    return false;
+  fController->params.xbr = strtoul(cmd, NULL, 16);
+  return true;
+}
+
+bool AmidalaConfig::cfg_xbl(const char *cmd) {
+  if (!startswith(cmd, "xbl="))
+    return false;
+  fController->params.xbl = strtoul(cmd, NULL, 16);
+  return true;
+}
+
+// ---- Alt/mute buttons, double-press, BT, WCB, WiFi --------------------------
+
+bool AmidalaConfig::cfg_altbtn(const char *cmd) {
+  return intparam(cmd, "altbtn=", fController->params.altbtn, 0, 9);
+}
+bool AmidalaConfig::cfg_altdomestick(const char *cmd) {
+  return intparam(cmd, "altdomestick=", fController->params.altdomestick, 0, 1);
+}
+bool AmidalaConfig::cfg_mutebutton(const char *cmd) {
+  return intparam(cmd, "mutebutton=", fController->params.mutebutton, 0, 9);
+}
+bool AmidalaConfig::cfg_dbtimeout(const char *cmd) {
+  return intparam(cmd, "dbtimeout=", fController->params.dbtimeout, 0, 5000);
+}
+bool AmidalaConfig::cfg_auxserial3(const char *cmd) {
+  return boolparam(cmd, "auxserial3=", fController->params.auxserial3);
+}
+bool AmidalaConfig::cfg_btcontrolleron(const char *cmd) {
+  return boolparam(cmd, "btcontrolleron=", fController->params.btcontrolleron);
+}
+bool AmidalaConfig::cfg_btaddr(const char *cmd) {
+  if (!startswith(cmd, "btaddr="))
+    return false;
+  AmidalaParameters &params = fController->params;
+  strncpy(params.btaddr, cmd, sizeof(params.btaddr) - 1);
+  params.btaddr[sizeof(params.btaddr) - 1] = '\0';
+  return true;
+}
+bool AmidalaConfig::cfg_wcbenable(const char *cmd) {
+  return boolparam(cmd, "wcbenable=", fController->params.wcbenable);
+}
+bool AmidalaConfig::cfg_wcboct2(const char *cmd) {
+  if (!startswith(cmd, "wcboct2="))
+    return false;
+  fController->params.wcboct2 = (uint8_t)strtoul(cmd, NULL, 16);
+  return true;
+}
+bool AmidalaConfig::cfg_wcboct3(const char *cmd) {
+  if (!startswith(cmd, "wcboct3="))
+    return false;
+  fController->params.wcboct3 = (uint8_t)strtoul(cmd, NULL, 16);
+  return true;
+}
+bool AmidalaConfig::cfg_wcbpassword(const char *cmd) {
+  if (!startswith(cmd, "wcbpassword="))
+    return false;
+  AmidalaParameters &params = fController->params;
+  strncpy(params.wcbpassword, cmd, sizeof(params.wcbpassword) - 1);
+  params.wcbpassword[sizeof(params.wcbpassword) - 1] = '\0';
+  return true;
+}
+bool AmidalaConfig::cfg_wcbquantity(const char *cmd) {
+  return intparam(cmd, "wcbquantity=", fController->params.wcbquantity, 0, 19);
+}
+bool AmidalaConfig::cfg_wcbid(const char *cmd) {
+  return intparam(cmd, "wcbid=", fController->params.wcbid, 0, 20);
+}
+bool AmidalaConfig::cfg_outboundserial(const char *cmd) {
+  return intparam(cmd, "outboundserial=", fController->params.outboundserial, 0, 1);
+}
+bool AmidalaConfig::cfg_wifion(const char *cmd) {
+  return boolparam(cmd, "wifion=", fController->params.wifion);
+}
+bool AmidalaConfig::cfg_wifissid(const char *cmd) {
+  if (!startswith(cmd, "wifissid="))
+    return false;
+  AmidalaParameters &params = fController->params;
+  strncpy(params.wifiSSID, cmd, sizeof(params.wifiSSID) - 1);
+  params.wifiSSID[sizeof(params.wifiSSID) - 1] = '\0';
+  return true;
+}
+bool AmidalaConfig::cfg_wifipassword(const char *cmd) {
+  if (!startswith(cmd, "wifipassword="))
+    return false;
+  AmidalaParameters &params = fController->params;
+  strncpy(params.wifiPassword, cmd, sizeof(params.wifiPassword) - 1);
+  params.wifiPassword[sizeof(params.wifiPassword) - 1] = '\0';
+  return true;
+}
+bool AmidalaConfig::cfg_wifichannel(const char *cmd) {
+  return intparam(cmd, "wifichannel=", fController->params.wifichannel, 1, 13);
+}
+
+// ---- Reassignable GPIO pin roles (issue #133) -------------------------------
+
+bool AmidalaConfig::cfg_pin1role(const char *cmd) {
+  return applyPinRoleParam(fController->params, cmd, "pin1role=", 1, fOutput);
+}
+bool AmidalaConfig::cfg_pin2role(const char *cmd) {
+  return applyPinRoleParam(fController->params, cmd, "pin2role=", 2, fOutput);
+}
+bool AmidalaConfig::cfg_pin3role(const char *cmd) {
+  return applyPinRoleParam(fController->params, cmd, "pin3role=", 3, fOutput);
+}
+bool AmidalaConfig::cfg_pin4role(const char *cmd) {
+  return applyPinRoleParam(fController->params, cmd, "pin4role=", 4, fOutput);
+}
+bool AmidalaConfig::cfg_pin5role(const char *cmd) {
+  return applyPinRoleParam(fController->params, cmd, "pin5role=", 5, fOutput);
+}
+bool AmidalaConfig::cfg_pin6role(const char *cmd) {
+  return applyPinRoleParam(fController->params, cmd, "pin6role=", 6, fOutput);
+}
+bool AmidalaConfig::cfg_pin39role(const char *cmd) {
+  return applyPinRoleParam(fController->params, cmd, "pin39role=", 39, fOutput);
+}
+bool AmidalaConfig::cfg_pin40role(const char *cmd) {
+  return applyPinRoleParam(fController->params, cmd, "pin40role=", 40, fOutput);
+}
+bool AmidalaConfig::cfg_pin41role(const char *cmd) {
+  return applyPinRoleParam(fController->params, cmd, "pin41role=", 41, fOutput);
+}
+bool AmidalaConfig::cfg_pin42role(const char *cmd) {
+  return applyPinRoleParam(fController->params, cmd, "pin42role=", 42, fOutput);
+}
+bool AmidalaConfig::cfg_pin47role(const char *cmd) {
+  return applyPinRoleParam(fController->params, cmd, "pin47role=", 47, fOutput);
+}
+
+// ---- Reassignable dome/drive serial ports (issue #147) ----------------------
+
+bool AmidalaConfig::cfg_domeserialport(const char *cmd) {
+  return applySerialPortParam(fController->params, cmd, "domeserialport=", SerialConsumer::kDome, fOutput);
+}
+bool AmidalaConfig::cfg_driveserialport(const char *cmd) {
+  return applySerialPortParam(fController->params, cmd, "driveserialport=", SerialConsumer::kDrive, fOutput);
+}
+
+// ---- Reboot -------------------------------------------------------------
+
+bool AmidalaConfig::cfg_reboot(const char *cmd) {
+  if (strcmp(cmd, "reboot") != 0)
+    return false;
+  void (*resetArduino)() = NULL;
+  resetArduino();
+  return true; // unreachable -- resetArduino() never returns
+}
+
+// ---- Dome/RoboClaw settings (formerly processDomeConfig()) -----------------
+
+bool AmidalaConfig::cfg_domeimu(const char *cmd) {
+  return boolparam(cmd, "domeimu=", fController->params.domeimu);
+}
+
+bool AmidalaConfig::cfg_domeflip(const char *cmd) {
+  AmidalaParameters &params = fController->params;
+  if (!boolparam(cmd, "domeflip=", params.domeflip))
+    return false;
+  // domeDrive is still null when config.txt is parsed at boot (it's
+  // constructed later in AmidalaController::setup(), which re-applies
+  // params.domeflip to it once it exists) -- only a live post-boot change
+  // needs to apply it here immediately.
+  if (fController->fDomeDrive)
+    fController->fDomeDrive->setInverted(params.domeflip);
+  return true;
+}
+
+bool AmidalaConfig::cfg_domespeed(const char *cmd) {
+  AmidalaParameters &params = fController->params;
+  if (!intparam(cmd, "domespeed=", params.domespeed, 0, 100))
+    return false;
+  // setMaxSpeed()/setMaxSpeedPct() expect a 0.0-1.0 fraction, not the raw
+  // 0-100 UI value -- matches what boot-time setup() already does
+  // (src/controller.cpp). setMaxSpeedPct() is a RoboClaw-only convenience
+  // wrapper; other dome-drive variants only have the base setMaxSpeed().
+  // domeDrive is null when config.txt is parsed at boot -- setup() applies
+  // params.domespeed to the drive once it's constructed, so skip here.
+  if (fController->fDomeDrive) {
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+    static_cast<DomeDriveRoboClaw*>(fController->fDomeDrive)->setMaxSpeedPct(float(params.domespeed) / 100.0f);
+#else
+    fController->fDomeDrive->setMaxSpeed(float(params.domespeed) / 100.0f);
+#endif
   }
-  // else if (intparam(cmd, "domespmin=", params.domespmin, 0, 100))
-  // {
-  // }
-  // else if (intparam(cmd, "domespmax=", params.domespmin, 900, 1023))
-  // {
-  // }
+  return true;
+}
+
+bool AmidalaConfig::cfg_domepos(const char *cmd) {
+  int32_t sintarg;
+  if (!sintparam(cmd, "domepos=", sintarg))
+    return false;
+#ifdef RDH_SERIAL
+  Serial.print("NEWPOS: ");
+  Serial.println(sintarg);
+  fController->fAutoDome.setAbsolutePosition(sintarg);
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool AmidalaConfig::cfg_domepos2(const char *cmd) {
+  int32_t sintarg, sintarg2;
+  if (!sintparam2(cmd, "domepos=", sintarg, sintarg2))
+    return false;
+#ifdef RDH_SERIAL
+  Serial.print("NEWPOS: ");
+  Serial.println(sintarg);
+  fController->fAutoDome.setAbsolutePosition(sintarg, sintarg2);
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool AmidalaConfig::cfg_domerpos(const char *cmd) {
+  int32_t sintarg;
+  if (!sintparam(cmd, "domerpos=", sintarg))
+    return false;
+#ifdef RDH_SERIAL
+  Serial.print("NEWPOS: ");
+  Serial.println(sintarg);
+  fController->fAutoDome.setRelativePosition(sintarg);
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool AmidalaConfig::cfg_domerpos2(const char *cmd) {
+  int32_t sintarg, sintarg2;
+  if (!sintparam2(cmd, "domerpos=", sintarg, sintarg2))
+    return false;
+#ifdef RDH_SERIAL
+  Serial.print("NEWPOS: ");
+  Serial.println(sintarg);
+  fController->fAutoDome.setRelativePosition(sintarg, sintarg2);
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool AmidalaConfig::cfg_domehome(const char *cmd) {
+  AmidalaParameters &params = fController->params;
+  if (!intparam(cmd, "domehome=", params.domehome, 0, 360))
+    return false;
+#ifdef RDH_SERIAL
+  fController->fAutoDome.setDomeHomePosition(params.domehome);
+#endif
+  return true;
+}
+
+bool AmidalaConfig::cfg_domemode(const char *cmd) {
+  AmidalaParameters &params = fController->params;
+  if (!intparam(cmd, "domemode=", params.domemode, 1, 5))
+    return false;
+#ifdef RDH_SERIAL
+  fController->fAutoDome.setDomeDefaultMode(params.domemode);
+#endif
+  return true;
+}
+
+bool AmidalaConfig::cfg_domeseekr(const char *cmd) {
+  if (!intparam(cmd, "domeseekr=", fController->params.domeseekr, 1, 180))
+    return false;
+  applyDomePositionParams();
+  return true;
+}
+bool AmidalaConfig::cfg_domeseekl(const char *cmd) {
+  if (!intparam(cmd, "domeseekl=", fController->params.domeseekl, 1, 180))
+    return false;
+  applyDomePositionParams();
+  return true;
+}
+bool AmidalaConfig::cfg_domefudge(const char *cmd) {
+  if (!intparam(cmd, "domefudge=", fController->params.domefudge, 1, 45))
+    return false;
+  applyDomePositionParams();
+  return true;
+}
+bool AmidalaConfig::cfg_domespeedhome(const char *cmd) {
+  if (!intparam(cmd, "domespeedhome=", fController->params.domespeedhome, 1, 100))
+    return false;
+  applyDomePositionParams();
+  return true;
+}
+bool AmidalaConfig::cfg_domespeedseek(const char *cmd) {
+  if (!intparam(cmd, "domespeedseek=", fController->params.domespeedseek, 1, 100))
+    return false;
+  applyDomePositionParams();
+  return true;
+}
+bool AmidalaConfig::cfg_domespeedmin(const char *cmd) {
+  if (!intparam(cmd, "domespeedmin=", fController->params.domespeedmin, 0, 30))
+    return false;
+  applyDomePositionParams();
+  return true;
+}
+bool AmidalaConfig::cfg_domedecelzone(const char *cmd) {
+  if (!intparam(cmd, "domedecelzone=", fController->params.domedecelzone, 5, 90))
+    return false;
+  applyDomePositionParams();
+  return true;
+}
+
+// ---- RoboClaw dome drive parameters (parsed regardless of active dome
+//      drive so config.txt is portable between builds) ----------------------
+// domeDrive is null when config.txt is parsed at boot (constructed later in
+// AmidalaController::setup(), which re-applies each of these params to it
+// once it exists) -- only a live post-boot change needs to apply here.
+
+bool AmidalaConfig::cfg_domercaddr(const char *cmd) {
+  AmidalaParameters &params = fController->params;
+  if (!intparam(cmd, "domercaddr=", params.domercaddr, 128, 135))
+    return false;
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+  if (fController->fDomeDrive)
+    static_cast<DomeDriveRoboClaw*>(fController->fDomeDrive)->setAddress(params.domercaddr);
+#endif
+  return true;
+}
+
+bool AmidalaConfig::cfg_domercchan(const char *cmd) {
+  AmidalaParameters &params = fController->params;
+  if (!intparam(cmd, "domercchan=", params.domercchan, 1, 2))
+    return false;
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+  if (fController->fDomeDrive)
+    static_cast<DomeDriveRoboClaw*>(fController->fDomeDrive)->setChannel(params.domercchan);
+#endif
+  return true;
+}
+
+bool AmidalaConfig::cfg_domercqpps(const char *cmd) {
+  AmidalaParameters &params = fController->params;
+  if (!intparam(cmd, "domercqpps=", params.domercqpps, 1, 65535))
+    return false;
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+  if (fController->fDomeDrive)
+    static_cast<DomeDriveRoboClaw*>(fController->fDomeDrive)->setQPPS(params.domercqpps);
+#endif
+  return true;
+}
+
+bool AmidalaConfig::cfg_domefront(const char *cmd) {
+  AmidalaParameters &params = fController->params;
+  if (!intparam(cmd, "domefront=", params.domefront, 0, 359))
+    return false;
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+  if (fController->fDomeDrive)
+    static_cast<DomeDriveRoboClaw*>(fController->fDomeDrive)->setFrontOffset(params.domefront);
+#endif
+  return true;
+}
+
+bool AmidalaConfig::cfg_domestall(const char *cmd) {
+  AmidalaParameters &params = fController->params;
+  if (!intparam(cmd, "domestall=", params.domestall, 100, 5000))
+    return false;
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+  if (fController->fDomeDrive)
+    static_cast<DomeDriveRoboClaw*>(fController->fDomeDrive)->setStallTimeout(params.domestall);
+#endif
+  return true;
+}
+
+bool AmidalaConfig::cfg_domeerrlog(const char *cmd) {
+  AmidalaParameters &params = fController->params;
+  if (!boolparam(cmd, "domeerrlog=", params.domeerrlog))
+    return false;
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+  if (fController->fDomeDrive)
+    static_cast<DomeDriveRoboClaw*>(fController->fDomeDrive)->setErrorLogging(params.domeerrlog);
+#endif
+  return true;
+}
+
+// ---- Dispatch table -----------------------------------------------------
+
+const AmidalaConfig::ConfigHandler AmidalaConfig::kConfigHandlers[] = {
+    &AmidalaConfig::cfg_sb,
+    &AmidalaConfig::cfg_s,
+    &AmidalaConfig::cfg_b,
+    &AmidalaConfig::cfg_lb,
+    &AmidalaConfig::cfg_ab,
+    &AmidalaConfig::cfg_db,
+    &AmidalaConfig::cfg_sstr,
+    &AmidalaConfig::cfg_fav,
+    &AmidalaConfig::cfg_hidden,
+    &AmidalaConfig::cfg_cat,
+    &AmidalaConfig::cfg_estopstr,
+    &AmidalaConfig::cfg_resumestr,
+    &AmidalaConfig::cfg_gesture,
+    &AmidalaConfig::cfg_audiohw,
+    &AmidalaConfig::cfg_acktype,
+    &AmidalaConfig::cfg_b9,
+    &AmidalaConfig::cfg_volume,
+    &AmidalaConfig::cfg_volumeChA,
+    &AmidalaConfig::cfg_volumeChB,
+    &AmidalaConfig::cfg_volumewheel,
+    &AmidalaConfig::cfg_altvolumewheel,
+    &AmidalaConfig::cfg_startupem,
+    &AmidalaConfig::cfg_startuplvl,
+    &AmidalaConfig::cfg_ackem,
+    &AmidalaConfig::cfg_acklvl,
+    &AmidalaConfig::cfg_mindelay,
+    &AmidalaConfig::cfg_maxdelay,
+    &AmidalaConfig::cfg_rvrmin,
+    &AmidalaConfig::cfg_rvrmax,
+    &AmidalaConfig::cfg_rvlmin,
+    &AmidalaConfig::cfg_rvlmax,
+    &AmidalaConfig::cfg_minpulse,
+    &AmidalaConfig::cfg_maxpulse,
+    &AmidalaConfig::cfg_rcchn,
+    &AmidalaConfig::cfg_rcd,
+    &AmidalaConfig::cfg_rcj,
+    &AmidalaConfig::cfg_myi2c,
+    &AmidalaConfig::cfg_serialbaud,
+    &AmidalaConfig::cfg_serialdelim,
+    &AmidalaConfig::cfg_serialeol,
+    &AmidalaConfig::cfg_fst,
+    &AmidalaConfig::cfg_j1adjv,
+    &AmidalaConfig::cfg_j1adjh,
+    &AmidalaConfig::cfg_rnd,
+    &AmidalaConfig::cfg_ackgest,
+    &AmidalaConfig::cfg_slowgest,
+    &AmidalaConfig::cfg_domegest,
+    &AmidalaConfig::cfg_startup,
+    &AmidalaConfig::cfg_rndon,
+    &AmidalaConfig::cfg_ackon,
+    &AmidalaConfig::cfg_mix12,
+    &AmidalaConfig::cfg_autocorrect,
+    &AmidalaConfig::cfg_goslow,
+    &AmidalaConfig::cfg_domech6,
+    &AmidalaConfig::cfg_xbr,
+    &AmidalaConfig::cfg_xbl,
+    &AmidalaConfig::cfg_domeimu,
+    &AmidalaConfig::cfg_domeflip,
+    &AmidalaConfig::cfg_domespeed,
+    &AmidalaConfig::cfg_domepos,
+    &AmidalaConfig::cfg_domepos2,
+    &AmidalaConfig::cfg_domerpos,
+    &AmidalaConfig::cfg_domerpos2,
+    &AmidalaConfig::cfg_domehome,
+    &AmidalaConfig::cfg_domemode,
+    &AmidalaConfig::cfg_domeseekr,
+    &AmidalaConfig::cfg_domeseekl,
+    &AmidalaConfig::cfg_domefudge,
+    &AmidalaConfig::cfg_domespeedhome,
+    &AmidalaConfig::cfg_domespeedseek,
+    &AmidalaConfig::cfg_domespeedmin,
+    &AmidalaConfig::cfg_domedecelzone,
+    &AmidalaConfig::cfg_domercaddr,
+    &AmidalaConfig::cfg_domercchan,
+    &AmidalaConfig::cfg_domercqpps,
+    &AmidalaConfig::cfg_domefront,
+    &AmidalaConfig::cfg_domestall,
+    &AmidalaConfig::cfg_domeerrlog,
+    &AmidalaConfig::cfg_altbtn,
+    &AmidalaConfig::cfg_altdomestick,
+    &AmidalaConfig::cfg_mutebutton,
+    &AmidalaConfig::cfg_dbtimeout,
+    &AmidalaConfig::cfg_auxserial3,
+    &AmidalaConfig::cfg_btcontrolleron,
+    &AmidalaConfig::cfg_btaddr,
+    &AmidalaConfig::cfg_wcbenable,
+    &AmidalaConfig::cfg_wcboct2,
+    &AmidalaConfig::cfg_wcboct3,
+    &AmidalaConfig::cfg_wcbpassword,
+    &AmidalaConfig::cfg_wcbquantity,
+    &AmidalaConfig::cfg_wcbid,
+    &AmidalaConfig::cfg_outboundserial,
+    &AmidalaConfig::cfg_wifion,
+    &AmidalaConfig::cfg_wifissid,
+    &AmidalaConfig::cfg_wifipassword,
+    &AmidalaConfig::cfg_wifichannel,
+    &AmidalaConfig::cfg_pin1role,
+    &AmidalaConfig::cfg_pin2role,
+    &AmidalaConfig::cfg_pin3role,
+    &AmidalaConfig::cfg_pin4role,
+    &AmidalaConfig::cfg_pin5role,
+    &AmidalaConfig::cfg_pin6role,
+    &AmidalaConfig::cfg_pin39role,
+    &AmidalaConfig::cfg_pin40role,
+    &AmidalaConfig::cfg_pin41role,
+    &AmidalaConfig::cfg_pin42role,
+    &AmidalaConfig::cfg_pin47role,
+    &AmidalaConfig::cfg_domeserialport,
+    &AmidalaConfig::cfg_driveserialport,
+    &AmidalaConfig::cfg_reboot,
+};
+
+bool AmidalaConfig::processConfig(const char *cmd) {
+  for (auto handler : kConfigHandlers) {
+    if ((this->*handler)(cmd))
+      return true;
+  }
   return false;
 }
