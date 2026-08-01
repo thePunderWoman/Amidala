@@ -12,6 +12,7 @@
 //   dome_homing_step()             — state-machine homing decisions
 //   dome_calibration_trigger()     — state-machine calibration decisions
 //   dome_obstruction_check()       — stall detection logic
+//   dome_format_roboclaw_error()   — RoboClaw status bitmask decoding
 //   dome_save/load_calibration()   — EEPROM round-trip
 //   DomeDriveRoboClaw::stop()      — auto-motion state clearing (e-stop bug)
 //   DomeDriveRoboClaw::setEnable() — motor lock-out
@@ -562,6 +563,55 @@ void test_obstruction_encoder_9_is_stall() {
     // abs(9) < 10 → stall; timer not active → start it.
     DomeObstructionResult r = dome_obstruction_check(0.5f, 9, false, 0, 500);
     assert_obstruction(r, true, false, false);
+}
+
+// ---- dome_format_roboclaw_error() (issue #166) --------------------------------
+// Decodes RoboClaw::ReadError()'s status bitmask for the monitor log --
+// distinct from dome_obstruction_check() above, which is our own software
+// stall detection and can't see a RoboClaw-reported controller fault.
+
+void test_format_error_zero_reports_ok() {
+    char buf[96];
+    dome_format_roboclaw_error(0, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_STRING("RoboClaw OK (no error/warning bits)", buf);
+}
+
+void test_format_error_estop_bit_is_named() {
+    char buf[96];
+    dome_format_roboclaw_error(0x00000001u, buf, sizeof(buf));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "0x00000001"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "ESTOP"));
+}
+
+void test_format_error_multiple_known_bits_both_named() {
+    // M1 + M2 driver fault together.
+    char buf[96];
+    dome_format_roboclaw_error(0x000000C0u, buf, sizeof(buf));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "M1_DRIVER_FAULT"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "M2_DRIVER_FAULT"));
+}
+
+void test_format_error_unrecognized_bit_still_shows_hex() {
+    // 0x100 (M1 Speed Error) is intentionally not in the known-bit table --
+    // must still surface the raw hex so nothing is silently swallowed.
+    char buf[96];
+    dome_format_roboclaw_error(0x00000100u, buf, sizeof(buf));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "0x00000100"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "unrecognized"));
+}
+
+void test_format_error_all_bits_set_does_not_overflow_buffer() {
+    // Defensive: every bit set at once must still produce a valid,
+    // null-terminated, in-bounds string (snprintf truncates safely).
+    char buf[96];
+    dome_format_roboclaw_error(0xFFFFFFFFu, buf, sizeof(buf));
+    TEST_ASSERT_TRUE(strlen(buf) < sizeof(buf));
+}
+
+void test_format_error_respects_small_buffer() {
+    char buf[8];
+    dome_format_roboclaw_error(0x00000001u, buf, sizeof(buf));
+    TEST_ASSERT_TRUE(strlen(buf) < sizeof(buf));
 }
 
 // ---- dome_save_calibration() + dome_load_calibration() -----------------------
@@ -1244,6 +1294,13 @@ int main(int argc, char **argv) {
     RUN_TEST(test_obstruction_stall_exceeds_timeout_declares);
     RUN_TEST(test_obstruction_encoder_exactly_10_clears_timer);
     RUN_TEST(test_obstruction_encoder_9_is_stall);
+
+    RUN_TEST(test_format_error_zero_reports_ok);
+    RUN_TEST(test_format_error_estop_bit_is_named);
+    RUN_TEST(test_format_error_multiple_known_bits_both_named);
+    RUN_TEST(test_format_error_unrecognized_bit_still_shows_hex);
+    RUN_TEST(test_format_error_all_bits_set_does_not_overflow_buffer);
+    RUN_TEST(test_format_error_respects_small_buffer);
 
     RUN_TEST(test_eeprom_load_returns_zero_when_no_signature);
     RUN_TEST(test_eeprom_load_returns_zero_when_wrong_signature);

@@ -24,6 +24,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdio.h>
 #include <math.h>
 
 // EEPROM is not included here — see note above.
@@ -384,4 +385,67 @@ static inline int32_t dome_load_calibration() {
     int32_t tpr = 0;
     EEPROM.get(addr + 4, tpr);
     return tpr > 0 ? tpr : 0;
+}
+
+// ===========================================================================
+// RoboClaw controller status decoding
+// ===========================================================================
+
+/**
+ * Format a RoboClaw ReadError()/GETERROR status bitmask into a short,
+ * human-readable line for the monitor log.
+ *
+ * Added to give visibility into RoboClaw-reported faults (driver fault,
+ * over current, E-Stop input, etc.) -- distinct from and invisible to our
+ * own software stall detection (dome_obstruction_check() above), which only
+ * watches encoder movement while homed and can't see a controller-level
+ * fault, e.g. one that trips during homing.
+ *
+ * Bit meanings are Basicmicro's documented "Read Status" table for the 2x
+ * packet-serial product line (this project's roboclaw_arduino_library
+ * target) -- cross-check against the specific controller's manual if a
+ * decode looks wrong for your hardware. Unrecognized bits are always
+ * preserved in the raw hex value even when not individually named.
+ *
+ * @param err     Raw status bitmask from RoboClaw::ReadError().
+ * @param out     Destination buffer.
+ * @param outLen  Size of out, including room for the terminator.
+ */
+static inline void dome_format_roboclaw_error(uint32_t err, char* out, size_t outLen) {
+    if (out == nullptr || outLen == 0) return;
+
+    if (err == 0) {
+        snprintf(out, outLen, "RoboClaw OK (no error/warning bits)");
+        return;
+    }
+
+    static const struct { uint32_t bit; const char* name; } kKnownBits[] = {
+        {0x00000001u, "ESTOP"},
+        {0x00000002u, "TEMP_ERR"},
+        {0x00000004u, "TEMP2_ERR"},
+        {0x00000008u, "MBATT_HIGH_ERR"},
+        {0x00000010u, "LBATT_HIGH_ERR"},
+        {0x00000020u, "LBATT_LOW_ERR"},
+        {0x00000040u, "M1_DRIVER_FAULT"},
+        {0x00000080u, "M2_DRIVER_FAULT"},
+        {0x00001000u, "M1_CURRENT_ERR"},
+        {0x00002000u, "M2_CURRENT_ERR"},
+        {0x00010000u, "M1_OVERCURRENT"},
+        {0x00020000u, "M2_OVERCURRENT"},
+    };
+
+    char flags[160] = "";
+    size_t flagsLen = 0;
+    for (size_t i = 0; i < sizeof(kKnownBits) / sizeof(kKnownBits[0]); i++) {
+        if (!(err & kKnownBits[i].bit)) continue;
+        int n = snprintf(flags + flagsLen, sizeof(flags) - flagsLen, "%s%s",
+                          flagsLen ? "," : "", kKnownBits[i].name);
+        if (n > 0) flagsLen += (size_t)n;
+        if (flagsLen >= sizeof(flags)) break;
+    }
+
+    if (flagsLen > 0)
+        snprintf(out, outLen, "RoboClaw error 0x%08lX [%s]", (unsigned long)err, flags);
+    else
+        snprintf(out, outLen, "RoboClaw error 0x%08lX [unrecognized bits]", (unsigned long)err);
 }

@@ -9,8 +9,15 @@
 #include "dome_drive_roboclaw.h"
 #include "dome_position_math.h"
 #ifndef UNIT_TEST
-#include "ReelTwo.h"   // DEBUG_PRINT / DEBUG_PRINTLN macros
+#include "ReelTwo.h"      // DEBUG_PRINT / DEBUG_PRINTLN macros
+#include "monitor_buf.h"  // monAppend() -- see checkRoboClawStatus()
 #endif
+
+// How often to poll the RoboClaw's own error/warning status (checkRoboClawStatus()).
+// Packet-serial is a shared, sequential bus with real motor commands on it every
+// animate() cycle (~25ms) -- polling status at 1Hz is cheap enough not to matter
+// while still being responsive for diagnosing an in-progress fault.
+static const uint32_t kRoboClawStatusCheckIntervalMs = 1000;
 
 // Uncomment to enable high-frequency per-cycle logging (sendMotorCommand,
 // readEncoder).  These fire every 25 ms so leave this off in normal use.
@@ -108,6 +115,12 @@ void DomeDriveRoboClaw::animate() {
         fHallPinWasLow = pinLow;
     }
 #endif
+
+    // 1c. Poll the RoboClaw's own reported error/warning status. Runs
+    // regardless of fState (unlike the software stall check in step 4/
+    // checkObstruction(), which only applies while homed) so it also catches
+    // a controller-level fault during homing or calibrating.
+    checkRoboClawStatus();
 
     // 2. Consume any pending hall-sensor trigger.
     bool hallFired = processHallTrigger();
@@ -507,6 +520,12 @@ void DomeDriveRoboClaw::checkObstruction() {
     }
     if (r.declareObstruction) {
         DEBUG_PRINTLN("DOME: Obstruction detected — motor stopped");
+#ifndef UNIT_TEST
+        // DEBUG_PRINTLN above only shows up over serial with USE_DEBUG defined
+        // -- monAppend() puts it in the always-on web monitor too, so a real
+        // stall is visible after the fact without a debug cable attached.
+        monAppend("DOME: Obstruction detected -- motor stopped", 'i');
+#endif
         stop();
         fState            = kStateObstructed;
         fStallTimerActive = false;
@@ -515,6 +534,25 @@ void DomeDriveRoboClaw::checkObstruction() {
         fStallTimerActive = false;
         fStallStartMs     = 0;
     }
+}
+
+void DomeDriveRoboClaw::checkRoboClawStatus() {
+#ifndef UNIT_TEST
+    uint32_t now = millis();
+    if (now - fLastRoboClawStatusCheckMs < kRoboClawStatusCheckIntervalMs) return;
+    fLastRoboClawStatusCheckMs = now;
+
+    bool valid = false;
+    uint32_t err = fRoboClaw.ReadError(fAddress, &valid);
+    if (!valid) return;  // comms hiccup on this one poll -- don't spam over it
+    if (err == fLastLoggedRoboClawError) return;  // only log on change
+
+    fLastLoggedRoboClawError = err;
+    char buf[96];
+    dome_format_roboclaw_error(err, buf, sizeof(buf));
+    monAppend(buf, 'i');
+    DEBUG_PRINTLN(buf);
+#endif
 }
 
 void DomeDriveRoboClaw::handleHoming(bool hallFired) {
