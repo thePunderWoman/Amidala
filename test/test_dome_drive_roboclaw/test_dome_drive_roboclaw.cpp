@@ -584,19 +584,21 @@ void test_format_error_estop_bit_is_named() {
 }
 
 void test_format_error_multiple_known_bits_both_named() {
-    // M1 + M2 driver fault together.
+    // M1 + M2 fault together.
     char buf[96];
     dome_format_roboclaw_error(0x000000C0u, buf, sizeof(buf));
-    TEST_ASSERT_NOT_NULL(strstr(buf, "M1_DRIVER_FAULT"));
-    TEST_ASSERT_NOT_NULL(strstr(buf, "M2_DRIVER_FAULT"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "M1_FAULT"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "M2_FAULT"));
 }
 
 void test_format_error_unrecognized_bit_still_shows_hex() {
-    // 0x100 (M1 Speed Error) is intentionally not in the known-bit table --
-    // must still surface the raw hex so nothing is silently swallowed.
+    // 0x8 is a genuine gap in Basicmicro's bit table (confirmed against the
+    // official manual -- it jumps from 0x4 straight to 0x10) -- must still
+    // surface the raw hex so nothing is silently swallowed if a future
+    // firmware revision starts using it.
     char buf[96];
-    dome_format_roboclaw_error(0x00000100u, buf, sizeof(buf));
-    TEST_ASSERT_NOT_NULL(strstr(buf, "0x00000100"));
+    dome_format_roboclaw_error(0x00000008u, buf, sizeof(buf));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "0x00000008"));
     TEST_ASSERT_NOT_NULL(strstr(buf, "unrecognized"));
 }
 
@@ -612,6 +614,50 @@ void test_format_error_respects_small_buffer() {
     char buf[8];
     dome_format_roboclaw_error(0x00000001u, buf, sizeof(buf));
     TEST_ASSERT_TRUE(strlen(buf) < sizeof(buf));
+}
+
+// ---- Field-observed values (issue #166 follow-up) ---------------------------
+// Locks in the decode of values actually seen on real hardware, so a future
+// bit-table edit can't silently regress the specific readings that were used
+// to diagnose the field issue. Dome runs on M1 (DEFAULT_DOME_ROBOCLAW_CHANNEL
+// == 1) -- M2_IDLE_WARN is expected background noise from the channel the
+// dome doesn't use; M1_OVER_REGEN_WARN is the one that's actually about the
+// dome's own motor (seen while it was moving slowly, consistent with
+// closed-loop deceleration approaching a target inducing regen current).
+
+void test_format_error_m2_idle_alone_is_benign_unused_channel() {
+    char buf[96];
+    dome_format_roboclaw_error(0x02000000u, buf, sizeof(buf));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "M2_IDLE_WARN"));
+}
+
+void test_format_error_m1_over_regen_with_m2_idle() {
+    char buf[96];
+    dome_format_roboclaw_error(0x42000000u, buf, sizeof(buf));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "M1_OVER_REGEN_WARN"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "M2_IDLE_WARN"));
+}
+
+void test_format_error_startup_snapshot_all_bits_named() {
+    // Seen once immediately after a restart -- a mix of expected startup
+    // transients (RESET_WARN, both motors idle before the first move) plus
+    // real current/overcurrent bits, all accumulated into one snapshot
+    // because warning bits persist until read. Full decode is 173 chars
+    // (longer than production's 96-char monitor-line buffer, which would
+    // truncate it -- that's fine and covered separately by
+    // test_format_error_respects_small_buffer; use a buffer big enough
+    // here to check the untruncated decode itself is correct).
+    char buf[200];
+    dome_format_roboclaw_error(0x63073000u, buf, sizeof(buf));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "M1_CURRENT_ERR"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "M2_CURRENT_ERR"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "M1_OVERCURRENT_WARN"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "M2_OVERCURRENT_WARN"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "MAIN_BATT_HIGH_WARN"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "M1_IDLE_WARN"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "M2_IDLE_WARN"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "RESET_WARN"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "M1_OVER_REGEN_WARN"));
 }
 
 // ---- dome_save_calibration() + dome_load_calibration() -----------------------
@@ -1301,6 +1347,9 @@ int main(int argc, char **argv) {
     RUN_TEST(test_format_error_unrecognized_bit_still_shows_hex);
     RUN_TEST(test_format_error_all_bits_set_does_not_overflow_buffer);
     RUN_TEST(test_format_error_respects_small_buffer);
+    RUN_TEST(test_format_error_m2_idle_alone_is_benign_unused_channel);
+    RUN_TEST(test_format_error_m1_over_regen_with_m2_idle);
+    RUN_TEST(test_format_error_startup_snapshot_all_bits_named);
 
     RUN_TEST(test_eeprom_load_returns_zero_when_no_signature);
     RUN_TEST(test_eeprom_load_returns_zero_when_wrong_signature);

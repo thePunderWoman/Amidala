@@ -401,11 +401,17 @@ static inline int32_t dome_load_calibration() {
  * watches encoder movement while homed and can't see a controller-level
  * fault, e.g. one that trips during homing.
  *
- * Bit meanings are Basicmicro's documented "Read Status" table for the 2x
- * packet-serial product line (this project's roboclaw_arduino_library
- * target) -- cross-check against the specific controller's manual if a
- * decode looks wrong for your hardware. Unrecognized bits are always
- * preserved in the raw hex value even when not individually named.
+ * Bit meanings are Basicmicro's official "90 - Read Status" table (RoboClaw
+ * Series User Manual, downloads.basicmicro.com/docs/roboclaw_user_manual.pdf,
+ * p.76) -- verified against the primary source, not reconstructed from
+ * memory. Per that table, ERROR bits (0x1-0x2000) persist until the
+ * controller is reset; WARNING bits (0x10000 and up) are transient and
+ * auto-clear the moment they're read, so a single poll can catch a warning
+ * that's already resolved by the time it's logged. Gaps in the bit sequence
+ * below (e.g. nothing at 0x8, 0x4000000-0x10000000) are intentional --
+ * those bits are genuinely unused/reserved, not an oversight. Unrecognized
+ * bits are always preserved in the raw hex value even when not individually
+ * named, so nothing is silently dropped if Basicmicro adds more later.
  *
  * @param err     Raw status bitmask from RoboClaw::ReadError().
  * @param out     Destination buffer.
@@ -420,18 +426,34 @@ static inline void dome_format_roboclaw_error(uint32_t err, char* out, size_t ou
     }
 
     static const struct { uint32_t bit; const char* name; } kKnownBits[] = {
+        // -- Errors (persist until the controller is reset) --
         {0x00000001u, "ESTOP"},
         {0x00000002u, "TEMP_ERR"},
         {0x00000004u, "TEMP2_ERR"},
-        {0x00000008u, "MBATT_HIGH_ERR"},
-        {0x00000010u, "LBATT_HIGH_ERR"},
-        {0x00000020u, "LBATT_LOW_ERR"},
-        {0x00000040u, "M1_DRIVER_FAULT"},
-        {0x00000080u, "M2_DRIVER_FAULT"},
+        {0x00000010u, "LOGIC_BATT_HIGH_ERR"},
+        {0x00000020u, "LOGIC_BATT_LOW_ERR"},
+        {0x00000040u, "M1_FAULT"},
+        {0x00000080u, "M2_FAULT"},
+        {0x00000100u, "M1_SPEED_ERR"},
+        {0x00000200u, "M2_SPEED_ERR"},
+        {0x00000400u, "M1_POSITION_ERR"},
+        {0x00000800u, "M2_POSITION_ERR"},
         {0x00001000u, "M1_CURRENT_ERR"},
         {0x00002000u, "M2_CURRENT_ERR"},
-        {0x00010000u, "M1_OVERCURRENT"},
-        {0x00020000u, "M2_OVERCURRENT"},
+        // -- Warnings (transient, auto-clear on read) --
+        {0x00010000u, "M1_OVERCURRENT_WARN"},
+        {0x00020000u, "M2_OVERCURRENT_WARN"},
+        {0x00040000u, "MAIN_BATT_HIGH_WARN"},
+        {0x00080000u, "MAIN_BATT_LOW_WARN"},
+        {0x00100000u, "TEMP_WARN"},
+        {0x00200000u, "TEMP2_WARN"},
+        {0x00400000u, "S4_LIMIT_SWITCH"},
+        {0x00800000u, "S5_LIMIT_SWITCH"},
+        {0x01000000u, "M1_IDLE_WARN"},
+        {0x02000000u, "M2_IDLE_WARN"},
+        {0x20000000u, "RESET_WARN"},
+        {0x40000000u, "M1_OVER_REGEN_WARN"},
+        {0x80000000u, "M2_OVER_REGEN_WARN"},
     };
 
     char flags[160] = "";
