@@ -232,6 +232,16 @@ public:
     /** Update the motor channel (1 = M1, 2 = M2). Applied immediately. */
     void setChannel(uint8_t channel) { fChannel = channel; }
 
+    /**
+     * Enable/disable logging RoboClaw-reported errors/warnings
+     * (checkRoboClawStatus()) to the monitor. Off by default -- most users
+     * don't need to see these unless they're actively debugging a dome
+     * issue. The status poll itself is skipped entirely while disabled, not
+     * just the logging, so there's no ongoing serial-bus cost either.
+     */
+    void setErrorLogging(bool enable) { fLogRoboClawErrors = enable; }
+    bool getErrorLogging() const { return fLogRoboClawErrors; }
+
     /** Configure auto-mode timing and speed params from loaded config. */
     void applyDomePositionParams(uint8_t seekMinDelay, uint8_t seekMaxDelay,
                                  uint8_t seekLeft,     uint8_t seekRight,
@@ -410,6 +420,7 @@ private:
 
     uint32_t fLastRoboClawStatusCheckMs = 0;
     uint32_t fLastLoggedRoboClawError   = 0xFFFFFFFFu;  ///< sentinel: force first read to log
+    bool     fLogRoboClawErrors         = false;  ///< see setErrorLogging()
 
     // ---- Sequence pause -----------------------------------------------------
 

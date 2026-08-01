@@ -261,6 +261,7 @@ void AmidalaController::setup() {
   fDomeDrive->setFrontOffset(params.domefront);
   fDomeDrive->setQPPS(params.domercqpps);
   fDomeDrive->setStallTimeout(params.domestall);
+  fDomeDrive->setErrorLogging(params.domeerrlog);
   fDomeDrive->setMaxSpeedPct(float(params.domespeed) / 100.0f);
   fDomeDrive->applyDomePositionParams(
       params.domeseekmin, params.domeseekmax,

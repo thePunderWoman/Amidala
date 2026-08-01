@@ -73,6 +73,17 @@ public:
 private:
   AmidalaController *fController = nullptr;
   Print *fOutput = nullptr;
+
+  // Handles the dome/RoboClaw config.txt keys (domeimu=, domeflip=,
+  // domespeed=, domercaddr=, domestall=, domeerrlog=, etc.). Split out of
+  // processConfig() purely to keep that function's compiled size down --
+  // it's one large if/else-if chain matching every config key, and got
+  // large enough on the ESP32-S3/Xtensa toolchain to trip a link-time
+  // "dangerous relocation: windowed longcall crosses 1GB boundary" error
+  // (a real toolchain limit on function size, not a logic bug). No
+  // behavior change: same keys, same effects, just called from
+  // processConfig() as a sub-dispatch instead of inlined into it.
+  bool processDomeConfig(const char *cmd);
 };
 
 // ---- readConfig() -----------------------------------------------------------

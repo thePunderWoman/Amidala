@@ -111,6 +111,7 @@ inline bool ensureConfigDefaults(const AmidalaParameters& params) {
         {"auxserial3=",     fmtBool(params.auxserial3)},
         {"domedecelzone=",  String(params.domedecelzone)},
         {"domeimu=",        fmtBool(params.domeimu)},
+        {"domeerrlog=",     fmtBool(params.domeerrlog)},
         {"wifion=",         fmtBool(params.wifion)},
         {"wifissid=",       String(params.wifiSSID)},
         {"wifipassword=",   String(params.wifiPassword)},

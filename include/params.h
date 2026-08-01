@@ -275,6 +275,7 @@ struct AmidalaParameters {
   bool domech6;  // dome channel-6 mode flag (configurable but effect unimplemented)
   bool domeimu;  // dome IMU flag (configurable; read by getDomeIMU())
   bool domeflip;
+  bool domeerrlog;  // log RoboClaw-reported errors/warnings to the monitor (off by default; debug aid)
 
   // ---- Alt-button modifier ---------------------------------------------------
   // altbtn: which button (1–9) acts as the modifier held to activate alt layer.
@@ -482,6 +483,7 @@ struct AmidalaParameters {
       domech6 = false;
       domeflip = DEFAULT_DOME_INVERTED;
       domeimu = true;
+      domeerrlog = false;
       altbtn = 0;
       altdomestick = 0;
       mutebutton = 0;
