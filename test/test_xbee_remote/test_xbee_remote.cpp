@@ -23,6 +23,8 @@ void DomeController::notify() {}
 void DomeController::process() {}
 void DomeController::onConnect() {}
 void DomeController::onDisconnect() {}
+bool DomeController::beginWebCapture() { return false; }
+bool DomeController::stopWebCapture() { return false; }
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -37,6 +39,7 @@ public:
     TestDomeController() : DomeController(nullptr) {}
     using DomeController::addGesture;
     using DomeController::resetGestureState;
+    using DomeController::trimTrailingCenter;
     using DomeController::fGestureBuffer;
     using DomeController::fGestureAxis;
 };
@@ -84,6 +87,33 @@ void test_dome_gesture_reset_clears_leftover_axis() {
     dc.resetGestureState();
 
     TEST_ASSERT_EQUAL(0, dc.fGestureAxis);
+}
+
+// ---- DomeController: trimTrailingCenter (issue #138 gesture capture) --------
+
+void test_dome_trim_trailing_center_strips_single_trailing_five() {
+    TestDomeController dc;
+    dc.addGesture('2');
+    dc.addGesture('5');
+    dc.addGesture('8');
+    dc.addGesture('5');
+    dc.trimTrailingCenter();
+    TEST_ASSERT_EQUAL_STRING("258", dc.fGestureBuffer);
+}
+
+void test_dome_trim_trailing_center_leaves_non_center_ending_unchanged() {
+    TestDomeController dc;
+    dc.addGesture('2');
+    dc.addGesture('5');
+    dc.addGesture('8');
+    dc.trimTrailingCenter();
+    TEST_ASSERT_EQUAL_STRING("258", dc.fGestureBuffer);
+}
+
+void test_dome_trim_trailing_center_leaves_empty_buffer_unchanged() {
+    TestDomeController dc;
+    dc.trimTrailingCenter();
+    TEST_ASSERT_EQUAL_STRING("", dc.fGestureBuffer);
 }
 
 // ---- XBeePocketRemote: initial state ----------------------------------------
@@ -282,6 +312,10 @@ int main(int argc, char **argv) {
     RUN_TEST(test_dome_gesture_reset_clears_leftover_text);
     RUN_TEST(test_dome_gesture_click_after_reset_is_empty_not_stale);
     RUN_TEST(test_dome_gesture_reset_clears_leftover_axis);
+
+    RUN_TEST(test_dome_trim_trailing_center_strips_single_trailing_five);
+    RUN_TEST(test_dome_trim_trailing_center_leaves_non_center_ending_unchanged);
+    RUN_TEST(test_dome_trim_trailing_center_leaves_empty_buffer_unchanged);
 
     return UNITY_END();
 }

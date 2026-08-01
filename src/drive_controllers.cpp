@@ -258,12 +258,16 @@ void DomeController::process() {
     fDriver->enableDomeController();
     resetGestureState();
     fGestureCollect = false;
+    // A web-initiated capture that idles out still needs to unblock the
+    // browser's status poll -- the result reads back empty, which the web UI
+    // treats as "timed out, try again" (see include/xbee_remote.h).
+    if (fWebCapture) {
+      fCaptureDone = true;
+      fWebCapture = false;
+    }
   } else {
     if (event.button_up.l3) {
-      // delete trailing '5' from gesture
-      unsigned glen = strlen(fGestureBuffer);
-      if (glen > 0 && fGestureBuffer[glen - 1] == '5')
-        fGestureBuffer[glen - 1] = 0;
+      trimTrailingCenter();
       fDriver->enableDomeController();
       fGestureCollect = false;
       // A gesture is allowed to end while the stick is still deflected (it's
@@ -286,7 +290,17 @@ void DomeController::process() {
                                   " min|ly|=" + String(fGestureMinAbsLy) + ")");
       }
       fGestureAxis = 0;
-      fDriver->processGesture(fGestureBuffer);
+      // A physical L3 press can complete a capture that was started from the
+      // web UI (issue #138: "click done or press L3") -- in that case the
+      // result is parked for the browser's status poll instead of being
+      // dispatched as a live gesture trigger.
+      if (fWebCapture) {
+        fDriver->fConsole.println("GESTURE: web capture end via L3 (\"" + String(fGestureBuffer) + "\")");
+        fCaptureDone = true;
+        fWebCapture = false;
+      } else {
+        fDriver->processGesture(fGestureBuffer);
+      }
       return;
     }
 
@@ -339,6 +353,38 @@ void DomeController::process() {
   }
 }
 
+// Starts a capture session driven by the web UI (POST
+// /api/gesture/capture/start) rather than a physical L3 press. Mirrors the
+// L3-start branch above so the two entry points behave identically once
+// collection is under way. Fails if a capture -- physical or web -- is
+// already in progress, so a stray click can't stomp an in-flight one.
+bool DomeController::beginWebCapture() {
+  if (fGestureCollect) return false;
+  fDriver->fConsole.println("GESTURE: web capture start");
+  fDriver->disableDomeController();
+  fGestureCollect = true;
+  fWebCapture = true;
+  fCaptureDone = false;
+  resetGestureState();
+  fGestureTimeOut = millis() + GESTURE_TIMEOUT_MS;
+  return true;
+}
+
+// Ends a web-initiated capture early (the web UI's "Done" button) -- the
+// same finalize sequence as the L3-end branch in notify(), but reachable
+// directly from a REST handler rather than waiting on a controller event.
+bool DomeController::stopWebCapture() {
+  if (!fGestureCollect || !fWebCapture) return false;
+  trimTrailingCenter();
+  fDriver->enableDomeController();
+  fGestureCollect = false;
+  fGestureAxis = 0;
+  fDriver->fConsole.println("GESTURE: web capture end via Done (\"" + String(fGestureBuffer) + "\")");
+  fCaptureDone = true;
+  fWebCapture = false;
+  return true;
+}
+
 void DomeController::onConnect() {
   DEBUG_PRINTLN("Dome Stick Connected");
   fDriver->enableDomeController();
@@ -346,6 +392,19 @@ void DomeController::onConnect() {
 
 void DomeController::onDisconnect() {
   DEBUG_PRINTLN("Dome Stick Disconnected");
+  // A capture in progress when the remote drops can't ever reach L3-up or
+  // the web "Done" button -- without this, the dome would stay disabled
+  // (see fDriver->disableDomeController() above) and a web capture's status
+  // poll would hang forever waiting for fCaptureDone. The 2s idle timeout
+  // would eventually clear fGestureCollect on its own, but not the web
+  // capture flags, and not the dome-disable until it did.
+  if (fGestureCollect) {
+    fDriver->fConsole.println("GESTURE: aborted (remote disconnected)");
+    resetGestureState();
+    fGestureCollect = false;
+    fWebCapture = false;
+    fCaptureDone = false;
+  }
   // Clear alt state if the alt button is on this controller.
   int altbtn = fDriver->params.altbtn;
   if (altbtn >= 6 && altbtn <= 9)

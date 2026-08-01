@@ -215,6 +215,18 @@ public:
   virtual void onConnect() override;
   virtual void onDisconnect() override;
 
+  // Web-driven gesture capture (issue #138): reuses the same collection state
+  // machine notify() drives from physical L3 presses, just diverting the
+  // result to polling instead of live dispatch. Bodies are defined in
+  // src/drive_controllers.cpp (need the complete AmidalaController type via
+  // fDriver, same as notify()/process()).
+  bool beginWebCapture();
+  bool stopWebCapture();
+
+  bool isWebCapturing() const { return fGestureCollect && fWebCapture; }
+  bool isCaptureDone() const { return fCaptureDone; }
+  const char *captureResult() const { return fGestureBuffer; }
+
   AmidalaController *fDriver;
 
 protected:
@@ -223,6 +235,14 @@ protected:
   // controller for that window (see DomeController::notify()).
   SafetyStopLatch fSafetyStop;
   bool fGestureCollect = false;
+  // true while the active capture was started via the web UI (POST
+  // /api/gesture/capture/start) rather than a physical double-L3 press; see
+  // beginWebCapture()/stopWebCapture() in src/drive_controllers.cpp.
+  bool fWebCapture = false;
+  // true once a web-initiated capture has finished (L3, the web "Done"
+  // button, or the idle timeout) and fGestureBuffer holds the result for
+  // polling. Empty fGestureBuffer with fCaptureDone true means "timed out".
+  bool fCaptureDone = false;
   bool fAltEngagedAbsStick = false; ///< true if alt hold engaged abs-stick mode
   char fGestureBuffer[MAX_GESTURE_LENGTH + 1] = {};
   char *fGesturePtr = fGestureBuffer;
@@ -268,5 +288,15 @@ protected:
     fGestureAxis = 0;
     fGestureMinAbsLx = 999;
     fGestureMinAbsLy = 999;
+  }
+
+  // A capture naturally ends with the stick back at center -- that trailing
+  // '5' was never a drawn stroke, just the recenter that closed out the last
+  // real one, so strip it before the result is dispatched or handed back to
+  // the web UI.
+  void trimTrailingCenter() {
+    unsigned glen = strlen(fGestureBuffer);
+    if (glen > 0 && fGestureBuffer[glen - 1] == '5')
+      fGestureBuffer[glen - 1] = '\0';
   }
 };

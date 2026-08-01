@@ -356,6 +356,18 @@ _bt_state = {
     "results":  [],
 }
 
+# Mock for /api/gesture/capture/*: there's no real stick here to draw with, so
+# each status poll while active reveals one more character of a canned demo
+# sequence -- enough to preview the live "Drawing: ..." UI locally. Ends only
+# on an explicit stop (mirrors the real flow, which waits for L3 or Done).
+_capture_state = {
+    "active":   False,
+    "done":     False,
+    "seq":      "",
+    "demo":     "258A",
+    "revealed": 0,
+}
+
 _CSP = ("default-src 'self'; "
         "script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
@@ -393,6 +405,16 @@ class _Handler(SimpleHTTPRequestHandler):
             return
         if path == "/api/bt/results":
             self._json(_bt_state["results"])
+            return
+        if path == "/api/gesture/capture/status":
+            if _capture_state["active"] and _capture_state["revealed"] < len(_capture_state["demo"]):
+                _capture_state["revealed"] += 1
+                _capture_state["seq"] = _capture_state["demo"][:_capture_state["revealed"]]
+            self._json({
+                "active": _capture_state["active"],
+                "done":   _capture_state["done"],
+                "seq":    _capture_state["seq"],
+            })
             return
         if path == "/api/periscope/seqs":
             self._json(_config.get("periscope_seqs", {}))
@@ -502,6 +524,23 @@ class _Handler(SimpleHTTPRequestHandler):
             _config["btaddr"] = ""
             _monitor["lines"].append({"t": "BT: cleared pairing", "c": "info"})
             _monitor["seq"] += 1
+            self._json({"ok": True})
+            return
+        if path == "/api/gesture/capture/start":
+            if _capture_state["active"]:
+                self._text("capture already in progress", status=409)
+                return
+            print("  GESTURE capture start")
+            _capture_state["active"] = True
+            _capture_state["done"] = False
+            _capture_state["seq"] = ""
+            _capture_state["revealed"] = 0
+            self._json({"ok": True})
+            return
+        if path == "/api/gesture/capture/stop":
+            print(f"  GESTURE capture stop (seq={_capture_state['seq']!r})")
+            _capture_state["active"] = False
+            _capture_state["done"] = True
             self._json({"ok": True})
             return
         if path == "/api/dome":
