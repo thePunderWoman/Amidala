@@ -125,25 +125,29 @@ void DriveController::onDisconnect() {
 
 void DomeController::notify() {
   uint32_t lagTime = millis() - lastPacket;
+
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+  // Random mode drives the dome autonomously and never reads the joystick,
+  // so a stale/lost controller signal isn't an unsafe condition for it the
+  // way it is for direct manual driving. Skip the connection-loss safety
+  // stop entirely while it's active -- otherwise "turn on random mode,
+  // power off the remote, walk away" (the whole point of the mode) instead
+  // stops the dome until the remote reconnects (issue #162).
+  if (fDriver->fDomeDrive->isRandomMode()) {
+    fSafetyStop.recover();  // consume any stale trip so it can't resurface later
+    if (lagTime <= 500)
+      process();
+    return;
+  }
+#endif
+
   if (lagTime > 5000) {
     DEBUG_PRINTLN("More than 5 seconds. Disconnect");
-#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    // domeEmergencyStop() -> stop() unconditionally drops kStateRandom back
-    // to kStateHomed; remember it so resumeIfInterrupted() can restore it
-    // once the connection recovers (issue #143 -- random mode otherwise
-    // never resumed on its own after any connection-loss safety stop).
-    // RoboClaw-only: DomeDriveSabertooth/DomeDrivePWM have no equivalent
-    // random-mode-resume concept to preserve across a safety stop.
-    fDriver->fDomeDrive->noteConnectionLossStop();
-#endif
     fDriver->domeEmergencyStop();
     fSafetyStop.trip();
     disconnect();
   } else if (lagTime > 500) {
     DEBUG_PRINTLN("It has been 500ms. Shutdown motors");
-#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    fDriver->fDomeDrive->noteConnectionLossStop();
-#endif
     fDriver->domeEmergencyStop();
     fSafetyStop.trip();
   } else {
@@ -160,9 +164,6 @@ void DomeController::notify() {
     if (fSafetyStop.recover() && !fGestureCollect) {
       DEBUG_PRINTLN("Signal recovered. Re-enabling dome");
       fDriver->enableDomeController();
-#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-      fDriver->fDomeDrive->resumeIfInterrupted();
-#endif
     }
     process();
   }
@@ -310,6 +311,12 @@ void DomeController::onDisconnect() {
     fDriver->fDomeDrive->disableAbsoluteStickMode();
     fAltEngagedAbsStick = false;
   }
+  // As in notify(): random mode doesn't read the joystick, so the remote
+  // dropping for good (past the failsafe timeout) isn't unsafe for it either
+  // -- leave it wandering rather than stopping the dome until the remote
+  // reconnects (issue #162).
+  if (fDriver->fDomeDrive->isRandomMode())
+    return;
 #endif
   fDriver->disableDomeController();
 }

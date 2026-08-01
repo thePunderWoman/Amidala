@@ -1277,12 +1277,6 @@ static void triggerEstop() {
     if (!sCtrl) return;
     sCtrl->emergencyStop();
     sCtrl->domeEmergencyStop();
-#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
-    // A deliberate e-stop must always win, even if it lands while an
-    // unresolved XBee drop is still waiting to auto-resume random mode
-    // on reconnect (see DomeDriveRoboClaw::resumeIfInterrupted()).
-    sCtrl->fDomeDrive->cancelPendingRandomResume();
-#endif
     for (uint8_t i = 0; i < sCtrl->params.estopCmdCount; i++)
         sCtrl->sendSerialString(sCtrl->params.EstopCmds[i].str);
 }
