@@ -39,7 +39,14 @@ void AmidalaAudio::init(AmidalaController *controller) {
     fSavedVolA = params.volumeChA;
     fSavedVolB = params.volumeChB;
     fMusing = params.rndon;
-    fController->fHCR.begin();
+    // begin(0) instead of the no-arg begin() (which defaults to a 125ms
+    // refresh) -- HCRVocalizer::update() unconditionally sends a <QD> self-
+    // query and logs the raw response whenever refreshSpeed elapses, which
+    // at 125ms floods the monitor with a state dump every cycle. Passing 0
+    // disables that (HCRVocalizer::update() gates it on refreshSpeed > 0)
+    // without needing to stop calling update() every cycle -- see process()
+    // below for why that still matters.
+    fController->fHCR.begin(0);
     DelayCall::schedule(hcrDelayedInit, 5000);
   }
 #endif
@@ -50,7 +57,13 @@ void AmidalaAudio::process() {
 #ifndef VMUSIC_SERIAL
   AmidalaParameters &params = fController->params;
   if (params.audiohw == AUDIO_HW_HCR) {
-    // fController->fHCR.update();
+    // update() also drains incoming serial from the HCR board one byte per
+    // call (HCRVocalizer::receive() is private -- update() is the only way
+    // to reach it), so this needs to run every cycle regardless of the
+    // refreshSpeed=0 self-query being disabled above -- an occasional call
+    // wouldn't keep up if the board ever sends something and risks losing
+    // bytes off the UART's finite RX buffer.
+    fController->fHCR.update();
   }
 #else
   AmidalaParameters &params = fController->params;
