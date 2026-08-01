@@ -110,6 +110,14 @@ inline String buttonActionJson(const ButtonAction& b) {
 inline String buildFullConfigJson(const AmidalaParameters& p) {
     const char* hw = (p.audiohw == AUDIO_HW_VMUSIC) ? "vmusic" : "hcr";
     String json = "{";
+    // String::concat() reserves the buffer at the exact new length on every
+    // += that outgrows capacity (no geometric growth -- see WString.cpp) --
+    // building this via ~200+ unreserved += (many more with serial strings
+    // configured, since Str[] can hold up to MAX_SERIAL_STRINGS entries)
+    // means that many reallocs+copies per call, on an endpoint every config
+    // page fetches on load. One upfront reserve() turns that into ~1.
+    json.reserve(4096 + (size_t)p.serialcount * 170 +
+                 (size_t)p.getServoCount() * 64 + (size_t)p.gcount * 64);
 
     // General
     json += "\"volume\":"        + String(p.volume)                   + ",";
@@ -414,6 +422,7 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
 // Overload that appends gadget configuration (JSON array string built by caller).
 inline String buildFullConfigJson(const AmidalaParameters& p, const String& gadgetsCfgJson) {
     String j = buildFullConfigJson(p);
+    j.reserve(j.length() + gadgetsCfgJson.length() + 20);
     j = j.substring(0, j.length() - 1);
     j += ",\"gadgets_cfg\":";
     j += gadgetsCfgJson;
@@ -427,6 +436,7 @@ inline String buildFullConfigJson(const AmidalaParameters& p, const String& gadg
 inline String buildFullConfigJson(const AmidalaParameters& p, const String& gadgetsCfgJson,
                                    uint8_t userSstrCnt) {
     String j = buildFullConfigJson(p);
+    j.reserve(j.length() + gadgetsCfgJson.length() + 40);
     j = j.substring(0, j.length() - 1);
     j += ",\"gadgets_cfg\":";
     j += gadgetsCfgJson;

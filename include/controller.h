@@ -164,7 +164,14 @@ public:
   DriveController fDriveStick;
   DomeController fDomeStick;
   XBeePocketRemote *remote[2] = {&fDriveStick, &fDomeStick};
-  AmidalaParameters params;
+  // Heap-allocated from PSRAM, not a plain member -- Str[MAX_SERIAL_STRINGS]
+  // alone is ~67KB, and as static internal-SRAM storage that was ~35% of
+  // this firmware's total RAM budget (issue #172). See allocParamsInPSRAM()
+  // in controller.cpp. Safe as a reference: declared here, before
+  // fAutoDome/fPPMDecoder below, so member construction order (which follows
+  // declaration order, not initializer-list order) binds it before anything
+  // later in the constructor's initializer list reads from it.
+  AmidalaParameters &params;
 #ifdef RDH_SERIAL
   RDHSerial fAutoDome;
 #endif
