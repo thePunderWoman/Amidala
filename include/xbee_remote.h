@@ -209,7 +209,7 @@ protected:
   SafetyStopLatch fSafetyStop;
   bool fGestureCollect = false;
   bool fAltEngagedAbsStick = false; ///< true if alt hold engaged abs-stick mode
-  char fGestureBuffer[MAX_GESTURE_LENGTH + 1];
+  char fGestureBuffer[MAX_GESTURE_LENGTH + 1] = {};
   char *fGesturePtr = fGestureBuffer;
   char fGestureAxis = 0;
   uint32_t fGestureTimeOut = 0;
@@ -220,5 +220,16 @@ protected:
       *fGesturePtr = '\0';
       fGestureTimeOut = millis() + GESTURE_TIMEOUT_MS;
     }
+  }
+
+  // Resets collection state back to an empty gesture. Resetting fGesturePtr
+  // alone is not enough: addGesture() null-terminates as it writes, but a
+  // gesture with zero strokes (a plain L3 click with no stick movement, or a
+  // timeout) never calls addGesture() at all, leaving the previous gesture's
+  // text sitting in the buffer. Without clearing it here, that stale text
+  // gets replayed as if it were the new gesture (issue #163).
+  void resetGestureBuffer() {
+    fGesturePtr = fGestureBuffer;
+    fGestureBuffer[0] = '\0';
   }
 };
