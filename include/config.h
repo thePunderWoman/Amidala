@@ -74,16 +74,146 @@ private:
   AmidalaController *fController = nullptr;
   Print *fOutput = nullptr;
 
-  // Handles the dome/RoboClaw config.txt keys (domeimu=, domeflip=,
-  // domespeed=, domercaddr=, domestall=, domeerrlog=, etc.). Split out of
-  // processConfig() purely to keep that function's compiled size down --
-  // it's one large if/else-if chain matching every config key, and got
-  // large enough on the ESP32-S3/Xtensa toolchain to trip a link-time
-  // "dangerous relocation: windowed longcall crosses 1GB boundary" error
-  // (a real toolchain limit on function size, not a logic bug). No
-  // behavior change: same keys, same effects, just called from
-  // processConfig() as a sub-dispatch instead of inlined into it.
-  bool processDomeConfig(const char *cmd);
+  // config.txt key dispatch (issue #171): processConfig() used to be one
+  // large if/else-if chain matching every key, which grew large enough on
+  // the ESP32-S3/Xtensa toolchain to trip a link-time "dangerous relocation:
+  // windowed longcall crosses 1GB boundary" error -- a hard limit on a
+  // single function's compiled body size, not a logic bug (compiler-flag
+  // workarounds were tried and ruled out; only the function's own size
+  // matters). A prior split of dome/RoboClaw keys into their own
+  // processDomeConfig() sub-dispatch bought headroom once, but was always a
+  // stopgap -- nothing stopped the same error from resurfacing once either
+  // function grew again.
+  //
+  // The real fix: one handler function per key (or per key-variant, e.g.
+  // domepos='s two comma-count overloads), referenced from kConfigHandlers
+  // below. processConfig() is now a fixed-size loop over that table -- its
+  // compiled size no longer grows with the number of config keys, so this
+  // class of link error can't recur no matter how many settings get added
+  // later. See src/config.cpp for the handler definitions and the table.
+  using ConfigHandler = bool (AmidalaConfig::*)(const char *cmd);
+  static const ConfigHandler kConfigHandlers[];
+
+  bool cfg_sb(const char *cmd);
+  bool cfg_s(const char *cmd);
+  bool cfg_b(const char *cmd);
+  bool cfg_lb(const char *cmd);
+  bool cfg_ab(const char *cmd);
+  bool cfg_db(const char *cmd);
+  bool cfg_sstr(const char *cmd);
+  bool cfg_fav(const char *cmd);
+  bool cfg_hidden(const char *cmd);
+  bool cfg_cat(const char *cmd);
+  bool cfg_estopstr(const char *cmd);
+  bool cfg_resumestr(const char *cmd);
+  bool cfg_gesture(const char *cmd);
+  bool cfg_audiohw(const char *cmd);
+
+  // ---- Simple scalar settings (single key -> single params field) --------
+  bool cfg_acktype(const char *cmd);
+  bool cfg_b9(const char *cmd);
+  bool cfg_volume(const char *cmd);
+  bool cfg_volumeChA(const char *cmd);
+  bool cfg_volumeChB(const char *cmd);
+  bool cfg_volumewheel(const char *cmd);
+  bool cfg_altvolumewheel(const char *cmd);
+  bool cfg_startupem(const char *cmd);
+  bool cfg_startuplvl(const char *cmd);
+  bool cfg_ackem(const char *cmd);
+  bool cfg_acklvl(const char *cmd);
+  bool cfg_mindelay(const char *cmd);
+  bool cfg_maxdelay(const char *cmd);
+  bool cfg_rvrmin(const char *cmd);
+  bool cfg_rvrmax(const char *cmd);
+  bool cfg_rvlmin(const char *cmd);
+  bool cfg_rvlmax(const char *cmd);
+  bool cfg_minpulse(const char *cmd);
+  bool cfg_maxpulse(const char *cmd);
+  bool cfg_rcchn(const char *cmd);
+  bool cfg_rcd(const char *cmd);
+  bool cfg_rcj(const char *cmd);
+  bool cfg_myi2c(const char *cmd);
+  bool cfg_serialbaud(const char *cmd);
+  bool cfg_serialdelim(const char *cmd);
+  bool cfg_serialeol(const char *cmd);
+  bool cfg_fst(const char *cmd);
+  bool cfg_j1adjv(const char *cmd);
+  bool cfg_j1adjh(const char *cmd);
+  bool cfg_rnd(const char *cmd);
+  bool cfg_ackgest(const char *cmd);
+  bool cfg_slowgest(const char *cmd);
+  bool cfg_domegest(const char *cmd);
+  bool cfg_startup(const char *cmd);
+  bool cfg_rndon(const char *cmd);
+  bool cfg_ackon(const char *cmd);
+  bool cfg_mix12(const char *cmd);
+  bool cfg_autocorrect(const char *cmd);
+  bool cfg_goslow(const char *cmd);
+  bool cfg_domech6(const char *cmd);
+
+  bool cfg_xbr(const char *cmd);
+  bool cfg_xbl(const char *cmd);
+
+  bool cfg_altbtn(const char *cmd);
+  bool cfg_altdomestick(const char *cmd);
+  bool cfg_mutebutton(const char *cmd);
+  bool cfg_dbtimeout(const char *cmd);
+  bool cfg_auxserial3(const char *cmd);
+  bool cfg_btcontrolleron(const char *cmd);
+  bool cfg_btaddr(const char *cmd);
+  bool cfg_wcbenable(const char *cmd);
+  bool cfg_wcboct2(const char *cmd);
+  bool cfg_wcboct3(const char *cmd);
+  bool cfg_wcbpassword(const char *cmd);
+  bool cfg_wcbquantity(const char *cmd);
+  bool cfg_wcbid(const char *cmd);
+  bool cfg_outboundserial(const char *cmd);
+  bool cfg_wifion(const char *cmd);
+  bool cfg_wifissid(const char *cmd);
+  bool cfg_wifipassword(const char *cmd);
+  bool cfg_wifichannel(const char *cmd);
+
+  // ---- Reassignable GPIO pin roles (issue #133) ---------------------------
+  bool cfg_pin1role(const char *cmd);
+  bool cfg_pin2role(const char *cmd);
+  bool cfg_pin3role(const char *cmd);
+  bool cfg_pin4role(const char *cmd);
+  bool cfg_pin5role(const char *cmd);
+  bool cfg_pin6role(const char *cmd);
+  bool cfg_pin39role(const char *cmd);
+  bool cfg_pin40role(const char *cmd);
+  bool cfg_pin41role(const char *cmd);
+  bool cfg_pin42role(const char *cmd);
+  bool cfg_pin47role(const char *cmd);
+
+  bool cfg_domeserialport(const char *cmd);
+  bool cfg_driveserialport(const char *cmd);
+
+  bool cfg_reboot(const char *cmd);
+
+  // ---- Dome/RoboClaw settings (formerly processDomeConfig()) -------------
+  bool cfg_domeimu(const char *cmd);
+  bool cfg_domeflip(const char *cmd);
+  bool cfg_domespeed(const char *cmd);
+  bool cfg_domepos(const char *cmd);
+  bool cfg_domepos2(const char *cmd);
+  bool cfg_domerpos(const char *cmd);
+  bool cfg_domerpos2(const char *cmd);
+  bool cfg_domehome(const char *cmd);
+  bool cfg_domemode(const char *cmd);
+  bool cfg_domeseekr(const char *cmd);
+  bool cfg_domeseekl(const char *cmd);
+  bool cfg_domefudge(const char *cmd);
+  bool cfg_domespeedhome(const char *cmd);
+  bool cfg_domespeedseek(const char *cmd);
+  bool cfg_domespeedmin(const char *cmd);
+  bool cfg_domedecelzone(const char *cmd);
+  bool cfg_domercaddr(const char *cmd);
+  bool cfg_domercchan(const char *cmd);
+  bool cfg_domercqpps(const char *cmd);
+  bool cfg_domefront(const char *cmd);
+  bool cfg_domestall(const char *cmd);
+  bool cfg_domeerrlog(const char *cmd);
 };
 
 // ---- readConfig() -----------------------------------------------------------
