@@ -1652,6 +1652,44 @@ static void handleApiBtForget() {
 }
 
 // ---------------------------------------------------------------------------
+// Gesture capture API endpoints (issue #138)
+//
+// Same start/poll shape as the BT scan endpoints above: start kicks off
+// collection on the dome stick's existing gesture state machine and returns
+// immediately; status is polled from the browser while the user draws the
+// gesture, and reflects the in-progress buffer live for a "drawing..."
+// preview. stop lets the web UI's "Done" button end collection without
+// requiring the physical L3 press (though L3 still works too).
+// ---------------------------------------------------------------------------
+
+static void handleApiGestureCaptureStart() {
+    if (!sCtrl) { sServer.send(500, "text/plain", "no controller"); return; }
+    if (!sCtrl->fDomeStick.beginWebCapture()) {
+        sServer.send(409, "text/plain", "capture already in progress");
+        return;
+    }
+    sServer.send(200, "application/json", "{\"ok\":true}");
+}
+
+static void handleApiGestureCaptureStatus() {
+    if (!sCtrl) { sServer.send(500, "text/plain", "no controller"); return; }
+    String json = "{\"active\":";
+    json += sCtrl->fDomeStick.isWebCapturing() ? "true" : "false";
+    json += ",\"done\":";
+    json += sCtrl->fDomeStick.isCaptureDone() ? "true" : "false";
+    json += ",\"seq\":\"";
+    json += String(sCtrl->fDomeStick.captureResult());
+    json += "\"}";
+    sServer.send(200, "application/json", json);
+}
+
+static void handleApiGestureCaptureStop() {
+    if (!sCtrl) { sServer.send(500, "text/plain", "no controller"); return; }
+    sCtrl->fDomeStick.stopWebCapture();
+    sServer.send(200, "application/json", "{\"ok\":true}");
+}
+
+// ---------------------------------------------------------------------------
 // AmidalaWiFiAP
 // ---------------------------------------------------------------------------
 
@@ -1821,6 +1859,9 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/api/bt/results",        HTTP_GET,  handleApiBtResults);
     sServer.on("/api/bt/pair",           HTTP_POST, handleApiBtPair);
     sServer.on("/api/bt/forget",         HTTP_POST, handleApiBtForget);
+    sServer.on("/api/gesture/capture/start",  HTTP_POST, handleApiGestureCaptureStart);
+    sServer.on("/api/gesture/capture/status", HTTP_GET,  handleApiGestureCaptureStatus);
+    sServer.on("/api/gesture/capture/stop",   HTTP_POST, handleApiGestureCaptureStop);
     sServer.on("/api/wcb/status",        HTTP_GET,  handleApiWcbStatus);
 
     sServer.onNotFound([]() { sServer.send(404, "text/plain", "Not found"); });

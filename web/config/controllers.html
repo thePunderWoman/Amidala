@@ -34,6 +34,9 @@
 .add-btn{background:none;border:1px solid var(--border);color:var(--text);cursor:pointer;padding:.3rem .9rem;font-size:.72rem;flex-shrink:0;border-radius:4px;transition:border-color .15s,color .15s}
 .add-btn:hover{border-color:var(--accent);color:var(--accent)}
 .empty-note{max-width:820px;margin:0 auto;padding:.8rem 0;font-size:.75rem;color:var(--muted)}
+.capture-status{max-width:820px;margin:0 auto;display:flex;align-items:center;padding:.7rem 0;gap:.6rem;border-bottom:1px solid var(--border);font-size:.78rem;color:var(--text)}
+.capture-status .cap-seq{font-family:ui-monospace,'SF Mono',Menlo,monospace;color:var(--accent);letter-spacing:.12em;min-width:1.5rem}
+.capture-status .cap-hint{flex:1;color:var(--muted)}
 </style>
 <script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
 </head>
@@ -291,11 +294,100 @@ function delGest(i) { apiPost('gesture_del_' + i, ''); }
 function addGest() {
   var seqEl = document.getElementById('new-seq');
   var actEl = document.getElementById('new-act');
-  var seq   = seqEl.value.trim();
+  var seq   = seqEl.value.trim().toUpperCase();
   var val   = actEl.value;
-  if (!seq || !/^[1-9]+$/.test(seq)) { showToast('Enter a valid sequence (digits 1–9)', true); return; }
+  // Digits 1-9 are joystick grid positions; A-D are triangle/circle/cross/
+  // square taps mixed into the stroke (see Gesture::matches() in core.h) —
+  // a captured gesture can legitimately end in a button tap.
+  if (!seq || !/^[1-9A-D]+$/.test(seq)) { showToast('Enter a valid sequence (digits 1–9, A–D)', true); return; }
   var body  = seq + (val !== '0' ? ',' + val : ',0');
   apiPost('gesture_add', body, function() { seqEl.value = ''; actEl.value = '0'; });
+}
+
+// ---- Gesture capture (issue #138) -------------------------------------------
+// Reuses the dome stick's existing gesture-collection state machine via
+// /api/gesture/capture/{start,status,stop}: start begins collection (which
+// already suppresses normal button/gesture dispatch on the droid for the
+// duration), status is polled while the user draws so the in-progress
+// sequence can be shown live, and stop lets the "Done"/"Cancel" buttons end
+// collection without requiring the physical L3 press (L3 still works too).
+
+var _capturePoll = null;
+var _capturePollCount = 0;
+var CAPTURE_POLL_MS = 500;
+var CAPTURE_MAX_POLLS = 16; // ~8s — belt-and-suspenders on the backend's own 2s idle timeout
+
+function startCapture() {
+  fetch('/api/gesture/capture/start', {method: 'POST'})
+    .then(function(r) {
+      if (r.status === 409) { showToast('Capture already in progress', true); return; }
+      if (!r.ok) { showToast('Failed to start capture', true); return; }
+      enterCaptureMode();
+    })
+    .catch(function() { showToast('Network error', true); });
+}
+
+function enterCaptureMode() {
+  _capturePollCount = 0;
+  document.getElementById('new-seq').disabled = true;
+  document.getElementById('capture-btn').style.display = 'none';
+  document.getElementById('add-btn-main').style.display = 'none';
+  var status = document.getElementById('capture-status');
+  status.style.display = '';
+  status.innerHTML =
+    '<span class="cap-hint">Draw the gesture on the stick&#8230;</span>' +
+    '<span class="cap-seq" id="capture-seq"></span>' +
+    '<button class="add-btn" onclick="stopCapture(true)">Done</button>' +
+    '<button class="add-btn" onclick="stopCapture(false)">Cancel</button>';
+  _capturePoll = setInterval(pollCapture, CAPTURE_POLL_MS);
+}
+
+function pollCapture() {
+  _capturePollCount++;
+  fetch('/api/gesture/capture/status')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var seqEl = document.getElementById('capture-seq');
+      if (seqEl) seqEl.textContent = d.seq || '';
+      if (d.done) {
+        finishCapture(d.seq);
+      } else if (_capturePollCount > CAPTURE_MAX_POLLS) {
+        finishCapture('');
+        showToast('Capture timed out', true);
+      }
+    })
+    .catch(function() {});
+}
+
+function stopCapture(keep) {
+  fetch('/api/gesture/capture/stop', {method: 'POST'})
+    .then(function() {
+      // If discarding, reset now rather than waiting on the next poll tick
+      // to notice done:true — there's no result to show either way.
+      if (!keep) exitCaptureMode();
+    })
+    .catch(function() { exitCaptureMode(); });
+}
+
+function finishCapture(seq) {
+  exitCaptureMode();
+  if (seq) {
+    document.getElementById('new-seq').value = seq;
+  } else {
+    showToast('No gesture captured — try again', true);
+  }
+}
+
+function exitCaptureMode() {
+  if (_capturePoll) { clearInterval(_capturePoll); _capturePoll = null; }
+  var seqInput = document.getElementById('new-seq');
+  var captureBtn = document.getElementById('capture-btn');
+  var addBtn = document.getElementById('add-btn-main');
+  var status = document.getElementById('capture-status');
+  if (seqInput)   seqInput.disabled = false;
+  if (captureBtn) captureBtn.style.display = '';
+  if (addBtn)     addBtn.style.display = '';
+  if (status)     status.style.display = 'none';
 }
 
 function renderGestures() {
@@ -320,9 +412,11 @@ function renderGestures() {
   }
   h += '<div class="add-form">';
   h += '<input id="new-seq" type="text" placeholder="e.g. 258" maxlength="8">';
+  h += '<button class="add-btn" id="capture-btn" onclick="startCapture()">Capture Gesture</button>';
   h += '<select id="new-act" class="act-sel" style="flex:1">' + actionOptions('0') + '</select>';
-  h += '<button class="add-btn" onclick="addGest()">Add</button>';
+  h += '<button class="add-btn" id="add-btn-main" onclick="addGest()">Add</button>';
   h += '</div>';
+  h += '<div class="capture-status" id="capture-status" style="display:none"></div>';
   document.getElementById('main').innerHTML = h;
 }
 
