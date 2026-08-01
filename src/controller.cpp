@@ -450,9 +450,6 @@ void AmidalaController::executeDomeAction(uint8_t subcmd, int arg) {
     fDomeDrive->toggleRandomMode();
     break;
   case ButtonAction::kDomeStop:
-    // Deliberate stop -- always wins, even over an unresolved connection-
-    // loss drop still waiting to auto-resume random mode on reconnect.
-    fDomeDrive->cancelPendingRandomResume();
     fDomeDrive->stop();
     break;
   case ButtonAction::kDomeFront:
