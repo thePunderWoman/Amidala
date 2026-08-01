@@ -82,7 +82,7 @@ jobs:
       # local-copy requirement, same pin, kept in sync by hand with
       # platformio.ini's env:native lib_deps entry.
       - name: Install HumanCyborgRelationsAPI
-        run: git clone --branch 1.0.3 --depth 1 https://github.com/thePunderWoman/HumanCyborgRelationsAPI lib/HumanCyborgRelationsAPI
+        run: git clone --branch 1.0.5 --depth 1 https://github.com/thePunderWoman/HumanCyborgRelationsAPI lib/HumanCyborgRelationsAPI
 
       - name: Build firmware
         run: pio run -e ${{ matrix.board }}
