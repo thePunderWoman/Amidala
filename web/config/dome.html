@@ -44,6 +44,7 @@ var SCHEMA = [
   {key:'domercqpps',label:'QPPS',                  type:'number', min:1,  max:65535, note:'ticks/sec at max speed'},
   {key:'domefront', label:'Front Offset',           type:'number', min:0,  max:359, note:'degrees'},
   {key:'domestall', label:'Stall Timeout',          type:'number', min:100,max:5000, note:'ms'},
+  {key:'domeerrlog',label:'Error/Warning Logging',  type:'bool', note:'log RoboClaw-reported faults to the monitor -- off unless debugging'},
   {section:'Dome Commands', when:RC},
   {type:'action', label:'Go Home',    cmd:'home',      endpoint:'/api/dome', btnLabel:'Send'},
   {type:'action', label:'Calibrate',  cmd:'calibrate', endpoint:'/api/dome', btnLabel:'Send'},

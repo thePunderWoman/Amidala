@@ -32,6 +32,7 @@ static AmidalaParameters makeParams() {
     p.auxserial3 = true;
     p.domedecelzone = 33;
     p.domeimu = false;
+    p.domeerrlog = true;
     p.wifion = true;
     strncpy(p.wifiSSID, "mydroid", sizeof(p.wifiSSID));
     strncpy(p.wifiPassword, "hunter2pass", sizeof(p.wifiPassword));
@@ -84,6 +85,7 @@ void test_returns_false_when_config_missing() {
 void test_no_change_when_all_keys_present() {
     const char* full =
         "volumeChA=1\nvolumeChB=2\nauxserial3=n\ndomedecelzone=5\ndomeimu=y\n"
+        "domeerrlog=y\n"
         "wifion=n\nwifissid=other\nwifipassword=otherpass\nwifichannel=1\n"
         "btcontrolleron=n\nbtaddr=\n"
         "wcbenable=n\nwcboct2=0\nwcboct3=0\nwcbpassword=\nwcbquantity=0\n"
@@ -156,6 +158,7 @@ void test_appends_all_when_file_has_none_of_the_keys() {
     TEST_ASSERT_TRUE(got.find("auxserial3=y") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("domedecelzone=33") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("domeimu=n") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("domeerrlog=y") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("wifion=y") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("wifissid=mydroid") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("wifipassword=hunter2pass") != std::string::npos);

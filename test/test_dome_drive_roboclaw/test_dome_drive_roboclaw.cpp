@@ -941,6 +941,21 @@ void test_setChannel_updates_field() {
     TEST_ASSERT_EQUAL_UINT8(2, drive.getChannelForTest());
 }
 
+// ---- setErrorLogging() -- RoboClaw error/warning monitor logging toggle -----
+
+void test_error_logging_off_by_default() {
+    auto drive = make_drive();
+    TEST_ASSERT_FALSE(drive.getErrorLogging());
+}
+
+void test_setErrorLogging_updates_field() {
+    auto drive = make_drive();
+    drive.setErrorLogging(true);
+    TEST_ASSERT_TRUE(drive.getErrorLogging());
+    drive.setErrorLogging(false);
+    TEST_ASSERT_FALSE(drive.getErrorLogging());
+}
+
 // ---- setAltDomeStick() — fallback when primary stick is disconnected ---------
 
 static JoystickController sAltStick;
@@ -1382,6 +1397,8 @@ int main(int argc, char **argv) {
     RUN_TEST(test_setMaxSpeedPct_clamps_above_one);
     RUN_TEST(test_setAddress_updates_field);
     RUN_TEST(test_setChannel_updates_field);
+    RUN_TEST(test_error_logging_off_by_default);
+    RUN_TEST(test_setErrorLogging_updates_field);
 
     RUN_TEST(test_alt_stick_used_when_primary_disconnected);
     RUN_TEST(test_primary_stick_takes_priority_over_alt);

@@ -538,6 +538,8 @@ void DomeDriveRoboClaw::checkObstruction() {
 
 void DomeDriveRoboClaw::checkRoboClawStatus() {
 #ifndef UNIT_TEST
+    if (!fLogRoboClawErrors) return;  // off by default -- skip the poll entirely, not just the log
+
     uint32_t now = millis();
     if (now - fLastRoboClawStatusCheckMs < kRoboClawStatusCheckIntervalMs) return;
     fLastRoboClawStatusCheckMs = now;

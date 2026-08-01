@@ -193,6 +193,7 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     json += "\"domercqpps\":"    + String(p.domercqpps)    + ",";
     json += "\"domefront\":"     + String(p.domefront)     + ",";
     json += "\"domestall\":"     + String(p.domestall)     + ",";
+    json += "\"domeerrlog\":\""  + String(p.domeerrlog ? "y" : "n") + "\",";
 
     // Servos — abbreviated keys to save flash; "sp" = speed to distinguish
     // from sstr "s" (serial string value)

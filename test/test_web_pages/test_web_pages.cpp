@@ -488,6 +488,7 @@ void test_full_config_json_dome_keys() {
     TEST_ASSERT_TRUE(contains(s, "\"domeimu\""));
     TEST_ASSERT_TRUE(contains(s, "\"domercaddr\""));
     TEST_ASSERT_TRUE(contains(s, "\"domestall\""));
+    TEST_ASSERT_TRUE(contains(s, "\"domeerrlog\""));
 }
 
 void test_full_config_json_default_volume() {

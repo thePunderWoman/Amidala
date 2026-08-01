@@ -226,6 +226,16 @@ void test_roboclaw_fields_are_distinct_from_each_other() {
     TEST_ASSERT_NOT_EQUAL((void*)&p.domefront,  (void*)&p.domestall);
     TEST_ASSERT_NOT_EQUAL((void*)&p.domefront,  (void*)&p.domehome);  // most likely alias mistake
     TEST_ASSERT_NOT_EQUAL((void*)&p.domestall,  (void*)&p.domespeed);
+    TEST_ASSERT_NOT_EQUAL((void*)&p.domestall,  (void*)&p.domeerrlog);
+}
+
+void test_domeerrlog_boolparam_routes_to_correct_field() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    p.domeerrlog = false;
+    bool matched = boolparam("domeerrlog=y", "domeerrlog=", p.domeerrlog);
+    TEST_ASSERT_TRUE(matched);
+    TEST_ASSERT_TRUE(p.domeerrlog);
 }
 
 // ---- Alt-button config keys -------------------------------------------------
@@ -1036,6 +1046,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_domestall_intparam_routes_to_correct_field);
     RUN_TEST(test_domestall_clamps_below_minimum);
     RUN_TEST(test_roboclaw_fields_are_distinct_from_each_other);
+    RUN_TEST(test_domeerrlog_boolparam_routes_to_correct_field);
 
     RUN_TEST(test_altbtn_intparam_routes_to_correct_field);
     RUN_TEST(test_altbtn_accepts_zero_disabled);
