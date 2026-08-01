@@ -27,7 +27,7 @@ void DomeController::onDisconnect() {}
 void setUp(void) {}
 void tearDown(void) {}
 
-// ---- DomeController: gesture buffer reset (issue #163) ----------------------
+// ---- DomeController: gesture state reset (issues #163, #167) ----------------
 // process() itself needs a fully-constructed AmidalaController and isn't
 // exercised natively (see stub above), so these tests reach the protected
 // gesture-collection members directly through a thin exposing subclass.
@@ -36,8 +36,9 @@ class TestDomeController : public DomeController {
 public:
     TestDomeController() : DomeController(nullptr) {}
     using DomeController::addGesture;
-    using DomeController::resetGestureBuffer;
+    using DomeController::resetGestureState;
     using DomeController::fGestureBuffer;
+    using DomeController::fGestureAxis;
 };
 
 void test_dome_gesture_buffer_starts_empty() {
@@ -54,18 +55,35 @@ void test_dome_gesture_reset_clears_leftover_text() {
 
     // Starting the next gesture collection (or a timeout) must clear it —
     // a zero-stroke click never calls addGesture() again to overwrite it.
-    dc.resetGestureBuffer();
+    dc.resetGestureState();
     TEST_ASSERT_EQUAL(0, strlen(dc.fGestureBuffer));
 }
 
 void test_dome_gesture_click_after_reset_is_empty_not_stale() {
     TestDomeController dc;
     dc.addGesture('6');
-    dc.resetGestureBuffer();
+    dc.resetGestureState();
 
     // A zero-stroke "click" gesture: nothing calls addGesture() before the
     // buffer is read. It must read back empty, not the previous gesture.
     TEST_ASSERT_EQUAL_STRING("", dc.fGestureBuffer);
+}
+
+void test_dome_gesture_reset_clears_leftover_axis() {
+    // Regression: a gesture that ends (L3 released) while the stick is still
+    // deflected leaves fGestureAxis stuck nonzero -- it's normally only
+    // cleared when the stick passes back through center. Left stuck, the
+    // *next* gesture's direction detection in process() (gated on
+    // `!fGestureAxis`) never fires, so every gesture after the first submits
+    // empty no matter what's actually drawn. Reported after #163 shipped:
+    // that fix correctly stopped the stale-buffer replay, which had been
+    // masking this separate bug the whole time.
+    TestDomeController dc;
+    dc.fGestureAxis = '4';  // as if the prior gesture ended mid-stroke-left
+
+    dc.resetGestureState();
+
+    TEST_ASSERT_EQUAL(0, dc.fGestureAxis);
 }
 
 // ---- XBeePocketRemote: initial state ----------------------------------------
@@ -263,6 +281,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_dome_gesture_buffer_starts_empty);
     RUN_TEST(test_dome_gesture_reset_clears_leftover_text);
     RUN_TEST(test_dome_gesture_click_after_reset_is_empty_not_stale);
+    RUN_TEST(test_dome_gesture_reset_clears_leftover_axis);
 
     return UNITY_END();
 }
