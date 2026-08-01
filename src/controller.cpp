@@ -3,6 +3,8 @@
 #include "xbee_spi.h"
 #include "bt_gamepad.h"
 #include "config_file.h"
+#include <esp_heap_caps.h>
+#include <new>
 
 // Hardware globals defined in src/globals.cpp.
 // ServoDispatch& avoids including ServoDispatchDirect.h here, which would
@@ -31,6 +33,20 @@ static void beginSerialPort(SerialPortId id, uint32_t baud) {
   }
 }
 
+// AmidalaParameters is dominated by Str[MAX_SERIAL_STRINGS] (~67KB, see
+// params.h) -- as a plain member it would sit in internal SRAM for the
+// life of the process. Heap-allocate it from PSRAM instead: both supported
+// boards have PSRAM to spare and internal SRAM does not (issue #172).
+// heap_caps_malloc doesn't zero the block the way static BSS storage would,
+// so memset before placement-new runs (AmidalaParameters::init(), called
+// via getRadioChannelCount() below, also memsets on first use -- this just
+// covers the window before that first call).
+static AmidalaParameters& allocParamsInPSRAM() {
+  void* mem = heap_caps_malloc(sizeof(AmidalaParameters), MALLOC_CAP_SPIRAM);
+  memset(mem, 0, sizeof(AmidalaParameters));
+  return *new (mem) AmidalaParameters();
+}
+
 AmidalaController::AmidalaController()
     : fConsole(),
       fHCR(&SERIAL, HCR_BAUD_RATE),
@@ -38,6 +54,7 @@ AmidalaController::AmidalaController()
       fVMusic(VMUSIC_SERIAL),
 #endif
       fDriveStick(this), fDomeStick(this),
+      params(allocParamsInPSRAM()),
 #ifdef RDH_SERIAL
       fAutoDome(RDH_SERIAL),
 #endif

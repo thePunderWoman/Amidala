@@ -1395,6 +1395,13 @@ static void handleApiPins() {
 
 static void handleApiMonitorGet() {
     String json = "{\"seq\":";
+    // No geometric growth in String::concat() (see WString.cpp) -- without
+    // this, up to MON_LINES unreserved += chains would mean up to that many
+    // reallocs+copies, on an endpoint the Monitor page polls every 1.5s
+    // while open. *2 on the line length gives slack for escaped control
+    // bytes (monJsonAppendEscaped); most lines are already-filtered
+    // printable ASCII so this over-reserves slightly rather than under.
+    json.reserve(64 + (size_t)sMonCount * (MON_LINE_LEN * 2 + 24));
     json += String(sMonSeq);
     json += ",\"lines\":[";
     uint16_t start = (sMonCount < MON_LINES) ? 0 : sMonHead;

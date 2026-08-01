@@ -19,7 +19,7 @@
 #include <unity.h>
 
 static void resetBuf() {
-    memset(sMonBuf, 0, sizeof(sMonBuf));
+    memset(sMonBuf, 0, sizeof(MonLine) * MON_LINES);
     sMonHead  = 0;
     sMonCount = 0;
     sMonSeq   = 0;

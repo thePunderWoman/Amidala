@@ -20,12 +20,29 @@ struct MonLine {
 };
 
 #ifdef MONITOR_BUF_OWNER
-MonLine   sMonBuf[MON_LINES];
+// sMonBuf is ~24.8KB (MON_LINES * sizeof(MonLine)) -- as a static array it
+// would sit in internal SRAM for the life of the process. Heap-allocate it
+// from PSRAM instead on real hardware (issue #172); native unit tests
+// (UNIT_TEST, see platformio.ini's env:native) have no PSRAM/ESP-IDF heap
+// caps, so they keep a plain static array.
+#ifndef UNIT_TEST
+#include <esp_heap_caps.h>
+inline MonLine* allocMonBufPSRAM() {
+    MonLine* buf = static_cast<MonLine*>(
+        heap_caps_malloc(sizeof(MonLine) * MON_LINES, MALLOC_CAP_SPIRAM));
+    memset(buf, 0, sizeof(MonLine) * MON_LINES);
+    return buf;
+}
+MonLine*  sMonBuf   = allocMonBufPSRAM();
+#else
+static MonLine sMonBufStorage[MON_LINES];
+MonLine*  sMonBuf   = sMonBufStorage;
+#endif
 uint16_t  sMonHead  = 0;
 uint16_t  sMonCount = 0;
 uint32_t  sMonSeq   = 0;
 #else
-extern MonLine   sMonBuf[MON_LINES];
+extern MonLine*  sMonBuf;
 extern uint16_t  sMonHead;
 extern uint16_t  sMonCount;
 extern uint32_t  sMonSeq;
