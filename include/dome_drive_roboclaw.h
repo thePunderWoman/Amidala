@@ -404,6 +404,13 @@ private:
     uint32_t fStallStartMs      = 0;
     bool     fStallTimerActive  = false;
 
+    // ---- RoboClaw controller status polling ----------------------------------
+    // See checkRoboClawStatus() -- distinct from the software stall detection
+    // above, this reads the RoboClaw's own reported fault/warning bits.
+
+    uint32_t fLastRoboClawStatusCheckMs = 0;
+    uint32_t fLastLoggedRoboClawError   = 0xFFFFFFFFu;  ///< sentinel: force first read to log
+
     // ---- Sequence pause -----------------------------------------------------
 
     bool     fSequenceActive        = false;
@@ -440,6 +447,16 @@ private:
     void    updatePosition();
     bool    processHallTrigger();   ///< Returns true if a trigger was consumed
     void    checkObstruction();
+    /**
+     * Poll the RoboClaw's own ReadError() status (throttled to roughly once a
+     * second) and log any nonzero/changed value to the monitor buffer via
+     * monAppend() -- see dome_format_roboclaw_error() in dome_position_math.h
+     * for the decode. Runs every animate() cycle regardless of fState (unlike
+     * checkObstruction(), which only runs while homed), so it also catches a
+     * controller-level fault during homing/calibrating. No-op in UNIT_TEST
+     * builds -- there's no real controller to query.
+     */
+    void    checkRoboClawStatus();
     void    handleHoming(bool hallFired);
     void    handleCalibrating(bool hallFired);
     void    handleAbsoluteStick();
