@@ -158,6 +158,7 @@ private:
   bool cfg_altdomestick(const char *cmd);
   bool cfg_mutebutton(const char *cmd);
   bool cfg_dbtimeout(const char *cmd);
+  bool cfg_gesturetimeout(const char *cmd);
   bool cfg_auxserial3(const char *cmd);
   bool cfg_btcontrolleron(const char *cmd);
   bool cfg_btaddr(const char *cmd);

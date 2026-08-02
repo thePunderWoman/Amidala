@@ -128,6 +128,7 @@ inline bool ensureConfigDefaults(const AmidalaParameters& params) {
         {"mutebutton=",     String(params.mutebutton)},
         {"b9=",             String(params.b9)},
         {"dbtimeout=",      String(params.dbtimeout)},
+        {"gesturetimeout=", String(params.gesturetimeout)},
         {"pin1role=",       String(pinRoleToString(params.pinRole[0]))},
         {"pin2role=",       String(pinRoleToString(params.pinRole[1]))},
         {"pin3role=",       String(pinRoleToString(params.pinRole[2]))},

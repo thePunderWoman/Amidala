@@ -49,6 +49,7 @@ static AmidalaParameters makeParams() {
     p.mutebutton = 4;
     p.b9 = 's';
     p.dbtimeout = 275;
+    p.gesturetimeout = 900;
     // Distinct from defaultPinRoles() so tests can confirm ensureConfigDefaults()
     // writes the CURRENT in-memory role, not the compiled-in default.
     p.pinRole[0]  = PinRoleType::kServo;   // 1
@@ -90,7 +91,7 @@ void test_no_change_when_all_keys_present() {
         "btcontrolleron=n\nbtaddr=\n"
         "wcbenable=n\nwcboct2=0\nwcboct3=0\nwcbpassword=\nwcbquantity=0\n"
         "wcbid=0\noutboundserial=0\n"
-        "mutebutton=0\nb9=n\ndbtimeout=300\n"
+        "mutebutton=0\nb9=n\ndbtimeout=300\ngesturetimeout=900\n"
         "pin1role=servo\npin2role=dout\npin3role=analog\npin4role=analog\n"
         "pin5role=dout\npin6role=servo\npin39role=servo\npin40role=dout\n"
         "pin41role=hall\npin42role=servo\npin47role=dout\n"
@@ -175,6 +176,7 @@ void test_appends_all_when_file_has_none_of_the_keys() {
     TEST_ASSERT_TRUE(got.find("mutebutton=4") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("b9=s") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("dbtimeout=275") != std::string::npos);
+    TEST_ASSERT_TRUE(got.find("gesturetimeout=900") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("pin1role=servo") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("pin2role=dout") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("pin3role=analog") != std::string::npos);

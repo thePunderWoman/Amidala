@@ -294,6 +294,12 @@ struct AmidalaParameters {
   // Only matters when a DB[] action is configured for a button.  0 disables
   // double-press detection entirely.  Default 300.
   uint16_t dbtimeout;
+  // gesturetimeout: idle window (ms) between strokes while a gesture is being
+  // drawn (L3 to start, L3 to end) -- not a cooldown between gestures. Pause
+  // longer than this mid-draw without hitting L3 and the whole gesture is
+  // discarded. Default 1000; see DomeController::addGesture() et al. in
+  // xbee_remote.h/drive_controllers.cpp.
+  uint16_t gesturetimeout;
 
   // ---- Aux serial (Serial2/AUX_SERIAL header, GPIO21 TX / GPIO38 RX) ------
   // auxserial3: enable UART2 at startup even when nothing in this build
@@ -488,6 +494,7 @@ struct AmidalaParameters {
       altdomestick = 0;
       mutebutton = 0;
       dbtimeout = 300;
+      gesturetimeout = 1000;
       auxserial3 = false;
       btcontrolleron = false;
       wcbenable = false;

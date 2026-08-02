@@ -123,6 +123,14 @@ void DriveController::onDisconnect() {
 // DomeController
 // ---------------------------------------------------------------------------
 
+void DomeController::addGesture(char ch) {
+  if (size_t(fGesturePtr - fGestureBuffer) < sizeof(fGestureBuffer) - 1) {
+    *fGesturePtr++ = ch;
+    *fGesturePtr = '\0';
+    fGestureTimeOut = millis() + fDriver->params.gesturetimeout;
+  }
+}
+
 void DomeController::notify() {
   uint32_t lagTime = millis() - lastPacket;
 
@@ -219,7 +227,7 @@ void DomeController::process() {
       DEBUG_PRINTLN("GESTURE START COLLECTING");
       // Also always-on (not just DEBUG_PRINTLN, which needs USE_DEBUG) --
       // start/timeout transitions previously left no trace in the field, so
-      // there was no way to tell a real 2s idle timeout apart from the main
+      // there was no way to tell a real idle timeout apart from the main
       // loop just having been busy long enough to blow through the window
       // mid-draw, silently ending collection and shifting every start/end
       // click pairing after it by one (reported after #163 shipped).
@@ -227,7 +235,7 @@ void DomeController::process() {
       fDriver->disableDomeController();
       fGestureCollect = true;
       resetGestureState();
-      fGestureTimeOut = millis() + GESTURE_TIMEOUT_MS;
+      fGestureTimeOut = millis() + fDriver->params.gesturetimeout;
     } else {
       bool altHeld = fDriver->isAltHeld();
 
@@ -247,10 +255,57 @@ void DomeController::process() {
         fDriver->noteMuteBtnUp();
     }
     return;
+  } else if (event.button_up.l3) {
+    // Checked ahead of the idle-timeout below on purpose (issue #172 field
+    // report): fGestureTimeOut is a deadline relative to the *last stroke*,
+    // not a cap on total draw time, but the two checks used to run in the
+    // other order -- so an end press landing on the same animate() cycle the
+    // deadline happened to already be past (a careful multi-stroke gesture,
+    // or just a pause before the final click) fell into the timeout branch
+    // instead, which never looks at event.button_up.l3. The gesture was
+    // silently discarded and the click that was meant to end it did nothing,
+    // reading in the field as "gestures need a long wait before the next one
+    // registers." Ending must win whenever L3 was actually just released,
+    // regardless of how close to (or past) the deadline that happened.
+    trimTrailingCenter();
+    fDriver->enableDomeController();
+    fGestureCollect = false;
+    // A gesture is allowed to end while the stick is still deflected (it's
+    // whatever happened between the two L3 presses, not required to end
+    // centered) -- so fGestureAxis can't rely on the stick recentering to
+    // get cleared. Clear it unconditionally right here, the instant
+    // collection ends, rather than deferring to the next resetGestureState()
+    // -- left stuck, the very next gesture's direction detection (gated on
+    // `!fGestureAxis`) would never fire and it would always submit empty.
+    //
+    // Diagnostic: if fGestureAxis is still set here, the stick was never
+    // observed centered after the last stroke -- direction detection below
+    // has been gated off (blocking any further strokes) for however long
+    // that's been true, which would silently collapse a multi-stroke
+    // gesture down to just its first stroke. Log it so the field data
+    // shows how close the stick actually got.
+    if (fGestureAxis) {
+      fDriver->fConsole.println("GESTURE: ended mid-stroke '" + String(fGestureAxis) +
+                                "' (never recentered; min|lx|=" + String(fGestureMinAbsLx) +
+                                " min|ly|=" + String(fGestureMinAbsLy) + ")");
+    }
+    fGestureAxis = 0;
+    // A physical L3 press can complete a capture that was started from the
+    // web UI (issue #138: "click done or press L3") -- in that case the
+    // result is parked for the browser's status poll instead of being
+    // dispatched as a live gesture trigger.
+    if (fWebCapture) {
+      fDriver->fConsole.println("GESTURE: web capture end via L3 (\"" + String(fGestureBuffer) + "\")");
+      fCaptureDone = true;
+      fWebCapture = false;
+    } else {
+      fDriver->processGesture(fGestureBuffer);
+    }
+    return;
   } else if (fGestureTimeOut < millis()) {
     DEBUG_PRINTLN("GESTURE TIMEOUT");
     // overshoot = how far past the deadline this check actually landed.
-    // Small (roughly one animate() cycle) means a genuine ~2s idle timeout.
+    // Small (roughly one animate() cycle) means a genuine idle timeout.
     // Large means something blocked the main loop for a while mid-draw --
     // the desync symptom this is here to confirm or rule out.
     fDriver->fConsole.println("GESTURE: timeout (had \"" + String(fGestureBuffer) +
@@ -266,44 +321,6 @@ void DomeController::process() {
       fWebCapture = false;
     }
   } else {
-    if (event.button_up.l3) {
-      trimTrailingCenter();
-      fDriver->enableDomeController();
-      fGestureCollect = false;
-      // A gesture is allowed to end while the stick is still deflected (it's
-      // whatever happened between the two L3 presses, not required to end
-      // centered) -- so fGestureAxis can't rely on the stick recentering to
-      // get cleared. Clear it unconditionally right here, the instant
-      // collection ends, rather than deferring to the next resetGestureState()
-      // -- left stuck, the very next gesture's direction detection (gated on
-      // `!fGestureAxis`) would never fire and it would always submit empty.
-      //
-      // Diagnostic: if fGestureAxis is still set here, the stick was never
-      // observed centered after the last stroke -- direction detection below
-      // has been gated off (blocking any further strokes) for however long
-      // that's been true, which would silently collapse a multi-stroke
-      // gesture down to just its first stroke. Log it so the field data
-      // shows how close the stick actually got.
-      if (fGestureAxis) {
-        fDriver->fConsole.println("GESTURE: ended mid-stroke '" + String(fGestureAxis) +
-                                  "' (never recentered; min|lx|=" + String(fGestureMinAbsLx) +
-                                  " min|ly|=" + String(fGestureMinAbsLy) + ")");
-      }
-      fGestureAxis = 0;
-      // A physical L3 press can complete a capture that was started from the
-      // web UI (issue #138: "click done or press L3") -- in that case the
-      // result is parked for the browser's status poll instead of being
-      // dispatched as a live gesture trigger.
-      if (fWebCapture) {
-        fDriver->fConsole.println("GESTURE: web capture end via L3 (\"" + String(fGestureBuffer) + "\")");
-        fCaptureDone = true;
-        fWebCapture = false;
-      } else {
-        fDriver->processGesture(fGestureBuffer);
-      }
-      return;
-    }
-
     if (event.button_up.triangle)
       addGesture('A');
     if (event.button_up.circle)
@@ -366,7 +383,7 @@ bool DomeController::beginWebCapture() {
   fWebCapture = true;
   fCaptureDone = false;
   resetGestureState();
-  fGestureTimeOut = millis() + GESTURE_TIMEOUT_MS;
+  fGestureTimeOut = millis() + fDriver->params.gesturetimeout;
   return true;
 }
 
