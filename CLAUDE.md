@@ -13,6 +13,7 @@ This firmware is intended to run on many different R2 builds with varying hardwa
 - All new logic should have unit tests in `test/` to prevent regressions.
 - Tests run on the native PlatformIO environment (no hardware required) — keep them that way. Do not introduce test dependencies that require Arduino or physical hardware.
 - When fixing a bug, add a test that would have caught it.
+- CI enforces a minimum aggregate line coverage (`scripts/coverage.sh --fail-under 80`, scoped to `src/`/`include/`) — see [Code coverage](#code-coverage). Run it locally before opening a PR that adds untested logic.
 
 **Bug fixes and regression test**
 - Any time you fix a bug, that bugfix should be covered by a new regression test.
@@ -37,6 +38,7 @@ This firmware is intended to run on many different R2 builds with varying hardwa
    git push thePunderWoman <branch>
    gh pr create ...
    ```
+3. Once a PR lands, delete the local feature branch. This repo always squash or rebase merges — `main` never gets a merge commit for the PR, so `git branch -d` (and `--merged` checks) won't recognize the branch as merged even though its content has landed. Confirm via `git log --oneline` (look for the PR's commit/title on `main`) or `gh pr view <branch> --json state`, then use `git branch -D <branch>` to remove it.
 
 ## Web UI development
 
@@ -51,7 +53,7 @@ The correct workflow for any UI change:
 
 ## Build verification
 
-CI (`ci.yml`) runs the native unit tests (`pio test -e native`) and compiles the real firmware for both board environments (default `DRIVE_SYSTEM`/`DOME_DRIVE` config only — not the full release matrix) on every push/PR. **Still always verify locally before pushing too** — CI catching it is a safety net, not a substitute for finding out before you open the PR:
+CI (`ci.yml`) runs the native unit tests with coverage instrumentation (`scripts/coverage.sh --fail-under 80`, see [Code coverage](#code-coverage)) and compiles the real firmware for both board environments (default `DRIVE_SYSTEM`/`DOME_DRIVE` config only — not the full release matrix) on every push/PR. **Still always verify locally before pushing too** — CI catching it is a safety net, not a substitute for finding out before you open the PR:
 
 ```
 pio run
@@ -68,3 +70,13 @@ pio test -e native
 ```
 
 Tests live in `test/` and use the native PlatformIO environment (no hardware required).
+
+## Code coverage
+
+```
+scripts/coverage.sh --fail-under 80
+```
+
+Runs the suite under `env:native-coverage` (`env:native` plus gcov instrumentation, see `scripts/coverage_flags.py`) and generates an HTML/XML report in `coverage/`, scoped to `src/` and `include/` (excludes `test/`, Unity, and vendored libs). Requires `gcovr` (`pip install gcovr`).
+
+CI runs this same script instead of a plain test pass and fails the build if aggregate line coverage drops below 80%. That threshold exists to catch regressions, not to be a target — ratchet it up as coverage improves rather than treating it as a permanent ceiling.
