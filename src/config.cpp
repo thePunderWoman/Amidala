@@ -1038,6 +1038,9 @@ bool AmidalaConfig::cfg_mutebutton(const char *cmd) {
 bool AmidalaConfig::cfg_dbtimeout(const char *cmd) {
   return intparam(cmd, "dbtimeout=", fController->params.dbtimeout, 0, 5000);
 }
+bool AmidalaConfig::cfg_gesturetimeout(const char *cmd) {
+  return intparam(cmd, "gesturetimeout=", fController->params.gesturetimeout, 200, 5000);
+}
 bool AmidalaConfig::cfg_auxserial3(const char *cmd) {
   return boolparam(cmd, "auxserial3=", fController->params.auxserial3);
 }
@@ -1477,6 +1480,7 @@ const AmidalaConfig::ConfigHandler AmidalaConfig::kConfigHandlers[] = {
     &AmidalaConfig::cfg_altdomestick,
     &AmidalaConfig::cfg_mutebutton,
     &AmidalaConfig::cfg_dbtimeout,
+    &AmidalaConfig::cfg_gesturetimeout,
     &AmidalaConfig::cfg_auxserial3,
     &AmidalaConfig::cfg_btcontrolleron,
     &AmidalaConfig::cfg_btaddr,

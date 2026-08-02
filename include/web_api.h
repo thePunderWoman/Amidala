@@ -313,6 +313,7 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     json += "\"mutebutton\":"   + String(p.mutebutton)   + ",";
     json += "\"altdomestick\":" + String(p.altdomestick) + ",";
     json += "\"dbtimeout\":"    + String(p.dbtimeout)    + ",";
+    json += "\"gesturetimeout\":" + String(p.gesturetimeout) + ",";
 
     // Button assignments — 9 buttons × 4 layers {p=press, l=long, a=alt, d=double}
     json += "\"buttons\":[";

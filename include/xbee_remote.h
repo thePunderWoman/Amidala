@@ -24,10 +24,10 @@
 #include "safety_stop_latch.h"
 
 // ---- Timing constants (overrideable before including this header) -----------
-
-#ifndef GESTURE_TIMEOUT_MS
-#define GESTURE_TIMEOUT_MS 2000
-#endif
+//
+// Gesture idle timeout is a runtime setting (params.gesturetimeout, see
+// params.h) rather than a #define here -- unlike LONG_PRESS_TIME below it's
+// a per-user feel tunable, not a hardware/protocol constant.
 
 #ifndef LONG_PRESS_TIME
 #define LONG_PRESS_TIME 3000
@@ -256,13 +256,10 @@ protected:
   int fGestureMinAbsLx = 999;
   int fGestureMinAbsLy = 999;
 
-  void addGesture(char ch) {
-    if (size_t(fGesturePtr - fGestureBuffer) < sizeof(fGestureBuffer) - 1) {
-      *fGesturePtr++ = ch;
-      *fGesturePtr = '\0';
-      fGestureTimeOut = millis() + GESTURE_TIMEOUT_MS;
-    }
-  }
+  // Body is in src/drive_controllers.cpp, not inline here: it reads
+  // fDriver->params.gesturetimeout, and AmidalaController is only
+  // forward-declared in this header (see file header comment above).
+  void addGesture(char ch);
 
   // Resets collection state back to an empty gesture. Resetting fGesturePtr
   // alone is not enough: addGesture() null-terminates as it writes, but a

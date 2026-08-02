@@ -392,7 +392,17 @@ function exitCaptureMode() {
 
 function renderGestures() {
   var gestures = _cfg.gestures || [];
+  var gt = _cfg.gesturetimeout !== undefined ? _cfg.gesturetimeout : 1000;
   var h = '';
+  h += '<div class="row"><div class="row-label">Gesture Idle Timeout</div>';
+  h += '<select name="gesturetimeout" class="row-sel" onchange="saveGlobal(\'gesturetimeout\',this.value)">';
+  h += opt('500',  '500 ms',  String(gt));
+  h += opt('750',  '750 ms',  String(gt));
+  h += opt('1000', '1000 ms', String(gt));
+  h += opt('1500', '1500 ms', String(gt));
+  h += opt('2000', '2000 ms', String(gt));
+  h += '</select></div>';
+  h += '<div class="gest-note" style="font-size:.65rem;margin:0 0 8px">Max pause between strokes while drawing before the gesture is discarded — not a wait between gestures.</div>';
   h += '<div class="gest-note">';
   h += '<b>Joystick grid positions:</b><br>';
   h += '1=up-left &nbsp;&nbsp;&nbsp; 2=up-center &nbsp;&nbsp; 3=up-right<br>';

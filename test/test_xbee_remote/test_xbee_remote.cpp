@@ -25,6 +25,17 @@ void DomeController::onConnect() {}
 void DomeController::onDisconnect() {}
 bool DomeController::beginWebCapture() { return false; }
 bool DomeController::stopWebCapture() { return false; }
+// addGesture()'s real body reads fDriver->params.gesturetimeout (issue #172
+// follow-up); fDriver is null in these tests (see TestDomeController below),
+// so stub it with a fixed timeout -- none of these tests inspect
+// fGestureTimeOut, only fGestureBuffer/fGestureAxis via resetGestureState().
+void DomeController::addGesture(char ch) {
+  if (size_t(fGesturePtr - fGestureBuffer) < sizeof(fGestureBuffer) - 1) {
+    *fGesturePtr++ = ch;
+    *fGesturePtr = '\0';
+    fGestureTimeOut = millis() + 1000;
+  }
+}
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -114,6 +125,56 @@ void test_dome_trim_trailing_center_leaves_empty_buffer_unchanged() {
     TestDomeController dc;
     dc.trimTrailingCenter();
     TEST_ASSERT_EQUAL_STRING("", dc.fGestureBuffer);
+}
+
+// ---- DomeController: end-vs-timeout branch priority (issue #172 field report) --
+// The real branching lives in DomeController::process() (src/drive_controllers.cpp),
+// which needs a fully-constructed AmidalaController and isn't exercised natively
+// (see stub comment above) -- so, same approach as FakeDblPress in
+// test_double_press.cpp, this mirrors just the three-way branch exactly:
+//   if (!collecting)         -> start
+//   else if (l3 released)    -> end + fire   (must be checked before the deadline)
+//   else if (deadline < now) -> timeout, discard
+//   else                     -> add stroke
+// Before the fix, the deadline check ran first, so an end press landing on the
+// same tick the deadline had already passed took the timeout branch instead --
+// process() never even looked at the L3 release, silently discarding the
+// gesture and eating the click meant to end it. That read in the field as
+// "gestures need a long wait before the next one registers."
+enum class FakeGestureOutcome { kNone, kStarted, kEnded, kTimedOut, kStroke };
+
+FakeGestureOutcome fakeGestureTick(bool collecting, bool l3Released,
+                                   uint32_t deadline, uint32_t now) {
+    if (!collecting) {
+        return FakeGestureOutcome::kStarted;
+    } else if (l3Released) {
+        return FakeGestureOutcome::kEnded;
+    } else if (deadline < now) {
+        return FakeGestureOutcome::kTimedOut;
+    }
+    return FakeGestureOutcome::kStroke;
+}
+
+// A same-tick L3 release must end the gesture even when the nominal deadline
+// has already passed -- this is the exact scenario that used to get eaten.
+void test_gesture_l3_release_wins_over_expired_deadline() {
+    FakeGestureOutcome outcome = fakeGestureTick(
+        /*collecting=*/true, /*l3Released=*/true, /*deadline=*/1000, /*now=*/1500);
+    TEST_ASSERT_TRUE(outcome == FakeGestureOutcome::kEnded);
+}
+
+// No L3 release and the deadline has passed -- still a genuine timeout.
+void test_gesture_timeout_fires_when_l3_not_released() {
+    FakeGestureOutcome outcome = fakeGestureTick(
+        /*collecting=*/true, /*l3Released=*/false, /*deadline=*/1000, /*now=*/1500);
+    TEST_ASSERT_TRUE(outcome == FakeGestureOutcome::kTimedOut);
+}
+
+// L3 release well before the deadline -- the common case, must still end normally.
+void test_gesture_l3_release_before_deadline_ends_normally() {
+    FakeGestureOutcome outcome = fakeGestureTick(
+        /*collecting=*/true, /*l3Released=*/true, /*deadline=*/1000, /*now=*/500);
+    TEST_ASSERT_TRUE(outcome == FakeGestureOutcome::kEnded);
 }
 
 // ---- XBeePocketRemote: initial state ----------------------------------------
@@ -316,6 +377,10 @@ int main(int argc, char **argv) {
     RUN_TEST(test_dome_trim_trailing_center_strips_single_trailing_five);
     RUN_TEST(test_dome_trim_trailing_center_leaves_non_center_ending_unchanged);
     RUN_TEST(test_dome_trim_trailing_center_leaves_empty_buffer_unchanged);
+
+    RUN_TEST(test_gesture_l3_release_wins_over_expired_deadline);
+    RUN_TEST(test_gesture_timeout_fires_when_l3_not_released);
+    RUN_TEST(test_gesture_l3_release_before_deadline_ends_normally);
 
     return UNITY_END();
 }
