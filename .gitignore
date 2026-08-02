@@ -1,6 +1,9 @@
 # PlatformIO build artifacts
 .pio/
 
+# Code coverage reports (scripts/coverage.sh)
+coverage/
+
 # Third-party libraries (install instructions in README.md)
 lib/*
 !lib/README.md

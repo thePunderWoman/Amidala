@@ -7,12 +7,21 @@ on:
     branches: [main]
 
 jobs:
-  # ── Native unit tests ─────────────────────────────────────────────────────
+  # ── Native unit tests + coverage ──────────────────────────────────────────
   # Runs on macOS so the -isysroot path in platformio.ini matches CI and local
   # development without modification. Real firmware compilation is verified
   # by the build-firmware job below.
+  #
+  # Runs the env:native-coverage env (env:native + gcov instrumentation, see
+  # scripts/coverage_flags.py) rather than plain env:native — it runs the
+  # exact same tests, just instrumented, so there's no reason to run both and
+  # pay for the suite twice. scripts/coverage.sh scopes the report to src/
+  # and include/ (excludes test/, Unity, vendored libs) and fails the job if
+  # line coverage drops below 80% — current coverage is ~82%; this threshold
+  # is meant to catch regressions, not to be a target. Ratchet it up as
+  # coverage improves rather than leaving it as a permanent floor.
   test:
-    name: Native Unit Tests
+    name: Native Unit Tests + Coverage
     runs-on: macos-latest
 
     steps:
@@ -31,11 +40,19 @@ jobs:
           key: ${{ runner.os }}-pio-native-${{ hashFiles('platformio.ini') }}
           restore-keys: ${{ runner.os }}-pio-native-
 
-      - name: Install PlatformIO Core
-        run: pip install --upgrade platformio
+      - name: Install PlatformIO Core and gcovr
+        run: pip install --upgrade platformio gcovr
 
-      - name: Run unit tests
-        run: pio test -e native
+      - name: Run unit tests with coverage
+        run: scripts/coverage.sh --fail-under 80
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
 
   # ── Firmware build verification ───────────────────────────────────────────
   # Compiles the real ESP32-S3 firmware (default DRIVE_SYSTEM/DOME_DRIVE,
