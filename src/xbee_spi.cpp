@@ -1,12 +1,14 @@
 // xbee_spi.cpp
-// ZigBee IO Sample (0x92) receive path for the XBee 3 SPI interface.
+// IO Sample receive path for the XBee 3 SPI interface. Recognizes both the
+// ZigBee frame type (0x92, what this firmware has always used) and the
+// 802.15.4 frame type (0x82) it's migrating toward -- see issue #187. Which
+// one arrives depends only on what's flashed on the transmitting pocket
+// remote, so both are simply accepted side by side; there's no local
+// runtime toggle for this. See include/xbee_io_sample.h for the frame body
+// layouts and parsing.
 //
-// Frame format parsed here (XBee API, AP=1):
-//   [0x7E][len_hi][len_lo][0x92][8-byte addr64][2-byte addr16][options]
-//   [num_samples][digital_mask_hi][digital_mask_lo][analog_mask]
-//   [digital_samples (2 bytes, if mask!=0)]
-//   [analog_0 (2 bytes), ..., analog_3 (2 bytes), per analogMask bits]
-//   [checksum]
+// Outer frame format parsed here (XBee API, AP=1):
+//   [0x7E][len_hi][len_lo][frame data...][checksum]
 //
 // Pocket remote wire format (unchanged from Mega / andrewrapp era):
 //   Analog 0 → y (vertical stick)
@@ -23,6 +25,7 @@
 #include "ReelTwo.h"   // must precede xbee_remote.h — provides Arduino type definitions
 #include "xbee_spi.h"
 #include "xbee_frame_checksum.h"
+#include "xbee_io_sample.h"
 #include "pin_config.h"
 #include <SPI.h>
 
@@ -88,52 +91,30 @@ void xbeeSPIReceiveAll(XBeePocketRemote** remotes, unsigned count) {
         if (length < 0) break;
         if (length == 0) continue;
 
-        if (length < 16 || buf[0] != 0x92)
+        XBeeIOSample sample;
+        if (!xbeeParseIOSample(buf, (uint16_t)length, &sample))
             continue;
-
-        uint32_t addrLsb = ((uint32_t)buf[5] << 24) | ((uint32_t)buf[6] << 16) |
-                           ((uint32_t)buf[7] << 8)  |  (uint32_t)buf[8];
-
-        uint16_t digitalMask = ((uint16_t)buf[13] << 8) | buf[14];
-        uint8_t  analogMask  = buf[15];
-
-        uint16_t dataOff = 16;
-        uint16_t digitalSamples = 0;
-        if (digitalMask != 0) {
-            if (dataOff + 2 > length) continue;
-            digitalSamples = ((uint16_t)buf[dataOff] << 8) | buf[dataOff + 1];
-            dataOff += 2;
-        }
-
-        uint16_t analog[4] = {512, 512, 0, 0};
-        for (int i = 0; i < 4; i++) {
-            if (analogMask & (1 << i)) {
-                if (dataOff + 2 > length) break;
-                analog[i] = ((uint16_t)buf[dataOff] << 8) | buf[dataOff + 1];
-                dataOff += 2;
-            }
-        }
 
         for (unsigned i = 0; i < count; i++) {
             auto r = remotes[i];
-            if (addrLsb != r->addr) continue;
+            if (sample.addrLsb != r->addr) continue;
             // Only update analog channels that are present in this packet.
             // A button-only packet (analogMask==0) must not clobber the last
             // known stick position with the {512,512,0,0} defaults — that
             // would reset lx/ly to zero and prevent gesture direction detection.
-            if (analogMask & (1 << 0)) r->y  = analog[0];
-            if (analogMask & (1 << 1)) r->x  = analog[1];
-            if (analogMask & (1 << 2)) r->w1 = analog[2];
-            if (analogMask & (1 << 3)) r->w2 = analog[3];
+            if (sample.analogMask & (1 << 0)) r->y  = sample.analog[0];
+            if (sample.analogMask & (1 << 1)) r->x  = sample.analog[1];
+            if (sample.analogMask & (1 << 2)) r->w1 = sample.analog[2];
+            if (sample.analogMask & (1 << 3)) r->w2 = sample.analog[3];
             // Active-LOW buttons: a DIO bit of 0 means the button is pressed.
             // If a DIO pin isn't in digitalMask (not wired), its bit is 0 in
             // digitalSamples regardless of physical state — guard with the mask
             // so an unwired button reads as not-pressed rather than always-pressed.
-            r->button[0] = (digitalMask & (1 << 5))  && !(digitalSamples & (1 << 5));   // triangle
-            r->button[1] = (digitalMask & (1 << 6))  && !(digitalSamples & (1 << 6));   // circle
-            r->button[2] = (digitalMask & (1 << 10)) && !(digitalSamples & (1 << 10));  // cross
-            r->button[3] = (digitalMask & (1 << 11)) && !(digitalSamples & (1 << 11));  // square
-            r->button[4] = (digitalMask & (1 << 4))  && !(digitalSamples & (1 << 4));   // l3
+            r->button[0] = (sample.digitalMask & (1 << 5))  && !(sample.digitalSamples & (1 << 5));   // triangle
+            r->button[1] = (sample.digitalMask & (1 << 6))  && !(sample.digitalSamples & (1 << 6));   // circle
+            r->button[2] = (sample.digitalMask & (1 << 10)) && !(sample.digitalSamples & (1 << 10));  // cross
+            r->button[3] = (sample.digitalMask & (1 << 11)) && !(sample.digitalSamples & (1 << 11));  // square
+            r->button[4] = (sample.digitalMask & (1 << 4))  && !(sample.digitalSamples & (1 << 4));   // l3
             r->lastPacket = millis();
             if (r->type != r->kXBee) r->type = r->kXBee;
             DEBUG_PRINT("XBee J");
