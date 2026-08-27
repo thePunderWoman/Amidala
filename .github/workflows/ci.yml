@@ -63,9 +63,13 @@ jobs:
   # too expensive to run on every push. This job exists because a dependency
   # version mismatch (HumanCyborgRelationsAPI pinned to 1.0.3 in
   # platformio.ini but this repo's release workflow still cloning 1.0.2)
-  # shipped all the way to a published release before anyone noticed —
-  # `pio run` is supposed to be verified locally before every push per
-  # CLAUDE.md, but nothing enforced that. Runs on ubuntu-latest, matching
+  # shipped all the way to a published release before anyone noticed. That
+  # specific failure mode (two hand-synced pins) is gone now that HCR is a
+  # normal lib_deps entry for every environment — platformio.ini is the only
+  # place the version is pinned — but this job still earns its keep as a
+  # real-firmware sanity check beyond env:native's unit tests: `pio run` is
+  # supposed to be verified locally before every push per CLAUDE.md, but
+  # nothing enforced that. Runs on ubuntu-latest, matching
   # build-firmware-matrix.yml (unlike the native job above, cross-compiling
   # for ESP32-S3 doesn't depend on the host OS's sysroot).
   build-firmware:
@@ -94,12 +98,6 @@ jobs:
 
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
-
-      # See the matching step/comment in build-firmware-matrix.yml — same
-      # local-copy requirement, same pin, kept in sync by hand with
-      # platformio.ini's env:native lib_deps entry.
-      - name: Install HumanCyborgRelationsAPI
-        run: git clone --branch 1.0.5 --depth 1 https://github.com/thePunderWoman/HumanCyborgRelationsAPI lib/HumanCyborgRelationsAPI
 
       - name: Build firmware
         run: pio run -e ${{ matrix.board }}
