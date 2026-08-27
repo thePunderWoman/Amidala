@@ -36,6 +36,13 @@ void setup() {
   digitalWrite(SD_CS_PIN, HIGH);
   pinMode(XBEE_CS_PIN, OUTPUT);
   digitalWrite(XBEE_CS_PIN, HIGH);
+  // SPI_~ATTN is an open-drain, active-low line on the XBee3 with no
+  // pull-up on the Amidala PCB (confirmed against the schematic net data --
+  // see issue #185) and no other pinMode() call anywhere in the firmware.
+  // Without this it floats whenever the module isn't actively driving it,
+  // which reads as noise on the ESP32 side. INPUT_PULLUP is a no-op if the
+  // line is actually driven, so this is safe regardless of module state.
+  pinMode(XBEE_ATTN_PIN, INPUT_PULLUP);
   pinMode(SPI_SPARE_CS_PIN, OUTPUT);
   digitalWrite(SPI_SPARE_CS_PIN, HIGH);
 

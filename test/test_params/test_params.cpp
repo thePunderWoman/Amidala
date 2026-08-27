@@ -112,6 +112,16 @@ void test_default_mindelay() {
     TEST_ASSERT_EQUAL(60, gDefaultParams.mindelay);
 }
 
+// Regression test for issue #185: fst previously had no default and fell
+// through to 0 from init()'s memset when no legacy EEPROM "SC23" block was
+// present, which broke the failsafe timeout check in
+// AmidalaController::animate() (constant XBee connect/disconnect flapping).
+void test_default_fst_in_valid_range() {
+    gDefaultParams.init();
+    TEST_ASSERT_GREATER_OR_EQUAL(1000, gDefaultParams.fst);
+    TEST_ASSERT_LESS_OR_EQUAL(3000, gDefaultParams.fst);
+}
+
 void test_default_maxdelay() {
     gDefaultParams.init();
     TEST_ASSERT_EQUAL(120, gDefaultParams.maxdelay);
@@ -464,6 +474,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_default_outboundserial_uart0);
     RUN_TEST(test_default_wifichannel);
     RUN_TEST(test_default_mindelay);
+    RUN_TEST(test_default_fst_in_valid_range);
     RUN_TEST(test_default_maxdelay);
     RUN_TEST(test_default_serialbaud);
     RUN_TEST(test_default_serialdelim);
