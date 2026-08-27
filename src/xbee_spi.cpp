@@ -22,6 +22,7 @@
 #include "debug.h"
 #include "ReelTwo.h"   // must precede xbee_remote.h — provides Arduino type definitions
 #include "xbee_spi.h"
+#include "xbee_frame_checksum.h"
 #include "pin_config.h"
 #include <SPI.h>
 
@@ -32,14 +33,26 @@ static inline uint8_t xbeeTransfer() { return SPI.transfer(0xFF); }
 static void xbeeDrain(uint16_t n) { while (n--) SPI.transfer(0xFF); }
 
 // Read one complete API frame into buf (frame-type byte + data, excludes the
-// 0x7E/length header and trailing checksum).  Returns the frame data length,
-// or 0 if no valid frame was found.
-static uint16_t xbeeReadFrame(uint8_t* buf, uint16_t maxLen) {
+// 0x7E/length header and trailing checksum). Returns the frame data length
+// on success.
+//
+// Returns -1 if no start delimiter (0x7E) was found at all within the idle
+// scan -- ATTN may be stuck low with nothing actually queued, and the caller
+// should stop draining rather than keep burning SPI cycles.
+//
+// Returns 0 if a delimiter WAS found but the frame itself is unusable (bad
+// length, or a checksum mismatch -- see xbeeChecksumValid() -- which most
+// often means the frame got mis-framed because the module isn't actually in
+// AP=1/unescaped API mode, see issue #185). Unlike the -1 case, the SPI
+// stream is still in sync here (the bad frame was fully drained), so the
+// caller should keep going: ATTN may still be low with more, valid, frames
+// queued right behind this one.
+static int32_t xbeeReadFrame(uint8_t* buf, uint16_t maxLen) {
     // Skip idle 0xFF bytes (XBee pads before the start delimiter)
     uint8_t b = 0xFF;
     for (int i = 0; i < 32 && b != 0x7E; i++)
         b = xbeeTransfer();
-    if (b != 0x7E) return 0;
+    if (b != 0x7E) return -1;
 
     uint16_t length = ((uint16_t)xbeeTransfer() << 8) | xbeeTransfer();
     if (length == 0 || length > maxLen) {
@@ -48,25 +61,32 @@ static uint16_t xbeeReadFrame(uint8_t* buf, uint16_t maxLen) {
     }
     for (uint16_t i = 0; i < length; i++)
         buf[i] = xbeeTransfer();
-    xbeeTransfer();  // checksum — read and discard
+    uint8_t checksum = xbeeTransfer();
+    if (!xbeeChecksumValid(buf, length, checksum))
+        return 0;
     return length;
 }
 
 void xbeeSPIReceiveAll(XBeePocketRemote** remotes, unsigned count) {
     uint8_t buf[64];
 
-    // Cap at 8 frames per animate() cycle. If xbeeReadFrame() returns 0
-    // (ATTN LOW but no valid frame found), break immediately — the pin may be
-    // stuck, and looping forever would block fDomeDrive->animate() and prevent
-    // the RoboClaw homing timeout from firing.
+    // Cap at 8 frames per animate() cycle. If xbeeReadFrame() returns -1 (no
+    // start delimiter found at all — ATTN may be stuck low with nothing
+    // actually queued), break immediately — looping forever would block
+    // fDomeDrive->animate() and prevent the RoboClaw homing timeout from
+    // firing. A 0 return (delimiter found, but the frame itself was bad —
+    // see xbeeReadFrame()'s comment) is different: the SPI stream is still
+    // in sync, so keep draining — more valid frames may be queued right
+    // behind a single corrupt one (issue #185).
     for (int limit = 8; limit > 0 && digitalRead(XBEE_ATTN_PIN) == LOW; limit--) {
         SPI.beginTransaction(kXBeeSettings);
         digitalWrite(XBEE_CS_PIN, LOW);
-        uint16_t length = xbeeReadFrame(buf, sizeof(buf));
+        int32_t length = xbeeReadFrame(buf, sizeof(buf));
         digitalWrite(XBEE_CS_PIN, HIGH);
         SPI.endTransaction();
 
-        if (length == 0) break;  // no valid frame — stop draining to avoid blocking
+        if (length < 0) break;
+        if (length == 0) continue;
 
         if (length < 16 || buf[0] != 0x92)
             continue;
