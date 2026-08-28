@@ -488,7 +488,17 @@ struct AmidalaParameters {
       domeseekl = DEFAULT_DOME_SEEK_LEFT;
       domeseekr = DEFAULT_DOME_SEEK_RIGHT;
       domefudge = DEFAULT_DOME_FUDGE;
-      domespeed = DOME_MAXIMUM_SPEED;
+      // domespeed is a 0-100 percentage (see config.cpp's cfg_domespeed()
+      // range check) -- NOT DOME_MAXIMUM_SPEED, which is a 0.0-1.0 fraction
+      // used correctly elsewhere (controller.cpp's setMaxSpeed(
+      // DOME_MAXIMUM_SPEED) call). Assigning that fraction here truncated to
+      // a uint8_t 1 (1%) instead of 100, and controller.cpp's later
+      // setMaxSpeedPct(domespeed/100.0f) call overwrote the correct 1.0
+      // fMaxSpeed with 0.01 -- full joystick deflection then never cleared
+      // domespeedmin's dead-band, so the dome silently ignored all stick
+      // input on any fresh board that had never had domespeed explicitly
+      // re-saved (issue #196).
+      domespeed = 100;
       domespeedhome = DEFAULT_DOME_SPEED_HOME;
       domespeedseek = DEFAULT_DOME_SPEED_SEEK;
       domespeedmin  = DEFAULT_DOME_SPEED_MIN;
