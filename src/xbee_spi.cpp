@@ -23,6 +23,7 @@
 
 #include "debug.h"
 #include "ReelTwo.h"   // must precede xbee_remote.h — provides Arduino type definitions
+#include "debug_monitor_tee.h"  // must follow ReelTwo.h -- see its own header comment
 #include "xbee_spi.h"
 #include "xbee_frame_checksum.h"
 #include "xbee_io_sample.h"

@@ -1,6 +1,17 @@
 #include "wifi_ap.h"
 #include "web_pages.h"
 
+// Must come before any other include that might transitively pull in
+// monitor_buf.h itself (e.g. controller.h -> debug_monitor_tee.h) --
+// MONITOR_BUF_OWNER only takes effect on monitor_buf.h's FIRST inclusion in
+// this translation unit, since it's guarded by #pragma once. If a non-owner
+// include reached it first, this owner-branch (the actual sMonBuf/etc.
+// storage definitions) would be silently skipped and every other TU's
+// `extern` declarations would fail to link.
+#define MONITOR_BUF_OWNER
+#include "monitor_buf.h"
+#include "monitor_drain.h"
+
 #ifndef UNIT_TEST
 #include <EEPROM.h>     // must precede params.h (via web_api.h)
 #include <WiFi.h>
@@ -22,14 +33,6 @@ static AmidalaController* sCtrl = nullptr;
 // Count of user-defined serial strings, excluding built-in injected commands.
 // Saved before injectBuiltinSerialCmds() runs; used to bound rewriteSerialStrings().
 static uint8_t            sUserSerialCount = 0;
-
-// ---------------------------------------------------------------------------
-// Serial monitor log buffer
-// ---------------------------------------------------------------------------
-
-#define MONITOR_BUF_OWNER
-#include "monitor_buf.h"
-#include "monitor_drain.h"
 
 // ---------------------------------------------------------------------------
 // SD card config write-back

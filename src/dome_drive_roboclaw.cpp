@@ -10,6 +10,7 @@
 #include "dome_position_math.h"
 #ifndef UNIT_TEST
 #include "ReelTwo.h"      // DEBUG_PRINT / DEBUG_PRINTLN macros
+#include "debug_monitor_tee.h"  // must follow ReelTwo.h -- see its own header comment
 #include "monitor_buf.h"  // monAppend() -- see checkRoboClawStatus()
 #endif
 

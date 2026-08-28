@@ -11,6 +11,7 @@
 
 #include "drive_config.h"
 #include "ReelTwo.h"
+#include "debug_monitor_tee.h"  // must follow ReelTwo.h -- see its own header comment
 // Needed unconditionally: globals.cpp/controller.cpp/servo.cpp reference the
 // ServoDispatch base class for the physical PWM servo outputs regardless of
 // DRIVE_SYSTEM. TankDrivePWM.h and TankDriveRoboteq.h happen to pull this in
