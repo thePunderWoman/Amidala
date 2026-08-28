@@ -54,7 +54,11 @@
 #endif
 
 #ifndef UNIT_TEST
-#include <RoboClaw.h>
+// basicmicro_arduino, not the older roboclaw_arduino_library -- see
+// platformio.ini's lib_deps comment. Class renamed RoboClaw -> Basicmicro
+// upstream; every method used below (fRoboClaw.*) kept an identical
+// signature, so this is the only header-level change the rename needed.
+#include <Basicmicro.h>
 #include <EEPROM.h>
 #endif
 
@@ -335,7 +339,7 @@ private:
     // ---- Hardware state (excluded from UNIT_TEST builds) --------------------
 
 #ifndef UNIT_TEST
-    RoboClaw fRoboClaw;
+    Basicmicro fRoboClaw;
 #endif
 
     uint8_t  fAddress;
