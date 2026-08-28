@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Troubleshooting — AMIDALA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/common.css">
+<style>
+#logs-status{font-size:.75rem;color:var(--muted);padding:.3rem 0 .6rem}
+.log-row{display:flex;align-items:center;gap:.5rem;padding:.5rem 0;border-bottom:1px solid var(--border)}
+.log-row .log-name{flex:1;font:500 .8rem/1.3 ui-monospace,'SF Mono',Menlo,monospace;word-break:break-all}
+.log-row .log-size{font-size:.7rem;color:var(--muted);white-space:nowrap}
+.viewer-pane{margin-top:.6rem;max-height:50vh;overflow:auto;background:#1a1a1a;color:#ddd;
+  padding:.7rem;font:.78rem/1.55 ui-monospace,'SF Mono',Menlo,monospace;
+  white-space:pre-wrap;word-break:break-all;border-radius:4px}
+</style>
+<script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; BACK</a>
+  <div class="page-title"><span class="dot"></span><span class="label">Troubleshooting</span><span class="dot"></span></div>
+</div>
+<main>
+  <div id="cfg-area"><div id="status">LOADING&#8230;</div></div>
+
+  <div class="section-label" style="margin-top:.8rem">Debug Log Files</div>
+  <div id="logs-status">Loading&#8230;</div>
+  <div id="logs-list"></div>
+
+  <div class="section-label" style="margin-top:.8rem">Config File</div>
+  <div class="row">
+    <div class="row-label">config.txt</div>
+    <button class="be-action" onclick="viewConfigFile()">View</button>
+  </div>
+
+  <pre id="viewer" class="viewer-pane" hidden></pre>
+</main>
+<script src="/assets/edit.js"></script>
+<script>
+function fmtSize(n) {
+  if (n > 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+  if (n > 1024) return (n / 1024).toFixed(1) + ' KB';
+  return n + ' B';
+}
+
+function load() {
+  fetch('/api/config').then(function(r) { return r.json(); }).then(function(d) {
+    var val = d.debugmode !== undefined ? String(d.debugmode) : 'n';
+    document.getElementById('cfg-area').innerHTML =
+      '<div class="section-label">Debug Log Capture</div>' +
+      buildRow({key: 'debugmode', label: 'Debug Mode', type: 'bool',
+                note: 'Writes everything the Serial Monitor sees to a capped file on the SD card. Turn off when you\'re done troubleshooting.'}, val);
+  }).catch(function() {
+    document.getElementById('cfg-area').innerHTML = '<div id="status">Failed to load</div>';
+  });
+  loadLogs();
+}
+
+function loadLogs() {
+  fetch('/api/logs').then(function(r) { return r.json(); }).then(function(d) {
+    document.getElementById('logs-status').textContent =
+      d.active ? ('Capturing to ' + d.current) : 'Not currently capturing.';
+    var files = (d.files || []).slice().sort(function(a, b) { return a.name < b.name ? 1 : -1; });
+    var listEl = document.getElementById('logs-list');
+    if (!files.length) {
+      listEl.innerHTML = '<div class="log-row"><div class="log-name">No log files yet.</div></div>';
+      return;
+    }
+    listEl.innerHTML = files.map(function(f) {
+      return '<div class="log-row">'
+        + '<div class="log-name">' + f.name + '</div>'
+        + '<div class="log-size">' + fmtSize(f.size) + '</div>'
+        + '<button class="be-action" onclick="viewLog(\'' + f.name + '\')">View</button>'
+        + '<a class="be-action" style="text-decoration:none" href="/api/logs?file=' + encodeURIComponent(f.name) + '" target="_blank">Open</a>'
+        + '</div>';
+    }).join('');
+  }).catch(function() {
+    document.getElementById('logs-status').textContent = 'Failed to load log list.';
+  });
+}
+
+function showViewer(text) {
+  var v = document.getElementById('viewer');
+  v.textContent = text;
+  v.hidden = false;
+  v.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+function viewLog(name) {
+  fetch('/api/logs?file=' + encodeURIComponent(name))
+    .then(function(r) { return r.text(); })
+    .then(showViewer)
+    .catch(function() { showViewer('Failed to load ' + name); });
+}
+
+function viewConfigFile() {
+  fetch('/api/configfile')
+    .then(function(r) { return r.text(); })
+    .then(showViewer)
+    .catch(function() { showViewer('Failed to load config.txt'); });
+}
+
+load();
+</script>
+</body>
+</html>

@@ -50,6 +50,7 @@ void test_home_page_has_tools_nav_links() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/monitor"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/update"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/safety"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/troubleshooting"));
 }
 
 void test_home_page_has_viewport_meta() {
@@ -393,6 +394,19 @@ void test_full_config_json_wifi_keys() {
     TEST_ASSERT_TRUE(contains(s, "\"wifipassword\""));
     TEST_ASSERT_TRUE(contains(s, "\"wifissid\":\"amidala\""));
     TEST_ASSERT_TRUE(contains(s, "\"wifichannel\":11"));
+}
+
+void test_full_config_json_debugmode_false_by_default() {
+    AmidalaParameters p = makeParams();  // debugmode left zeroed = false
+    String json = buildFullConfigJson(p);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"debugmode\":\"n\""));
+}
+
+void test_full_config_json_debugmode_true() {
+    AmidalaParameters p = makeParams();
+    p.debugmode = true;
+    String json = buildFullConfigJson(p);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"debugmode\":\"y\""));
 }
 
 void test_full_config_json_xbee_hex_format() {
@@ -805,6 +819,36 @@ void test_info_json_dome_not_homed_default() {
     TEST_ASSERT_TRUE(contains(json.c_str(), "\"dome_degrees\":0"));
 }
 
+void test_info_json_debugmode_false_by_default() {
+    String json = buildInfoJson("pwm", "pwm", "hcr", "amidala", "192.168.4.1");
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"debugmode\":false"));
+}
+
+void test_info_json_debugmode_true() {
+    String json = buildInfoJson("pwm", "pwm", "hcr", "amidala", "192.168.4.1",
+                                0, 0, false, false, false, false, 0,
+                                nullptr, nullptr, /*debugMode=*/true);
+    TEST_ASSERT_TRUE(contains(json.c_str(), "\"debugmode\":true"));
+}
+
+// ---------------------------------------------------------------------------
+// Troubleshooting page (issue #199) — debug-mode log capture + config.txt viewer
+// ---------------------------------------------------------------------------
+
+void test_troubleshooting_page_uses_config_endpoint() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_TROUBLESHOOTING, "/api/config"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_TROUBLESHOOTING, "href=\"/\""));
+}
+
+void test_troubleshooting_page_has_debugmode_toggle() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_TROUBLESHOOTING, "'debugmode'"));
+}
+
+void test_troubleshooting_page_has_log_and_configfile_endpoints() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_TROUBLESHOOTING, "/api/logs"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_TROUBLESHOOTING, "/api/configfile"));
+}
+
 void test_diagnostics_page_has_connectivity_rows() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_DIAGNOSTICS, "conn-xd"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_DIAGNOSTICS, "conn-xo"));
@@ -980,6 +1024,8 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_full_config_json_no_trailing_comma);
     RUN_TEST(test_full_config_json_general_keys);
     RUN_TEST(test_full_config_json_wifi_keys);
+    RUN_TEST(test_full_config_json_debugmode_false_by_default);
+    RUN_TEST(test_full_config_json_debugmode_true);
     RUN_TEST(test_full_config_json_xbee_hex_format);
     RUN_TEST(test_full_config_json_btaddr_empty_by_default);
     RUN_TEST(test_full_config_json_btaddr_stored_correctly);
@@ -1019,8 +1065,15 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_info_json_bt_connected_true);
     RUN_TEST(test_info_json_dome_homed_and_degrees);
     RUN_TEST(test_info_json_dome_not_homed_default);
+    RUN_TEST(test_info_json_debugmode_false_by_default);
+    RUN_TEST(test_info_json_debugmode_true);
     RUN_TEST(test_diagnostics_page_has_connectivity_rows);
     RUN_TEST(test_diagnostics_page_polls_api_info);
+
+    // Troubleshooting page
+    RUN_TEST(test_troubleshooting_page_uses_config_endpoint);
+    RUN_TEST(test_troubleshooting_page_has_debugmode_toggle);
+    RUN_TEST(test_troubleshooting_page_has_log_and_configfile_endpoints);
 
     // buttonActionJson
     RUN_TEST(test_buttonActionJson_kNone_emits_type_only);

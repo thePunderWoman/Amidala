@@ -380,6 +380,7 @@ public:
   }
 
   void close() { fValid = false; }
+  void flush() {}  // real SD.h File::flush() has no observable effect on the mock's in-memory fs
 
 private:
   std::string  fContent;       // read-mode buffer (owned copy)
@@ -426,6 +427,12 @@ struct MockSDClass {
     return name && _fs.erase(std::string(name)) > 0;
   }
   bool remove(const String& name) { return remove(name.c_str()); }
+
+  // No real subdirectory concept in this map-based mock (every path is just
+  // a flat key) -- always succeeds, matching "already exists" being a
+  // harmless no-op on real SD.h too.
+  bool mkdir(const char* /*path*/) { return true; }
+  bool mkdir(const String& /*path*/) { return true; }
 
   // Test helper: read back written content
   std::string getFile(const char* name) const {

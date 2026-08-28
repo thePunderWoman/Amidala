@@ -36,6 +36,7 @@ PAGES = [
     ("update.html",                 "WEB_PAGE_UPDATE"),
     ("config/coming-soon.html",     "WEB_PAGE_COMING_SOON"),
     ("diagnostics.html",            "WEB_PAGE_DIAGNOSTICS"),
+    ("troubleshooting.html",        "WEB_PAGE_TROUBLESHOOTING"),
 ]
 
 _LINK_RE   = re.compile(r'[ \t]*<link rel="stylesheet" href="/assets/common\.css">\n?')
@@ -49,6 +50,35 @@ _CSP = ("default-src 'self'; "
         "style-src 'self' 'unsafe-inline'; "
         "connect-src 'self'")
 _CSP_TAG = f'<meta http-equiv="Content-Security-Policy" content="{_CSP}">\n'
+
+# Debug-mode indicator, injected into every page the same way as the CSP tag
+# above (issue #199) -- a non-interactive corner badge, shown whenever
+# /api/info reports debugmode on, so it's impossible to miss that a debug
+# session is being written to the SD card regardless of which page someone
+# is looking at. pointer-events:none so it never intercepts clicks on real
+# controls underneath it (e.g. monitor.html's send bar sits at the bottom).
+_DEBUG_BANNER_TAG = """<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\\u26a0 DEBUG MODE ACTIVE \\u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
+"""
 
 
 def run(project_dir: str) -> None:
@@ -73,7 +103,7 @@ def run(project_dir: str) -> None:
 
         html = _LINK_RE.sub(f"<style>\n{css}\n</style>\n", html)
         html = _SCRIPT_RE.sub(f"<script>\n{js}\n</script>\n", html)
-        html = html.replace("<head>\n", f"<head>\n{_CSP_TAG}", 1)
+        html = html.replace("<head>\n", f"<head>\n{_CSP_TAG}{_DEBUG_BANNER_TAG}", 1)
 
         if ')html"' in html:
             raise ValueError(f"{rel_path}: content contains ')html\"' which breaks the raw-string delimiter")

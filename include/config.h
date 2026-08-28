@@ -173,6 +173,7 @@ private:
   bool cfg_wifissid(const char *cmd);
   bool cfg_wifipassword(const char *cmd);
   bool cfg_wifichannel(const char *cmd);
+  bool cfg_debugmode(const char *cmd);
 
   // ---- Reassignable GPIO pin roles (issue #133) ---------------------------
   bool cfg_pin1role(const char *cmd);

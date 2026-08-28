@@ -403,6 +403,17 @@ struct AmidalaParameters {
   char    wifiPassword[65];
   uint8_t wifichannel;
 
+  // ---- Runtime debug-mode log capture (issue #199) -------------------------
+  // debugmode: when on, everything already flowing into the serial monitor's
+  // ring buffer (monitor_buf.h -- serial ports, console tee, and DEBUG_PRINT*
+  // output when USE_DEBUG is compiled in) is ALSO persisted to a size-capped
+  // file on the SD card, so a field debug session survives without a laptop
+  // physically watching the monitor page the whole time. Independent of
+  // USE_DEBUG et al (include/debug.h) -- those gate whether debug output
+  // exists at all; this only gates whether whatever already exists gets
+  // written to SD. See include/debug_file_logger.h. Default off.
+  bool    debugmode;
+
   constexpr unsigned getSoundBankCount() {
     return sizeof(SB) / sizeof(SB[0]);
   }
@@ -527,6 +538,7 @@ struct AmidalaParameters {
       strncpy(wifiSSID, "amidala", sizeof(wifiSSID));
       strncpy(wifiPassword, "Astromech", sizeof(wifiPassword));
       wifichannel = 1;
+      debugmode = false;
       minpulse = DEFAULT_DOME_MIN_PULSE;
       maxpulse = DEFAULT_DOME_MAX_PULSE;
       sRAMInited = true;
