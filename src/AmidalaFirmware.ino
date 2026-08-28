@@ -36,6 +36,16 @@ void setup() {
   digitalWrite(SD_CS_PIN, HIGH);
   pinMode(XBEE_CS_PIN, OUTPUT);
   digitalWrite(XBEE_CS_PIN, HIGH);
+  // XBEE_ATTN_PIN is deliberately left unconfigured (floating input) here.
+  // #186 added pinMode(XBEE_ATTN_PIN, INPUT_PULLUP), reasoning that it was
+  // a safe no-op if the line was actually driven -- on real hardware it
+  // wasn't: it reproducibly prevented the XBee3 from ever asserting ATTN on
+  // a true cold power-on (fixed only by a reset that didn't touch XBee
+  // power), while a plain reset always worked. Root cause not fully
+  // understood -- possibly interacting with a bootstrap/config sampling
+  // window on the module's own DIO1/AD1 pin -- but confirmed via a clean
+  // A/B test on hardware (issue #185). Do not re-add without new hardware
+  // evidence that it's actually safe.
   pinMode(SPI_SPARE_CS_PIN, OUTPUT);
   digitalWrite(SPI_SPARE_CS_PIN, HIGH);
 
