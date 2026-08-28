@@ -549,7 +549,17 @@ struct AmidalaParameters {
             ((uint32_t)EEPROM.read(offs + 0) << 0);
       offs += sizeof(uint32_t);
 
+      // Bounds below mirror each field's own cfg_*() setter in config.cpp
+      // (rcchn/minpulse/maxpulse/rvrmin/rvlmin/rvrmax/rvlmax/fst) -- the
+      // "SC23" signature only proves this block was intentionally written
+      // at some point, not that every byte in it is still intact. A partial
+      // EEPROM write (e.g. a restart landing mid-commit, issue #185's field
+      // report) can corrupt data after the signature while leaving it
+      // matching, so clamp on load the same way live edits already are,
+      // rather than trusting raw bytes straight into a running remote's
+      // failsafe timeout or a servo's pulse limits.
       rcchn = EEPROM.read(offs++);
+      rcchn = min(max(rcchn, (uint8_t)6), (uint8_t)8);
 
       unsigned unknown;
       // ?
@@ -558,10 +568,12 @@ struct AmidalaParameters {
 
       minpulse = ((uint16_t)EEPROM.read(offs + 1) << 8) |
                  ((uint16_t)EEPROM.read(offs + 0) << 0);
+      minpulse = min(max(minpulse, (uint16_t)0), (uint16_t)2500);
       offs += sizeof(uint16_t);
 
       maxpulse = ((uint16_t)EEPROM.read(offs + 1) << 8) |
                  ((uint16_t)EEPROM.read(offs + 0) << 0);
+      maxpulse = min(max(maxpulse, (uint16_t)0), (uint16_t)2500);
       offs += sizeof(uint16_t);
 
       // unknown  6?
@@ -577,22 +589,27 @@ struct AmidalaParameters {
 
       rvrmin = ((uint16_t)EEPROM.read(offs + 1) << 8) |
                ((uint16_t)EEPROM.read(offs + 0) << 0);
+      rvrmin = min(max(rvrmin, (uint16_t)0), (uint16_t)100);
       offs += sizeof(uint16_t);
 
       rvlmin = ((uint16_t)EEPROM.read(offs + 1) << 8) |
                ((uint16_t)EEPROM.read(offs + 0) << 0);
+      rvlmin = min(max(rvlmin, (uint16_t)0), (uint16_t)100);
       offs += sizeof(uint16_t);
 
       rvrmax = ((uint32_t)EEPROM.read(offs + 1) << 8) |
                ((uint16_t)EEPROM.read(offs + 0) << 0);
+      rvrmax = min(max(rvrmax, (uint16_t)900), (uint16_t)1023);
       offs += sizeof(uint16_t);
 
       rvlmax = ((uint16_t)EEPROM.read(offs + 1) << 8) |
                ((uint16_t)EEPROM.read(offs + 0) << 0);
+      rvlmax = min(max(rvlmax, (uint16_t)900), (uint16_t)1023);
       offs += sizeof(uint16_t);
 
       fst = ((uint16_t)EEPROM.read(offs + 1) << 8) |
             ((uint16_t)EEPROM.read(offs + 0) << 0);
+      fst = min(max(fst, (uint16_t)1000), (uint16_t)3000);
       offs += sizeof(uint16_t);
 
       offs = 0xea;
