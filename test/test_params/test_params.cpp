@@ -440,6 +440,70 @@ void test_eeprom_xbr_loaded_when_sc23_signature_present() {
     TEST_ASSERT_EQUAL_HEX32(0x05060708, p.xbl);
 }
 
+// Regression coverage for issue #185's field report: a device that hit a
+// restart mid-EEPROM-commit ended up with corrupted bytes after an intact
+// "SC23" signature -- the signature only proves the block was intentionally
+// written at some point, not that every byte in it is still what was
+// written. Before this, those bytes were trusted straight into live params
+// with no validation at all. Uses 0xFF fill (the erased-flash pattern) as
+// the corruption, since that's the realistic failure mode -- clamping
+// should bring every field back into the same range its own cfg_*() setter
+// in config.cpp already enforces for a live edit.
+void test_eeprom_sc23_corrupted_fields_clamped_to_valid_ranges() {
+    int base = 0x64;
+    EEPROM.data[base + 0] = 'S'; EEPROM.data[base + 1] = 'C';
+    EEPROM.data[base + 2] = '2'; EEPROM.data[base + 3] = '3';
+    EEPROM.data[base + 4] = 0;
+    // xbr/xbl (base+5..base+12): opaque hardware addresses, no valid range
+    // to clamp -- left as 0xFF fill deliberately, not under test here.
+    for (int i = 5; i <= 12; i++) EEPROM.data[base + i] = 0xFF;
+    EEPROM.data[base + 13] = 0xFF;               // rcchn      (valid: 6-8)
+    EEPROM.data[base + 14] = 0xFF;               // unknown
+    EEPROM.data[base + 15] = 0xFF; EEPROM.data[base + 16] = 0xFF;  // minpulse (valid: 0-2500)
+    EEPROM.data[base + 17] = 0xFF; EEPROM.data[base + 18] = 0xFF;  // maxpulse (valid: 0-2500)
+    for (int i = 19; i <= 23; i++) EEPROM.data[base + i] = 0xFF;   // unknown x5
+    EEPROM.data[base + 24] = 0xFF; EEPROM.data[base + 25] = 0xFF;  // rvrmin (valid: 0-100)
+    EEPROM.data[base + 26] = 0xFF; EEPROM.data[base + 27] = 0xFF;  // rvlmin (valid: 0-100)
+    EEPROM.data[base + 28] = 0xFF; EEPROM.data[base + 29] = 0xFF;  // rvrmax (valid: 900-1023)
+    EEPROM.data[base + 30] = 0xFF; EEPROM.data[base + 31] = 0xFF;  // rvlmax (valid: 900-1023)
+    EEPROM.data[base + 32] = 0xFF; EEPROM.data[base + 33] = 0xFF;  // fst    (valid: 1000-3000)
+
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    p.init(true);
+
+    TEST_ASSERT_EQUAL(8, p.rcchn);
+    TEST_ASSERT_EQUAL(2500, p.minpulse);
+    TEST_ASSERT_EQUAL(2500, p.maxpulse);
+    TEST_ASSERT_EQUAL(100, p.rvrmin);
+    TEST_ASSERT_EQUAL(100, p.rvlmin);
+    TEST_ASSERT_EQUAL(1023, p.rvrmax);
+    TEST_ASSERT_EQUAL(1023, p.rvlmax);
+    TEST_ASSERT_EQUAL(3000, p.fst);
+}
+
+// Same corruption class, but clamped from below instead of above -- a
+// stuck-at-zero sector (rather than erased/0xFF) is just as plausible a
+// failure mode, and the fix needs to hold in both directions.
+void test_eeprom_sc23_zeroed_fields_clamped_up_to_valid_ranges() {
+    int base = 0x64;
+    EEPROM.data[base + 0] = 'S'; EEPROM.data[base + 1] = 'C';
+    EEPROM.data[base + 2] = '2'; EEPROM.data[base + 3] = '3';
+    EEPROM.data[base + 4] = 0;
+    // Everything from base+5 onward is already 0 from setUp()'s memset --
+    // rcchn/minpulse/maxpulse/rvrmin/rvlmin all have a valid 0 or near-0
+    // floor, so only rvrmax/rvlmax/fst (whose valid ranges don't include 0)
+    // actually exercise the low-side clamp.
+
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    p.init(true);
+
+    TEST_ASSERT_EQUAL(900, p.rvrmax);
+    TEST_ASSERT_EQUAL(900, p.rvlmax);
+    TEST_ASSERT_EQUAL(1000, p.fst);
+}
+
 // ---- getRadioChannelCount lazy-init -----------------------------------------
 
 void test_get_radio_channel_count_returns_default_zero_when_eeprom_absent() {
@@ -475,6 +539,8 @@ int main(int argc, char **argv) {
     RUN_TEST(test_default_wifichannel);
     RUN_TEST(test_default_mindelay);
     RUN_TEST(test_default_fst_in_valid_range);
+    RUN_TEST(test_eeprom_sc23_corrupted_fields_clamped_to_valid_ranges);
+    RUN_TEST(test_eeprom_sc23_zeroed_fields_clamped_up_to_valid_ranges);
     RUN_TEST(test_default_maxdelay);
     RUN_TEST(test_default_serialbaud);
     RUN_TEST(test_default_serialdelim);
