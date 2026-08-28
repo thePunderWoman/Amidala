@@ -18,6 +18,7 @@ static void resetBuf() {
     sMonHead  = 0;
     sMonCount = 0;
     sMonSeq   = 0;
+    sMonAppendSink = nullptr;
 }
 
 void setUp(void)    { resetBuf(); }
@@ -109,6 +110,75 @@ void test_read_order_after_wrap() {
     TEST_ASSERT_EQUAL_STRING("line256", sMonBuf[0].text);
 }
 
+// ---- Append sink (debug_file_logger.h's SD-persistence hook, issue #199) ---
+//
+// monitor_buf.h stays dependency-free (see its header comment) by exposing a
+// plain function-pointer sink instead of including debug_file_logger.h
+// itself -- these tests exercise the hook mechanism directly with a small
+// spy, without pulling in SD/params at all.
+
+static int  sSinkCalls;
+static char sSinkText[MON_LINE_LEN * 2];  // larger than the ring buffer's own line cap --
+                                           // see test_append_sink_receives_untruncated_text
+static char sSinkCls;
+
+static void spySink(const char* text, char cls) {
+    sSinkCalls++;
+    strncpy(sSinkText, text, sizeof(sSinkText) - 1);
+    sSinkText[sizeof(sSinkText) - 1] = '\0';
+    sSinkCls = cls;
+}
+
+void test_append_sink_not_called_when_unset() {
+    // Default state (no sink registered) -- must not crash or otherwise
+    // misbehave; this is also the state every other test in this file runs
+    // in, so a null sink must be a true no-op.
+    monAppend("no sink here");
+    TEST_ASSERT_EQUAL_INT(0, sSinkCalls);
+}
+
+void test_append_sink_called_with_text_and_class() {
+    sSinkCalls = 0;
+    monSetAppendSink(spySink);
+    monAppend("hello", 't');
+    TEST_ASSERT_EQUAL_INT(1, sSinkCalls);
+    TEST_ASSERT_EQUAL_STRING("hello", sSinkText);
+    TEST_ASSERT_EQUAL_CHAR('t', sSinkCls);
+}
+
+void test_append_sink_called_once_per_append() {
+    sSinkCalls = 0;
+    monSetAppendSink(spySink);
+    monAppend("a");
+    monAppend("b");
+    monAppend("c");
+    TEST_ASSERT_EQUAL_INT(3, sSinkCalls);
+}
+
+void test_append_sink_receives_untruncated_text() {
+    // The ring buffer entry itself is truncated to MON_LINE_LEN-1 (see
+    // test_text_truncated_to_line_len above), but the sink should still see
+    // whatever monAppend() was actually called with -- full fidelity for
+    // whatever persists it (the SD log file has no such length limit).
+    sSinkCalls = 0;
+    monSetAppendSink(spySink);
+    char big[MON_LINE_LEN + 32];
+    memset(big, 'A', sizeof(big) - 1);
+    big[sizeof(big) - 1] = '\0';
+    monAppend(big);
+    TEST_ASSERT_EQUAL_INT((int)strlen(big), (int)strlen(sSinkText));
+}
+
+void test_clearing_sink_stops_further_calls() {
+    sSinkCalls = 0;
+    monSetAppendSink(spySink);
+    monAppend("x");
+    TEST_ASSERT_EQUAL_INT(1, sSinkCalls);
+    monSetAppendSink(nullptr);
+    monAppend("y");
+    TEST_ASSERT_EQUAL_INT(1, sSinkCalls);  // unchanged
+}
+
 // ---- JSON escaping (handleApiMonitorGet()'s serialization) ------------------
 //
 // Bug: only '"' and '\\' were escaped when serializing a monitor line into
@@ -184,6 +254,11 @@ int main(int argc, char **argv) {
     RUN_TEST(test_head_wraps_after_MON_LINES_entries);
     RUN_TEST(test_oldest_entry_overwritten_when_full);
     RUN_TEST(test_read_order_after_wrap);
+    RUN_TEST(test_append_sink_not_called_when_unset);
+    RUN_TEST(test_append_sink_called_with_text_and_class);
+    RUN_TEST(test_append_sink_called_once_per_append);
+    RUN_TEST(test_append_sink_receives_untruncated_text);
+    RUN_TEST(test_clearing_sink_stops_further_calls);
     RUN_TEST(test_json_escape_quote_and_backslash);
     RUN_TEST(test_json_escape_passes_through_plain_text);
     RUN_TEST(test_json_escape_named_control_chars);

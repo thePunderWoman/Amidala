@@ -6,6 +6,27 @@ static const char WEB_PAGE_HOME[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AMIDALA</title>
@@ -218,6 +239,10 @@ footer a:hover{opacity:1;}
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 H8 L10 7 L14 17 L16 12 H21"/></svg>
       <div><div class="name">Droid Status</div><div class="sub">I/O · sensors</div></div>
     </a>
+    <a class="card" href="/troubleshooting">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="16" rx="1.5"/><line x1="6.5" y1="8" x2="13.5" y2="8"/><line x1="6.5" y1="11.5" x2="13.5" y2="11.5"/><circle cx="17" cy="17" r="3.2"/><line x1="19.3" y1="19.3" x2="21.5" y2="21.5"/></svg>
+      <div><div class="name">Troubleshooting</div><div class="sub">Debug logs · config.txt</div></div>
+    </a>
   </nav>
 
   <footer><span id="footer">SERVED LOCALLY</span> &nbsp;·&nbsp; <a href="https://github.com/thePunderWoman/Amidala/wiki" target="_blank" rel="noopener">DOCUMENTATION</a></footer>
@@ -295,6 +320,27 @@ static const char WEB_PAGE_GENERAL[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>General Settings — AMIDALA</title>
@@ -1069,6 +1115,27 @@ static const char WEB_PAGE_CONFIG_CONNECTIVITY[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Connectivity — AMIDALA</title>
@@ -2043,6 +2110,27 @@ static const char WEB_PAGE_WIFI[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>WiFi — AMIDALA</title>
@@ -2807,6 +2895,27 @@ static const char WEB_PAGE_XBEE[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>XBee — AMIDALA</title>
@@ -3568,6 +3677,27 @@ static const char WEB_PAGE_AUDIO[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Audio — AMIDALA</title>
@@ -4448,6 +4578,27 @@ static const char WEB_PAGE_RC_RADIO[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RC Radio — AMIDALA</title>
@@ -5230,6 +5381,27 @@ static const char WEB_PAGE_DOME[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dome Drive — AMIDALA</title>
@@ -6018,6 +6190,27 @@ static const char WEB_PAGE_SERIAL_STRINGS[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Serial Commands — AMIDALA</title>
@@ -7117,6 +7310,27 @@ static const char WEB_PAGE_GADGETS[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Gadgets — AMIDALA</title>
@@ -8122,6 +8336,27 @@ static const char WEB_PAGE_SERVOS[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Servos — AMIDALA</title>
@@ -8979,6 +9214,27 @@ static const char WEB_PAGE_PINS[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pins — AMIDALA</title>
@@ -9814,6 +10070,27 @@ static const char WEB_PAGE_SERIAL_PORTS[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Serial Ports — AMIDALA</title>
@@ -10653,6 +10930,27 @@ static const char WEB_PAGE_CONTROLLERS[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Controllers — AMIDALA</title>
@@ -11819,6 +12117,27 @@ static const char WEB_PAGE_DROID_CONTROL[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Droid Control — AMIDALA</title>
@@ -13006,6 +13325,27 @@ static const char WEB_PAGE_SAFETY[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Safety — AMIDALA</title>
@@ -13939,6 +14279,27 @@ static const char WEB_PAGE_MONITOR[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Serial Monitor — AMIDALA</title>
@@ -14966,6 +15327,27 @@ static const char WEB_PAGE_UPDATE[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Firmware Update — AMIDALA</title>
@@ -15870,6 +16252,27 @@ static const char WEB_PAGE_COMING_SOON[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AMIDALA</title>
@@ -16188,6 +16591,27 @@ static const char WEB_PAGE_DIAGNOSTICS[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Droid Status — AMIDALA</title>
@@ -17068,6 +17492,867 @@ fetch('/api/config')
     refresh();
     setInterval(refresh, 2000);
   });
+</script>
+</body>
+</html>
+)html";
+
+static const char WEB_PAGE_TROUBLESHOOTING[] = R"html(<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<script>
+(function(){
+  function show(){
+    if(document.getElementById('debugmode-badge'))return;
+    var b=document.createElement('div');
+    b.id='debugmode-badge';
+    b.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9999;'
+      +'background:#8f2d3b;color:#fff;padding:.5rem .9rem;border-radius:6px;'
+      +'font:600 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;'
+      +'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none';
+    b.textContent='\u26a0 DEBUG MODE ACTIVE \u2014 LOGGING TO SD';
+    document.body.appendChild(b);
+  }
+  function check(){
+    fetch('/api/info',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+      .then(function(d){ if(d&&d.debugmode) show(); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',check);
+  else check();
+})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Troubleshooting — AMIDALA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Amidala web UI — shared styles.
+   Embed script inlines this into every page's <style> block.
+   In dev mode (scripts/web_dev.py) it's served as a real file from /assets/common.css. */
+
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+
+:root {
+  --accent:      #8f2d3b;
+  --bg:          #e9edf1;
+  --surface:     #ffffff;
+  --surface2:    #f4f7f9;
+  --border:      #dce3e9;
+  --text:        #2b333b;
+  --muted:       #707b85;
+  --danger:      #a8323a;
+  --danger-soft: rgba(168,50,58,.08);
+  --tex:         rgba(43,51,59,.07);
+  --glow:        rgba(143,45,59,.10);
+  /* legacy aliases — pages referencing --gold / --dim / --fg still work */
+  --gold: var(--accent);
+  --dim:  var(--muted);
+  --fg:   var(--text);
+}
+
+body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(120% 62% at 50% -12%, var(--glow), transparent 58%),
+    radial-gradient(var(--tex) .9px, transparent 1.2px),
+    radial-gradient(var(--tex) .9px, transparent 1.2px);
+  background-size: auto, 14px 14px, 23px 23px;
+  background-position: center top, 0 0, 7px 11px;
+  color: var(--text);
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100vh;
+  padding: 24px 22px 80px;
+}
+
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: inherit; }
+.hidden { display: none !important; }
+[hidden] { display: none !important; }
+
+/* ---- page shell ---- */
+
+.page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 4px 0 18px; border-bottom: 1px solid var(--border);
+  max-width: 820px; margin: 0 auto;
+}
+
+.back {
+  display: inline-flex; align-items: center; gap: 8px;
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .18em; color: var(--muted); transition: color .15s;
+  flex-shrink: 0; white-space: nowrap;
+}
+.back:hover { color: var(--accent); }
+
+.page-title {
+  display: flex; align-items: center; gap: 13px;
+}
+.page-title .dot {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+  display: inline-block; flex-shrink: 0;
+}
+.page-title .label {
+  font: 600 20px/1 'Cormorant Garamond', Georgia, serif;
+  letter-spacing: .16em; color: var(--text); text-transform: uppercase;
+}
+
+main {
+  max-width: 820px; margin: 0 auto; padding-top: 28px;
+}
+
+#status {
+  text-align: center; padding: 2rem; color: var(--muted);
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: .2em;
+}
+
+/* ---- section labels ---- */
+
+.section-label {
+  margin: 26px 0 4px; border-bottom: 1px solid var(--border); padding-bottom: 10px;
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .22em; text-transform: uppercase; color: var(--muted);
+}
+
+/* ---- settings rows ---- */
+
+.row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--border);
+}
+.row-label {
+  font: 400 15px/1.3 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: var(--text); flex: 1;
+}
+.rv {
+  font: 500 14px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  color: var(--accent);
+}
+.ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.ri input, .ri select {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); padding: .3rem .5rem; border-radius: 4px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: .82rem;
+  min-width: 80px;
+}
+.ri input:focus, .ri select:focus { outline: none; border-color: var(--accent); }
+
+/* edit / save / cancel */
+.be {
+  background: none; border: none; padding: 4px; color: var(--muted);
+  cursor: pointer; display: flex; align-items: center;
+  opacity: .7; transition: opacity .15s, color .15s; flex-shrink: 0;
+}
+.be:hover { opacity: 1; color: var(--accent); }
+.bs {
+  background: var(--accent); border: none; border-radius: 4px;
+  padding: 5px 12px; font: 600 10px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .1em; color: #fff; cursor: pointer;
+  flex-shrink: 0; transition: opacity .15s;
+}
+.bs:hover { opacity: .85; }
+.bc {
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  padding: 4px 10px; font: 500 10px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  color: var(--muted); cursor: pointer; flex-shrink: 0; transition: border-color .15s;
+}
+.bc:hover { border-color: var(--muted); }
+
+/* action-type row button */
+.be-action {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+  padding: 6px 16px; font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .1em; color: var(--text); cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.be-action:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- tabs (used on controllers + droid-control) ---- */
+
+.tabs {
+  display: flex; border-bottom: 1px solid var(--border);
+  max-width: 820px; margin: 0 auto;
+}
+.tab {
+  flex: 1; background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--muted); font-family: inherit; font-size: .72rem;
+  letter-spacing: .1em; text-transform: uppercase; padding: .85rem 1rem; cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ---- toast ---- */
+
+.toast {
+  position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); padding: .55rem 1.4rem;
+  font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: .08em;
+  pointer-events: none; white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(30,45,55,.12);
+  animation: _tfi .15s ease, _tfo .3s 1.9s ease forwards; z-index: 9999;
+}
+.toast-err { border-color: var(--danger); color: var(--danger); }
+@keyframes _tfi {
+  from { opacity:0; transform:translateX(-50%) translateY(6px) }
+  to   { opacity:1; transform:translateX(-50%) translateY(0) }
+}
+@keyframes _tfo { from{opacity:1} to{opacity:0} }
+
+/* ---- E-Stop (injected into page-header by edit.js) ---- */
+
+#estop {
+  display: inline-flex; align-items: center; gap: 9px;
+  background: var(--danger-soft); border: 1px solid var(--danger); border-radius: 6px;
+  padding: 8px 14px; font: 600 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .2em; color: var(--danger); cursor: pointer;
+  transition: background .15s, color .15s; flex-shrink: 0;
+}
+#estop:hover { background: var(--danger); color: #fff; }
+#estop .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: inline-block; }
+
+/* ---- shared page utilities ---- */
+
+.info-banner {
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--muted); padding: .7rem 1rem; font-size: .75rem;
+  line-height: 1.6; margin-bottom: .8rem; border-radius: 4px;
+}
+
+.restart-banner {
+  max-width: 820px; margin: 18px auto 0; border: 1px solid var(--accent);
+  background: var(--glow); color: var(--text); padding: .7rem 1rem;
+  font-size: .78rem; line-height: 1.5; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.restart-banner button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: .4rem .8rem; font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap; flex-shrink: 0;
+  transition: opacity .15s;
+}
+.restart-banner button:hover { opacity: .85; }
+.restart-banner button:disabled { opacity: .5; cursor: default; }
+
+/* sub-section heading used in droid-control + controllers */
+.sec-hdr {
+  font-size: .58rem; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--muted); padding: .55rem 0 .35rem;
+  border-bottom: 1px solid var(--border); margin: .6rem 0 0;
+}
+.sub-hdr {
+  font-size: .65rem; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); padding: .4rem 0 .25rem;
+  border-bottom: 1px solid var(--border); margin: .6rem 0 0;
+}
+
+/* touch-control buttons */
+.dc-btn, .angle-btn, .grid-btn {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); padding: .85rem .5rem; border-radius: 4px;
+  cursor: pointer; font-size: .88rem; text-align: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .12s, border-color .12s;
+}
+.dc-btn:hover, .dc-btn:active,
+.angle-btn:hover, .angle-btn:active,
+.grid-btn:hover, .grid-btn:active { background: var(--surface2); border-color: var(--accent); }
+.grid-btn { line-height: 1.3; min-height: 3.5rem; }
+.grid-btn.full { grid-column: 1/-1; }
+
+/* ---- footer (injected by edit.js on sub-pages) ---- */
+
+footer {
+  max-width: 820px; margin: 48px auto 0; padding-bottom: 32px;
+  text-align: center;
+  font: 500 10px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: .24em; color: var(--muted); opacity: .7;
+}
+footer a {
+  color: inherit; text-decoration: none;
+  border-bottom: 1px solid currentColor; padding-bottom: 1px;
+  transition: opacity .15s;
+}
+footer a:hover { opacity: 1; }
+
+/* ---- dark mode (colors from design system renderVals()) ---- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --accent:      #cf6470;
+    --bg:          #0f1216;
+    --surface:     #161b21;
+    --surface2:    #1c232a;
+    --border:      #283139;
+    --text:        #e7ecf0;
+    --muted:       #828e98;
+    --danger:      #d05b63;
+    --danger-soft: rgba(208,91,99,.14);
+    --tex:         rgba(231,236,240,.06);
+    --glow:        rgba(207,100,112,.17);
+  }
+}
+:root[data-theme="dark"] {
+  --accent:      #cf6470;
+  --bg:          #0f1216;
+  --surface:     #161b21;
+  --surface2:    #1c232a;
+  --border:      #283139;
+  --text:        #e7ecf0;
+  --muted:       #828e98;
+  --danger:      #d05b63;
+  --danger-soft: rgba(208,91,99,.14);
+  --tex:         rgba(231,236,240,.06);
+  --glow:        rgba(207,100,112,.17);
+}
+
+/* ---- right header group (theme toggle + e-stop, injected by edit.js) ---- */
+.hdr-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* ---- theme toggle button ---- */
+#theme-toggle {
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  padding: 5px 9px; color: var(--muted); cursor: pointer; flex-shrink: 0;
+  font-size: .85rem; line-height: 1; transition: border-color .15s, color .15s;
+}
+#theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+<style>
+#logs-status{font-size:.75rem;color:var(--muted);padding:.3rem 0 .6rem}
+.log-row{display:flex;align-items:center;gap:.5rem;padding:.5rem 0;border-bottom:1px solid var(--border)}
+.log-row .log-name{flex:1;font:500 .8rem/1.3 ui-monospace,'SF Mono',Menlo,monospace;word-break:break-all}
+.log-row .log-size{font-size:.7rem;color:var(--muted);white-space:nowrap}
+.viewer-pane{margin-top:.6rem;max-height:50vh;overflow:auto;background:#1a1a1a;color:#ddd;
+  padding:.7rem;font:.78rem/1.55 ui-monospace,'SF Mono',Menlo,monospace;
+  white-space:pre-wrap;word-break:break-all;border-radius:4px}
+</style>
+<script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
+</head>
+<body>
+<div class="page-header">
+  <a class="back" href="/">&#9664; BACK</a>
+  <div class="page-title"><span class="dot"></span><span class="label">Troubleshooting</span><span class="dot"></span></div>
+</div>
+<main>
+  <div id="cfg-area"><div id="status">LOADING&#8230;</div></div>
+
+  <div class="section-label" style="margin-top:.8rem">Debug Log Files</div>
+  <div id="logs-status">Loading&#8230;</div>
+  <div id="logs-list"></div>
+
+  <div class="section-label" style="margin-top:.8rem">Config File</div>
+  <div class="row">
+    <div class="row-label">config.txt</div>
+    <button class="be-action" onclick="viewConfigFile()">View</button>
+  </div>
+
+  <pre id="viewer" class="viewer-pane" hidden></pre>
+</main>
+<script>
+/* Amidala web UI — edit-in-place widget + shared config page helpers.
+   Embed script inlines this into every config sub-page.
+   In dev mode (scripts/web_dev.py) it's served as /assets/edit.js. */
+
+// ----------------------------------------------------------------- theme ----
+
+function _toggleTheme() {
+  var t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem('amidala-theme', t);
+  var btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = t === 'dark' ? '☀' : '☾';
+}
+
+// ------------------------------------------------------------------ toast ---
+
+function showToast(msg, isErr) {
+  var t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' toast-err' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
+}
+
+// -------------------------------------------------------- edit-in-place -----
+
+function startEdit(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  inp.dataset.orig = inp.value;
+  row.querySelector('.rv').hidden = true;
+  row.querySelector('.ri').hidden = false;
+  btn.hidden = true;
+  row.querySelector('.bs').hidden = false;
+  row.querySelector('.bc').hidden = false;
+}
+
+// Hides the edit controls and shows the read-only display again. Does NOT
+// touch the input's value -- callers decide separately whether to revert it
+// (doCancel) or leave it as-is (doSave, after a successful save).
+function _closeEditUI(row) {
+  row.querySelector('.rv').hidden = false;
+  row.querySelector('.ri').hidden = true;
+  row.querySelector('.be').hidden = false;
+  row.querySelector('.bs').hidden = true;
+  row.querySelector('.bc').hidden = true;
+}
+
+function doCancel(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input,select');
+  if (inp && inp.dataset.orig !== undefined) inp.value = inp.dataset.orig;
+  _closeEditUI(row);
+}
+
+async function doSave(btn) {
+  var row = btn.closest('.row');
+  var key = row.dataset.key;
+  var rt  = row.dataset.type;
+  var inp = row.querySelector('input,select');
+  var val = inp.value;
+  var prev = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
+  if (rt === 'ascii-char') {
+    val = val.length > 0 ? String(val.charCodeAt(0)) : '0';
+  }
+  try {
+    var r = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'key=' + encodeURIComponent(key) + '&value=' + encodeURIComponent(val)
+    });
+    if (r.ok) {
+      var dv = row.querySelector('.rv');
+      if (rt === 'bool' || rt === 'select') {
+        var sel = row.querySelector('select');
+        dv.textContent = sel.options[sel.selectedIndex].text;
+      } else if (rt === 'ascii-char') {
+        dv.textContent = _asciiDisp(val);
+      } else if (rt === 'password') {
+        dv.textContent = '••••••••';
+      } else {
+        var fmtFn = row.dataset.fmt;
+        dv.textContent = (fmtFn && window[fmtFn]) ? window[fmtFn](val) : val;
+      }
+      // Keep the tracked config snapshot in sync and re-evaluate any other
+      // rows whose when: predicate depends on this key, so toggling e.g. a
+      // bool field immediately shows/hides its dependent fields without a
+      // full page reload.
+      if (_configData) _configData[key] = val;
+      _applyWhenVisibility();
+      _refreshDynamicOptions();
+      if (row.dataset.restart === '1') _flagRestartRequired();
+      // Optional page-defined hook for keys whose "needs restart" status is
+      // stateful rather than a fixed schema property (e.g. WCB identity
+      // fields only need a restart if the mesh client is already running --
+      // see connectivity.html's refreshWCBStatus()). A plain restart:true
+      // flag can't express that, so the page re-checks its own server-side
+      // status endpoint here instead of waiting for the next full page load.
+      if (window._onConfigSaved) window._onConfigSaved(key);
+      // The saved value must stick: update dataset.orig to it (so a future
+      // Cancel reverts to this, not the pre-edit value) and close the edit
+      // UI directly -- NOT via doCancel(), which would revert inp.value
+      // back to the old dataset.orig and silently desync the control from
+      // what was actually just saved.
+      inp.dataset.orig = val;
+      _closeEditUI(row);
+      showToast('Saved');
+    } else {
+      showToast('Save failed: ' + await r.text(), true);
+    }
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+// ------------------------------------------------ schema-driven row builder --
+
+// Display helper for ascii-char type: number → printable char or named label.
+function _asciiDisp(val) {
+  var n = parseInt(val, 10);
+  if (isNaN(n)) return String(val);
+  var names = {0:'NUL', 9:'TAB', 10:'LF', 13:'CR', 27:'ESC', 32:'SP'};
+  if (names[n] !== undefined) return names[n];
+  if (n > 32 && n < 127) return String.fromCharCode(n);
+  return String(n);
+}
+
+// s.options may be a static array (most schema rows) or a function(d) that
+// computes the option list against the live _configData snapshot -- same
+// pattern as s.when(d). Used by pin-picker rows (see pins.html) so their
+// choices reflect the server-supplied assignable pool and exclude whatever
+// pin every other role currently holds, without duplicating that logic here.
+function _resolveOptions(s) {
+  if (typeof s.options === 'function') return s.options(_configData) || [];
+  return s.options || [];
+}
+
+function dispValue(s, val) {
+  if (s.type === 'bool') return val === 'y' ? 'On' : 'Off';
+  if (s.type === 'select') {
+    var found = _resolveOptions(s).find(function(op) { return op.v === String(val); });
+    return found ? found.l : val;
+  }
+  if (s.type === 'password') return '••••••••';
+  if (s.type === 'ascii-char') return _asciiDisp(val);
+  if (s.fmtFn && window[s.fmtFn]) return window[s.fmtFn](val);
+  return String(val);
+}
+
+function buildInput(s, val) {
+  if (s.type === 'bool') {
+    return '<select>'
+      + '<option value="y"' + (val === 'y' ? ' selected' : '') + '>On</option>'
+      + '<option value="n"' + (val === 'n' ? ' selected' : '') + '>Off</option>'
+      + '</select>';
+  }
+  if (s.type === 'select') {
+    var opts = _resolveOptions(s).map(function(op) {
+      return '<option value="' + op.v + '"' + (String(val) === op.v ? ' selected' : '') + '>' + op.l + '</option>';
+    }).join('');
+    return '<select>' + opts + '</select>';
+  }
+  if (s.type === 'ascii-char') {
+    var n = parseInt(val, 10);
+    var ch = (!isNaN(n) && n > 32 && n < 127) ? String.fromCharCode(n) : '';
+    return '<input type="text" maxlength="1" value="' + ch + '" style="width:3rem;text-align:center">';
+  }
+  if (s.type === 'number') {
+    return '<input type="number" value="' + val + '" min="' + (s.min || 0) + '" max="' + (s.max || 9999) + '">';
+  }
+  if (s.type === 'password') {
+    return '<input type="password" value="' + val + '" maxlength="' + (s.maxlength || 64) + '">';
+  }
+  return '<input type="text" value="' + val + '"' + (s.maxlength ? ' maxlength="' + s.maxlength + '"' : '') + '>';
+}
+
+async function doAction(btn) {
+  var cmd      = btn.dataset.cmd;
+  var endpoint = btn.dataset.endpoint || '/api/monitor';
+  var prev = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
+  try {
+    var r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'cmd=' + encodeURIComponent(cmd)
+    });
+    showToast(r.ok ? 'Sent' : 'Failed', !r.ok);
+  } catch(e) {
+    showToast('Network error', true);
+  }
+  btn.textContent = prev;
+  btn.disabled = false;
+}
+
+var _pencil = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 l0.5-3.5 L15 6 l3 3 L7.5 19.5 Z"/><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"/></svg>';
+
+function buildRow(s, val, hidden) {
+  var hiddenAttr = hidden ? ' hidden' : '';
+  if (s.type === 'action') {
+    return '<div class="row"' + hiddenAttr + '>'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<button class="be-action" onclick="doAction(this)" data-cmd="' + s.cmd + '" data-endpoint="' + (s.endpoint || '/api/monitor') + '">'
+      + (s.btnLabel || 'Send') + '</button>'
+      + '</div>';
+  }
+  var disp = dispValue(s, val);
+  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  if (s.readOnly) {
+    return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
+      + '<div class="row-label">' + s.label + '</div>'
+      + '<div class="rv">' + disp + '</div>'
+      + '</div>';
+  }
+  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+    + '<div class="row-label">' + s.label + '</div>'
+    + '<div class="rv">' + disp + '</div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
+    + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
+    + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + '</div>';
+}
+
+// --------------------------------------------------- emergency stop button ---
+
+(function() {
+  var hdr = document.querySelector('.page-header');
+
+  // right-side group keeps the header at 3 flex children: [BACK] [TITLE] [GROUP]
+  var rg = document.createElement('div');
+  rg.className = 'hdr-right';
+
+  // theme toggle
+  var tt = document.createElement('button');
+  tt.id = 'theme-toggle';
+  tt.title = 'Toggle dark / light mode';
+  tt.textContent = document.documentElement.dataset.theme === 'dark' ? '☀' : '☾';
+  tt.onclick = _toggleTheme;
+  rg.appendChild(tt);
+
+  // e-stop
+  var b = document.createElement('button');
+  b.id = 'estop';
+  b.title = 'Emergency Stop — halts all motors';
+  b.innerHTML = '<span class="dot"></span>E-STOP';
+  b.onclick = function() {
+    fetch('/api/estop', { method: 'POST' })
+      .then(function(r) { showToast(r.ok ? 'Emergency stop sent' : 'Stop failed', !r.ok); })
+      .catch(function() { showToast('Stop failed', true); });
+  };
+  rg.appendChild(b);
+
+  if (hdr) hdr.appendChild(rg);
+  else document.body.appendChild(rg);
+})();
+
+// ------------------------------------------------------ restart banner -------
+
+// Sticky, browser-scoped "a setting needs a reboot to apply" flag -- same
+// mechanism already used for the theme preference (localStorage, not a
+// server round-trip). Set by doSave() whenever a saved row has
+// data-restart="1" (schema rows opt in via `restart:true`), and by any page
+// with its own stateful reboot-required logic (e.g. connectivity.html's WCB
+// panel). Cleared only once a real restart is confirmed (see _pollForRestart).
+function _flagRestartRequired() {
+  localStorage.setItem('amidala-restart-required', '1');
+  _showRestartBanner();
+}
+
+function _showRestartBanner() {
+  if (document.getElementById('restart-banner')) return;
+  var main = document.querySelector('main');
+  var b = document.createElement('div');
+  b.id = 'restart-banner';
+  b.className = 'restart-banner';
+  b.innerHTML = '<span>A restart is required for setting changes to apply.</span>'
+    + '<button onclick="_doRestart(this)">Restart Now</button>';
+  // Inserted as <main>'s previous sibling, not inside it -- buildPage()
+  // fully replaces main's innerHTML once its fetch resolves, which would
+  // otherwise wipe out a banner injected before that completes.
+  if (main) document.body.insertBefore(b, main);
+  else document.body.appendChild(b);
+}
+
+// Shared by the auto-shown restart-required banner AND any standalone
+// "Restart" button elsewhere in the UI (e.g. the Droid Status page) -- btn
+// is required, the banner/span are optional and only used when present.
+function _doRestart(btn) {
+  if (!confirm('Restart the droid now?')) return;
+  var banner = document.getElementById('restart-banner');
+  var span = banner ? banner.querySelector('span') : null;
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  if (span) span.textContent = 'Restarting…';
+  fetch('/api/reboot', { method: 'POST' }).catch(function() {});
+  // Fixed grace delay before polling starts -- mirrors update.html's OTA
+  // restart flow, giving the device a moment to actually begin rebooting
+  // before we start treating a fetch rejection as "still down" evidence.
+  setTimeout(function() { _pollForRestart(btn, span); }, 3000);
+}
+
+function _pollForRestart(btn, span) {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(timer);
+      var msg = 'Still restarting — check the board, or reload manually.';
+      if (span) span.textContent = msg;
+      else if (btn) btn.textContent = 'Still restarting…';
+      return;
+    }
+    fetch('/api/info', { cache: 'no-store' })
+      .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        clearInterval(timer);
+        localStorage.removeItem('amidala-restart-required');
+        location.reload();
+      })
+      .catch(function() { /* still restarting -- wait for the next tick */ });
+  }, 2000);
+}
+
+(function() {
+  // update.html already has its own, more detailed restart-polling flow --
+  // a second generic banner there mid-flash would be confusing.
+  if (location.pathname.indexOf('update') !== -1) return;
+  if (localStorage.getItem('amidala-restart-required') === '1') _showRestartBanner();
+})();
+
+// --------------------------------------------------------------- footer -------
+
+(function() {
+  if (location.pathname.indexOf('monitor') !== -1) return;
+  var f = document.createElement('footer');
+  f.innerHTML = '<a href="https://github.com/thePunderWoman/Amidala/wiki" target="_blank" rel="noopener">DOCUMENTATION</a>';
+  document.body.appendChild(f);
+})();
+
+// ------------------------------------------------- hash-based tab nav --------
+
+function initHashTabs(defaultTab, onSwitch) {
+  function activate(raw) {
+    var requested = ((raw || '').replace(/^#/, ''));
+    var tabs = document.querySelectorAll('.tab');
+    var matched = false;
+    tabs.forEach(function(el) { if (el.dataset.tab === requested) matched = true; });
+    var t = matched ? requested : defaultTab;
+    tabs.forEach(function(el) { el.classList.toggle('active', el.dataset.tab === t); });
+    if (onSwitch) onSwitch(t);
+  }
+  window.addEventListener('hashchange', function() { activate(location.hash); });
+  activate(location.hash);
+}
+
+function showHashTab(t) {
+  location.hash = '#' + t;
+}
+
+// Tracks the current page's schema + last-known config snapshot so a saved
+// edit can re-evaluate other rows' when: predicates without a full reload.
+var _schema = null;
+var _configData = null;
+
+function buildPage(SCHEMA, endpoint, callback) {
+  fetch(endpoint)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      _schema = SCHEMA;
+      _configData = d;
+      var html = '';
+      var sectionSkip = false;
+      SCHEMA.forEach(function(s) {
+        if (s.section) {
+          // Section-level when: (e.g. hardware-type gating) is still
+          // evaluated once at load -- unlike row-level when:, nothing in
+          // this codebase edits the gating key inline from the same page,
+          // so there's no live case to react to yet.
+          sectionSkip = s.when ? !s.when(d) : false;
+          if (!sectionSkip) html += '<div class="section-label">' + s.section + '</div>';
+          return;
+        }
+        if (sectionSkip) return;
+        // Row-level when: rows are still rendered (just hidden), so they
+        // can be shown live via _applyWhenVisibility() after a save.
+        var rowHidden = !!(s.when && !s.when(d));
+        if (s.type === 'action') { html += buildRow(s, '', rowHidden); return; }
+        var val = (d[s.key] !== undefined) ? String(d[s.key]) : '?';
+        html += buildRow(s, val, rowHidden);
+      });
+      document.querySelector('main').innerHTML = html;
+      if (callback) callback(d);
+    })
+    .catch(function() {
+      var el = document.getElementById('status');
+      if (el) el.textContent = 'Failed to load settings.';
+    });
+}
+
+// Re-hides/shows every row-level when:-gated row against the current
+// _configData snapshot. Called after doSave() so toggling a gating field
+// (e.g. a bool) immediately shows/hides its dependent rows in place.
+function _applyWhenVisibility() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || !s.when) return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    if (row) row.hidden = !s.when(_configData);
+  });
+}
+
+// Rebuilds the <select> for every row whose schema uses a function-based
+// options (see _resolveOptions / pins.html) against the live _configData
+// snapshot. Each row's <select> is only ever built once at page load
+// (buildRow()), so without this, saving e.g. dout1pin=40 wouldn't stop
+// servo1pin's dropdown from still offering 40 until a full page reload.
+function _refreshDynamicOptions() {
+  if (!_schema || !_configData) return;
+  _schema.forEach(function(s) {
+    if (s.section || typeof s.options !== 'function') return;
+    var row = document.querySelector('[data-key="' + s.key + '"]');
+    var sel = row && row.querySelector('select');
+    if (!sel) return;
+    var val = (_configData[s.key] !== undefined) ? String(_configData[s.key]) : sel.value;
+    sel.outerHTML = buildInput(s, val);
+  });
+}
+</script>
+<script>
+function fmtSize(n) {
+  if (n > 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+  if (n > 1024) return (n / 1024).toFixed(1) + ' KB';
+  return n + ' B';
+}
+
+function load() {
+  fetch('/api/config').then(function(r) { return r.json(); }).then(function(d) {
+    var val = d.debugmode !== undefined ? String(d.debugmode) : 'n';
+    document.getElementById('cfg-area').innerHTML =
+      '<div class="section-label">Debug Log Capture</div>' +
+      buildRow({key: 'debugmode', label: 'Debug Mode', type: 'bool',
+                note: 'Writes everything the Serial Monitor sees to a capped file on the SD card. Turn off when you\'re done troubleshooting.'}, val);
+  }).catch(function() {
+    document.getElementById('cfg-area').innerHTML = '<div id="status">Failed to load</div>';
+  });
+  loadLogs();
+}
+
+function loadLogs() {
+  fetch('/api/logs').then(function(r) { return r.json(); }).then(function(d) {
+    document.getElementById('logs-status').textContent =
+      d.active ? ('Capturing to ' + d.current) : 'Not currently capturing.';
+    var files = (d.files || []).slice().sort(function(a, b) { return a.name < b.name ? 1 : -1; });
+    var listEl = document.getElementById('logs-list');
+    if (!files.length) {
+      listEl.innerHTML = '<div class="log-row"><div class="log-name">No log files yet.</div></div>';
+      return;
+    }
+    listEl.innerHTML = files.map(function(f) {
+      return '<div class="log-row">'
+        + '<div class="log-name">' + f.name + '</div>'
+        + '<div class="log-size">' + fmtSize(f.size) + '</div>'
+        + '<button class="be-action" onclick="viewLog(\'' + f.name + '\')">View</button>'
+        + '<a class="be-action" style="text-decoration:none" href="/api/logs?file=' + encodeURIComponent(f.name) + '" target="_blank">Open</a>'
+        + '</div>';
+    }).join('');
+  }).catch(function() {
+    document.getElementById('logs-status').textContent = 'Failed to load log list.';
+  });
+}
+
+function showViewer(text) {
+  var v = document.getElementById('viewer');
+  v.textContent = text;
+  v.hidden = false;
+  v.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+function viewLog(name) {
+  fetch('/api/logs?file=' + encodeURIComponent(name))
+    .then(function(r) { return r.text(); })
+    .then(showViewer)
+    .catch(function() { showViewer('Failed to load ' + name); });
+}
+
+function viewConfigFile() {
+  fetch('/api/configfile')
+    .then(function(r) { return r.text(); })
+    .then(showViewer)
+    .catch(function() { showViewer('Failed to load config.txt'); });
+}
+
+load();
 </script>
 </body>
 </html>

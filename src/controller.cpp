@@ -3,6 +3,7 @@
 #include "xbee_spi.h"
 #include "bt_gamepad.h"
 #include "config_file.h"
+#include "debug_file_logger.h"
 #include <esp_heap_caps.h>
 #include <new>
 
@@ -119,6 +120,16 @@ void AmidalaController::setup() {
   // parses in file order" reasoning as validatePinAssignments() above.
   fConfig.validateSerialPortAssignments();
   fConfig.showCurrentConfiguration();
+
+  // Runtime debug-mode SD log capture (issue #199) -- register the sink
+  // before restoring the saved on/off state so a config.txt with
+  // debugmode=y already starts capturing from here (everything logged
+  // before this point in setup(), including config.txt parsing itself, is
+  // necessarily missed -- SD/config aren't available any earlier). Also
+  // covers a live toggle later via cfg_debugmode() in config.cpp, which
+  // calls the same setEnabled().
+  monSetAppendSink(&debugFileLoggerSink);
+  debugFileLogger().setEnabled(params.debugmode);
 
   // fTankDrive/fDomeDrive construction is deferred to here (issue #147),
   // rather than living in AmidalaController's own constructor -- see

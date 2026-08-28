@@ -116,6 +116,7 @@ inline bool ensureConfigDefaults(const AmidalaParameters& params) {
         {"wifissid=",       String(params.wifiSSID)},
         {"wifipassword=",   String(params.wifiPassword)},
         {"wifichannel=",    String(params.wifichannel)},
+        {"debugmode=",      fmtBool(params.debugmode)},
         {"btcontrolleron=", fmtBool(params.btcontrolleron)},
         {"btaddr=",         String(params.btaddr)},
         {"wcbenable=",      fmtBool(params.wcbenable)},

@@ -1,4 +1,5 @@
 #include "controller.h"
+#include "debug_file_logger.h"
 
 void AmidalaConfig::init(AmidalaController *controller) {
   fController = controller;
@@ -1110,6 +1111,19 @@ bool AmidalaConfig::cfg_wifichannel(const char *cmd) {
   return intparam(cmd, "wifichannel=", fController->params.wifichannel, 1, 13);
 }
 
+// debugmode applies live -- no restart needed, see debug_file_logger.h.
+// AmidalaController::setup() makes the matching setEnabled() call at boot
+// (once config.txt/SD are both available) for whatever value was loaded
+// from config.txt; this handles every change after that (web UI or the
+// Monitor page's command line).
+bool AmidalaConfig::cfg_debugmode(const char *cmd) {
+  AmidalaParameters &params = fController->params;
+  if (!boolparam(cmd, "debugmode=", params.debugmode))
+    return false;
+  debugFileLogger().setEnabled(params.debugmode);
+  return true;
+}
+
 // ---- Reassignable GPIO pin roles (issue #133) -------------------------------
 
 bool AmidalaConfig::cfg_pin1role(const char *cmd) {
@@ -1495,6 +1509,7 @@ const AmidalaConfig::ConfigHandler AmidalaConfig::kConfigHandlers[] = {
     &AmidalaConfig::cfg_wifissid,
     &AmidalaConfig::cfg_wifipassword,
     &AmidalaConfig::cfg_wifichannel,
+    &AmidalaConfig::cfg_debugmode,
     &AmidalaConfig::cfg_pin1role,
     &AmidalaConfig::cfg_pin2role,
     &AmidalaConfig::cfg_pin3role,

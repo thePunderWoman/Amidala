@@ -40,7 +40,8 @@ inline String buildInfoJson(const char* drive, const char* dome,
                              bool btConnected = false,
                              bool domeHomed = false, int domeDegrees = 0,
                              const char* serial1Role = nullptr,
-                             const char* serial2Role = nullptr) {
+                             const char* serial2Role = nullptr,
+                             bool debugMode = false) {
     String driveVal = drive ? (String("\"") + drive + "\"") : String("null");
     String domeVal  = dome  ? (String("\"") + dome  + "\"") : String("null");
     String serial1Val = serial1Role ? (String("\"") + serial1Role + "\"") : String("null");
@@ -69,7 +70,11 @@ inline String buildInfoJson(const char* drive, const char* dome,
     // other UI) adapt to reassignment instead of assuming a fixed
     // port-to-role mapping from the compiled drive/dome type alone.
     json += "\"serial1_role\":" + serial1Val + ",";
-    json += "\"serial2_role\":" + serial2Val;
+    json += "\"serial2_role\":" + serial2Val + ",";
+    // Polled by the shared debug-mode overlay banner (embed_web.py-injected
+    // into every page) so it's visible everywhere, not just on pages that
+    // otherwise fetch /api/config -- issue #199.
+    json += "\"debugmode\":" + String(debugMode ? "true" : "false");
     json += "}";
     return json;
 }
@@ -142,6 +147,9 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     json += "\"wifissid\":\""     + String(p.wifiSSID)                 + "\",";
     json += "\"wifipassword\":\"" + String(p.wifiPassword)             + "\",";
     json += "\"wifichannel\":"    + String(p.wifichannel)              + ",";
+
+    // Runtime debug-mode log capture (issue #199)
+    json += "\"debugmode\":\""   + String(p.debugmode ? "y" : "n")     + "\",";
 
     // XBee
     json += "\"xbr\":\"" + hexStr(p.xbr) + "\",";

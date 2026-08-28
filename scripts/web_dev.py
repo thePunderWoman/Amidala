@@ -153,6 +153,7 @@ def parse_example_config(path):
         "wcbquantity":   0,
         "wcbid":         0,
         "outboundserial":0,
+        "debugmode":     "n",
         "buttons":  [_make_button() for _ in range(9)],
         "gestures": [],
         "gadgets_cfg": [{"type": 0, "sstr": []} for _ in range(7)],
@@ -176,7 +177,7 @@ def parse_example_config(path):
                   "wifion", "wifissid", "wifipassword", "xbr", "xbl",
                   "audiohw", "domeflip", "domeimu", "domech6",
                   "btcontrolleron", "btaddr", "wcbenable", "wcbpassword",
-                  "wcboct2", "wcboct3"}
+                  "wcboct2", "wcboct3", "debugmode"}
 
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
@@ -350,6 +351,23 @@ _info = {
     "serial2_role": "unused",
 }
 
+# Mock for the Troubleshooting page's log viewer (issue #199) -- there's no
+# real SD card here, so a couple of canned "completed session" files stand in
+# for whatever real debug_NNNNN.log files would look like.
+_LOG_FILES = {
+    "debug_00001.log": (
+        "=== debug log session start ===\n"
+        "i LOG: Amidala boot\n"
+        "i LOG: WiFi AP up (amidala, 192.168.4.1)\n"
+        "t > :LD00\n"
+    ),
+    "debug_00002.log": (
+        "=== debug log session start ===\n"
+        "i LOG: Amidala boot\n"
+        "r S0: BD:FLUTTER\n"
+    ),
+}
+
 _bt_state = {
     "addr":     _config.get("btaddr", ""),
     "scanning": False,
@@ -390,7 +408,30 @@ class _Handler(SimpleHTTPRequestHandler):
             self._json(_config)
             return
         if path == "/api/info":
-            self._json(_info)
+            info = dict(_info)
+            info["debugmode"] = _config.get("debugmode") == "y"
+            self._json(info)
+            return
+        if path == "/api/logs":
+            qs = parse_qs(urlparse(self.path).query)
+            if "file" in qs:
+                self._text(_LOG_FILES.get(qs["file"][0], ""),
+                           status=200 if qs["file"][0] in _LOG_FILES else 404)
+                return
+            active = _config.get("debugmode") == "y"
+            files = [{"name": n, "size": len(c)} for n, c in _LOG_FILES.items()]
+            self._json({
+                "active": active,
+                "current": "debug_00002.log" if active else "",
+                "files": files,
+            })
+            return
+        if path == "/api/configfile":
+            try:
+                with open(_EXAMPLE_CONFIG, encoding="utf-8", errors="replace") as f:
+                    self._text(f.read())
+            except FileNotFoundError:
+                self._text("", status=404)
             return
         if path == "/api/monitor":
             self._json(_monitor)

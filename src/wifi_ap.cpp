@@ -19,6 +19,7 @@
 #include <ESPmDNS.h>
 #include <Update.h>
 #include "SD.h"
+#include "debug_file_logger.h"
 #include "web_api.h"
 #include "controller.h"
 #include "drive_config.h"
@@ -722,7 +723,7 @@ static void handleApiInfo() {
 #else
                       false, 0,
 #endif
-                      serial1Role, serial2Role));
+                      serial1Role, serial2Role, sCtrl->params.debugmode));
 }
 
 static void handleApiConfigGet() {
@@ -1396,6 +1397,62 @@ static void handleApiPins() {
     sServer.send(200, "application/json", json);
 }
 
+// ---------------------------------------------------------------------------
+// Troubleshooting: debug-mode SD log files + config.txt viewer (issue #199)
+// ---------------------------------------------------------------------------
+
+// GET /api/logs            -> {"active":bool,"current":"NAME","files":[{"name":..,"size":..},...]}
+// GET /api/logs?file=NAME  -> raw text/plain content of that one log file
+static void handleApiLogsGet() {
+    String reqFile = sServer.arg("file");
+    if (!reqFile.isEmpty()) {
+        // The only source of filenames the UI ever sends back here is the
+        // listing this same endpoint just produced -- reject anything with
+        // a path separator rather than trust it into a path join below.
+        if (reqFile.indexOf('/') != -1) {
+            sServer.send(400, "text/plain", "invalid filename");
+            return;
+        }
+        File f = SD.open(String(DEBUG_LOG_DIR) + "/" + reqFile, "r");
+        if (!f) { sServer.send(404, "text/plain", "not found"); return; }
+        sServer.streamFile(f, "text/plain");
+        f.close();
+        return;
+    }
+
+    String json = "{\"active\":";
+    json += debugFileLogger().isEnabled() ? "true" : "false";
+    json += ",\"current\":\"" + debugFileLogger().currentFile() + "\",\"files\":[";
+    File dir = SD.open(DEBUG_LOG_DIR);
+    bool first = true;
+    if (dir) {
+        for (File entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
+            String name = String(entry.name());
+            // Some cores report the full path in name(); the client only
+            // ever needs the bare filename to round-trip via ?file= above.
+            int slash = name.lastIndexOf('/');
+            if (slash != -1) name = name.substring(slash + 1);
+            if (!entry.isDirectory() && name != "seq.txt") {
+                if (!first) json += ",";
+                first = false;
+                json += "{\"name\":\"" + name + "\",\"size\":" + String(entry.size()) + "}";
+            }
+            entry.close();
+        }
+        dir.close();
+    }
+    json += "]}";
+    sServer.send(200, "application/json", json);
+}
+
+// GET /api/configfile -> raw text/plain content of /config.txt (read-only viewer)
+static void handleApiConfigFileGet() {
+    File f = SD.open("/config.txt", "r");
+    if (!f) { sServer.send(404, "text/plain", "config.txt not found"); return; }
+    sServer.streamFile(f, "text/plain");
+    f.close();
+}
+
 static void handleApiMonitorGet() {
     String json = "{\"seq\":";
     // No geometric growth in String::concat() (see WString.cpp) -- without
@@ -1570,6 +1627,7 @@ static void handleConfigGadgets()       { sServer.send_P(200, "text/html", WEB_P
 static void handleSafety()             { sServer.send_P(200, "text/html", WEB_PAGE_SAFETY);           }
 static void handleComingSoon()          { sServer.send_P(200, "text/html", WEB_PAGE_COMING_SOON);     }
 static void handleDiagnostics()         { sServer.send_P(200, "text/html", WEB_PAGE_DIAGNOSTICS);      }
+static void handleTroubleshooting()     { sServer.send_P(200, "text/html", WEB_PAGE_TROUBLESHOOTING);  }
 static void handleConfigConnectivity()  { sServer.send_P(200, "text/html", WEB_PAGE_CONFIG_CONNECTIVITY); }
 
 // ---------------------------------------------------------------------------
@@ -1873,6 +1931,9 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/api/gesture/capture/status", HTTP_GET,  handleApiGestureCaptureStatus);
     sServer.on("/api/gesture/capture/stop",   HTTP_POST, handleApiGestureCaptureStop);
     sServer.on("/api/wcb/status",        HTTP_GET,  handleApiWcbStatus);
+    sServer.on("/troubleshooting",       HTTP_GET,  handleTroubleshooting);
+    sServer.on("/api/logs",              HTTP_GET,  handleApiLogsGet);
+    sServer.on("/api/configfile",        HTTP_GET,  handleApiConfigFileGet);
 
     sServer.onNotFound([]() { sServer.send(404, "text/plain", "Not found"); });
 

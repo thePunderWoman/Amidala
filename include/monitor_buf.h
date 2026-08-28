@@ -19,6 +19,15 @@ struct MonLine {
     char cls; // 't'=tx  'r'=rx  'i'=info
 };
 
+// Optional sink invoked with every appended line, in addition to the ring
+// buffer itself -- lets higher-level code (see debug_file_logger.h) persist
+// monitor output to SD without this header taking on that dependency: it's
+// deliberately kept free of anything beyond stdint/string.h (see header
+// comment above) so it stays usable from a plain native unit test. A bare
+// function pointer, not a callback registry -- there's only ever one
+// consumer (the runtime debug-mode SD logger, issue #199).
+typedef void (*MonAppendSink)(const char* text, char cls);
+
 #ifdef MONITOR_BUF_OWNER
 // sMonBuf is ~24.8KB (MON_LINES * sizeof(MonLine)) -- as a static array it
 // would sit in internal SRAM for the life of the process. Heap-allocate it
@@ -41,12 +50,16 @@ MonLine*  sMonBuf   = sMonBufStorage;
 uint16_t  sMonHead  = 0;
 uint16_t  sMonCount = 0;
 uint32_t  sMonSeq   = 0;
+MonAppendSink sMonAppendSink = nullptr;
 #else
 extern MonLine*  sMonBuf;
 extern uint16_t  sMonHead;
 extern uint16_t  sMonCount;
 extern uint32_t  sMonSeq;
+extern MonAppendSink sMonAppendSink;
 #endif
+
+inline void monSetAppendSink(MonAppendSink sink) { sMonAppendSink = sink; }
 
 inline void monAppend(const char* text, char cls = 'i') {
     strncpy(sMonBuf[sMonHead].text, text, MON_LINE_LEN - 1);
@@ -55,6 +68,7 @@ inline void monAppend(const char* text, char cls = 'i') {
     sMonHead = (sMonHead + 1) % MON_LINES;
     if (sMonCount < MON_LINES) sMonCount++;
     sMonSeq++;
+    if (sMonAppendSink) sMonAppendSink(text, cls);
 }
 
 // Appends `text` to `out` as a JSON string body (the part between the
