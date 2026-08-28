@@ -55,6 +55,25 @@ void setup() {
   pinMode(SPI_MISO_PIN, INPUT_PULLUP);
   SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
 
+  // Settle time before the XBee3 sees any SPI traffic (issue #185's cold-boot
+  // report: pocket remotes intermittently never connect on power-up, but any
+  // reset that doesn't remove power from the XBee -- UI or the board's reset
+  // button -- fixes it immediately). The XBee3's ~RESET pin has no GPIO
+  // driving it, only a passive R1/C1 RC network (10k/100nF -- see the PCB
+  // schematic), giving a ~1.2ms release delay. The ESP32 reaches this point
+  // in setup() well inside that same order of magnitude, so on a true cold
+  // power-on both chips can be racing out of reset together, and this side
+  // starts driving CS/SPI before the XBee3's own oscillator/boot sequence
+  // (which needs meaningfully longer than 1.2ms) has actually finished. A
+  // reset-only restart never hits this: the XBee's power, and therefore its
+  // already-settled oscillator, was never interrupted.
+  // 200ms is a conservative starting margin, not a spec'd number -- there's
+  // no GPIO feedback from the module to know precisely when it's ready, and
+  // this hasn't been confirmed against Digi's own hardware reference. Safe
+  // to tune down later if field testing shows it's more than needed; it's a
+  // one-time boot cost either way.
+  delay(200);
+
   CONSOLE_SERIAL.begin(DEFAULT_BAUD_RATE);
   // Wait up to 3 s for USB-CDC to connect so boot log messages (including SD
   // init warnings) are visible on the monitor before SD.begin() is called.
