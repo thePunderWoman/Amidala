@@ -157,6 +157,16 @@ void test_default_dome_speed_home() {
     TEST_ASSERT_EQUAL(DEFAULT_DOME_SPEED_HOME, gDefaultParams.domespeedhome);
 }
 
+// Regression test for issue #196: domespeed (a 0-100 percentage) was
+// defaulted from DOME_MAXIMUM_SPEED (a 0.0-1.0 fraction, 1.0f), which
+// truncates to 1 when assigned into the uint8_t field -- a fresh board ran
+// the dome at 1% speed, silently below driveFromJoystick()'s dead-band for
+// any stick input, so the dome never responded to the joystick at all.
+void test_default_domespeed_is_100_not_truncated_fraction() {
+    gDefaultParams.init();
+    TEST_ASSERT_EQUAL(100, gDefaultParams.domespeed);
+}
+
 void test_default_dome_speed_min() {
     gDefaultParams.init();
     TEST_ASSERT_EQUAL(DEFAULT_DOME_SPEED_MIN, gDefaultParams.domespeedmin);
@@ -548,6 +558,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_default_audiohw_is_hcr);
     RUN_TEST(test_default_dome_home_position);
     RUN_TEST(test_default_dome_speed_home);
+    RUN_TEST(test_default_domespeed_is_100_not_truncated_fraction);
     RUN_TEST(test_default_dome_speed_min);
     RUN_TEST(test_default_dome_fudge);
     RUN_TEST(test_default_min_pulse);
