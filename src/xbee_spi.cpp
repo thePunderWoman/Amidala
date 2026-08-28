@@ -59,14 +59,18 @@ static int32_t xbeeReadFrame(uint8_t* buf, uint16_t maxLen) {
 
     uint16_t length = ((uint16_t)xbeeTransfer() << 8) | xbeeTransfer();
     if (length == 0 || length > maxLen) {
+        DEBUG_PRINT("XBee: bad frame length ");
+        DEBUG_PRINTLN(length);
         xbeeDrain(length + 1);  // drain data + checksum
         return 0;
     }
     for (uint16_t i = 0; i < length; i++)
         buf[i] = xbeeTransfer();
     uint8_t checksum = xbeeTransfer();
-    if (!xbeeChecksumValid(buf, length, checksum))
+    if (!xbeeChecksumValid(buf, length, checksum)) {
+        DEBUG_PRINTLN("XBee: bad checksum");
         return 0;
+    }
     return length;
 }
 
@@ -92,12 +96,19 @@ void xbeeSPIReceiveAll(XBeePocketRemote** remotes, unsigned count) {
         if (length == 0) continue;
 
         XBeeIOSample sample;
-        if (!xbeeParseIOSample(buf, (uint16_t)length, &sample))
+        if (!xbeeParseIOSample(buf, (uint16_t)length, &sample)) {
+            DEBUG_PRINT("XBee: unrecognized/short frame type=0x");
+            DEBUG_PRINT_HEX(buf[0]);
+            DEBUG_PRINT(" len=");
+            DEBUG_PRINTLN(length);
             continue;
+        }
 
+        bool matched = false;
         for (unsigned i = 0; i < count; i++) {
             auto r = remotes[i];
             if (sample.addrLsb != r->addr) continue;
+            matched = true;
             // Only update analog channels that are present in this packet.
             // A button-only packet (analogMask==0) must not clobber the last
             // known stick position with the {512,512,0,0} defaults — that
@@ -121,6 +132,11 @@ void xbeeSPIReceiveAll(XBeePocketRemote** remotes, unsigned count) {
             DEBUG_PRINT(i + 1);
             DEBUG_PRINTLN(" packet");
             break;
+        }
+        if (!matched) {
+            DEBUG_PRINT("XBee: no configured remote for addr 0x");
+            DEBUG_PRINT_HEX(sample.addrLsb);
+            DEBUG_PRINTLN("");
         }
     }
 }
