@@ -442,15 +442,6 @@ struct AmidalaParameters {
       mix12 = false;
       rcd = 30;
       rcj = 5;
-      // Unlike every other field above, fst previously had no default here --
-      // it was only ever set by the legacy EEPROM "SC23" block load further
-      // down. A board without that block (fresh flash, or EEPROM wiped) fell
-      // through to 0 from the memset above, which makes the failsafe check in
-      // AmidalaController::animate() (lastPacket + fst < millis()) true on
-      // almost every loop pass between real packets -- constant connect/
-      // disconnect flapping (issue #185). 2000 sits mid-range of the UI's
-      // enforced 1000-3000 bound (see rc-radio.html/safety.html SCHEMA).
-      fst = 2000;
       // Default pin roles (issue #133) -- see defaultPinRoles() above.
       defaultPinRoles(pinRole);
       // Default dome/drive serial ports (issue #147) -- see
