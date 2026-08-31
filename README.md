@@ -11,7 +11,7 @@
   </a>
 </p>
 
-**Amidala** is an ESP32-S3 firmware for controlling your droids. It runs on the [Amidala PCB](PCB/) — a PCB designed to make wiring a full-featured droid build straightforward — and is compatible with both the N8R2 (8 MB flash) and N16R8 (16 MB flash) module variants.
+**Amidala** is an ESP32-S3 firmware for controlling your droids. It runs on the [Amidala PCB](PCB/) — a PCB designed to make wiring a full-featured droid build straightforward — and is compatible with both the N8R2 (8 MB flash) and N16R8 (16 MB flash) module variants. Amidala is designed to pair with [Snips Controllers](https://github.com/thePunderWoman/SnipsControllers), coming soon, but can work with older Stealth controllers, bluetooth, or RC.
 
 > **Building from source?** Flash size and PSRAM mode are baked into the firmware image at build time, so you need to tell PlatformIO which module your board has *before* your first flash — it can't be changed later via the web UI. Check the label on your ESP32-S3 module (or your PCB order) for "N8R2" or "N16R8", then build/upload with the matching environment: `pio run -e esp32s3-n16r8 -t upload` (the default) or `pio run -e esp32s3-n8r2 -t upload`. Just want to flash a droid rather than develop firmware? The **Firmware Installer** wizard below flashes a prebuilt image over USB — no toolchain needed.
 
@@ -22,10 +22,11 @@
 ## Features
 
 - **XBee wireless control** — secure, long-range, low-latency control via XBee 3 modules
-- **Multiple Controller Support** — works with classic stealth controllers, Amidala controllers, standard Bluetooth gamepads, and analog RC (PPM) input.
+- **Multiple Controller Support** — works with Snips Controllers (currently in prototype stage), classic stealth controllers, standard Bluetooth gamepads, and analog RC (PPM) input.
 - **Wi-Fi configuration UI** — browser-based interface for fully configuring your droid without needing to pull the SD card.
 - **WCB mesh networking** — join a [WCB](https://github.com/greghulette/WCBClient) ESP-NOW mesh to coordinate commands across multiple boards (e.g. a separate body controller) with no extra wiring.
 - **Native HCR support** — full Human Cyborg Relations vocalizer integration.
+- **Built in Serial Monitor** — full featured onboard native serial monitor to view traffic in real time, even across your WCB Mesh.
 - **Advanced Dome Drive** — Built-in support for auto dome drive with a Pololu encoder motor and hall sensor, or any other basic PWM dome drive.
 - **Flexible drive systems** — PWM, Sabertooth serial, or RoboteQ (PWM, serial, or hybrid)
 - **Native built-in safety features** — Web based e-stop, dome obstruction motor disconnect, auto motor disable on controller disconnect.
@@ -37,6 +38,10 @@
 
 ---
 
+## Controller Support
+
+Amidala is natively designed to work with [Snips Controllers](https://github.com/thePunderWoman/SnipsControllers) or other XBee-based dual handheld pocket controllers. It can also be used with standard Bluetooth controllers and RC.
+
 ## Web Configuration UI
 
 <p align="center">
@@ -44,6 +49,12 @@
 </p>
 
 The Amidala web interface allows you total control over your droid's configuration. You can set up your controller configuration, which buttons trigger what, add serial commands, set defaults for audio, dome positioning, safety timeouts, emergency stop commands, configure Bluetooth, see digital pin statuses, use the serial monitor, configure your droid's gadgets, and even use the droid control page to trigger sequences, trigger emotes, and dome controls. See more in the wiki.
+
+## Availability and Pricing
+
+Amidala boards are currently available to beta testers. Please let me know if you would prefer to have it pre-soldered or bare. Either way, it will come with the headers, slots, jumper, and power terminals. The ESP32-S3-N16R8 is standard and can be sourced from your favorite location. You will also need an XBee3 module if you intend to use Snips or Stealth controllers with your build. See the Wiki page for details on the recommended options. Price is $20 per board plus shipping, which includes a small donation to charity. Note: This does __not__ include controllers. However, once Snips Controllers are past the prototype phase, we will offer them together with Amidala.
+
+Please reach out if you are interested in helping beta test.
 
 ## Get Started
 
