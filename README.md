@@ -52,7 +52,7 @@ The Amidala web interface allows you total control over your droid's configurati
 
 ## Availability and Pricing
 
-Amidala boards are currently available to beta testers. Please let me know if you would prefer to have it pre-soldered or bare. Either way, it will come with the headers, slots, jumper, and power terminals. The ESP32-S3-N16R8 is standard and can be sourced from your favorite location. You will also need an XBee3 module if you intend to use Snips or Stealth controllers with your build. See the Wiki page for details on the recommended options. Price is $20 per board plus shipping, which includes a small donation to charity. Note: This does __not__ include controllers. However, once Snips Controllers are past the prototype phase, we will offer them together with Amidala.
+Amidala boards are currently available to beta testers. Please let me know if you would prefer to have it pre-soldered or bare. Either way, it will come with the headers, slots, jumper, and power terminals. The ESP32-S3-N16R8 is standard and can be sourced from your favorite location. You will also need an XBee3 module if you intend to use Snips or Stealth controllers with your build. See the Wiki page for details on the recommended options. Price is $30 per board plus shipping, which includes a small donation to charity. Note: This does __not__ include controllers. However, once Snips Controllers are past the prototype phase, we will offer them together with Amidala.
 
 Please reach out if you are interested in helping beta test.
 
