@@ -151,6 +151,10 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     // Runtime debug-mode log capture (issue #199)
     json += "\"debugmode\":\""   + String(p.debugmode ? "y" : "n")     + "\",";
 
+    // Controller type (issue #203) -- UI-facing declaration only, does not
+    // gate dispatch. See CONTROLLER_TYPE_* in params.h.
+    json += "\"controllertype\":" + String(p.controllertype) + ",";
+
     // XBee
     json += "\"xbr\":\"" + hexStr(p.xbr) + "\",";
     json += "\"xbl\":\"" + hexStr(p.xbl) + "\",";

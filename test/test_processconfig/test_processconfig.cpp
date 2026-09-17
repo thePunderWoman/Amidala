@@ -273,6 +273,45 @@ void test_altbtn_clamps_above_nine() {
     TEST_ASSERT_EQUAL(9, p.altbtn);
 }
 
+// ---- Controller type (issue #203) -------------------------------------------
+
+void test_controllertype_intparam_routes_to_correct_field() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool matched = intparam("controllertype=2", "controllertype=", p.controllertype,
+                             CONTROLLER_TYPE_XBEE, CONTROLLER_TYPE_RC);
+    TEST_ASSERT_TRUE(matched);
+    TEST_ASSERT_EQUAL(CONTROLLER_TYPE_BLUETOOTH, p.controllertype);
+}
+
+void test_controllertype_accepts_xbee_default() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool matched = intparam("controllertype=0", "controllertype=", p.controllertype,
+                             CONTROLLER_TYPE_XBEE, CONTROLLER_TYPE_RC);
+    TEST_ASSERT_TRUE(matched);
+    TEST_ASSERT_EQUAL(CONTROLLER_TYPE_XBEE, p.controllertype);
+}
+
+void test_controllertype_accepts_rc_max() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool matched = intparam("controllertype=3", "controllertype=", p.controllertype,
+                             CONTROLLER_TYPE_XBEE, CONTROLLER_TYPE_RC);
+    TEST_ASSERT_TRUE(matched);
+    TEST_ASSERT_EQUAL(CONTROLLER_TYPE_RC, p.controllertype);
+}
+
+void test_controllertype_clamps_above_rc() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    // 4 is out of range (only 0-3 defined) -> clamped to 3 (RC)
+    bool matched = intparam("controllertype=4", "controllertype=", p.controllertype,
+                             CONTROLLER_TYPE_XBEE, CONTROLLER_TYPE_RC);
+    TEST_ASSERT_TRUE(matched);
+    TEST_ASSERT_EQUAL(CONTROLLER_TYPE_RC, p.controllertype);
+}
+
 void test_altdomestick_intparam_zero() {
     AmidalaParameters p;
     memset(&p, 0, sizeof(p));
@@ -1047,6 +1086,11 @@ int main(int argc, char **argv) {
     RUN_TEST(test_domestall_clamps_below_minimum);
     RUN_TEST(test_roboclaw_fields_are_distinct_from_each_other);
     RUN_TEST(test_domeerrlog_boolparam_routes_to_correct_field);
+
+    RUN_TEST(test_controllertype_intparam_routes_to_correct_field);
+    RUN_TEST(test_controllertype_accepts_xbee_default);
+    RUN_TEST(test_controllertype_accepts_rc_max);
+    RUN_TEST(test_controllertype_clamps_above_rc);
 
     RUN_TEST(test_altbtn_intparam_routes_to_correct_field);
     RUN_TEST(test_altbtn_accepts_zero_disabled);

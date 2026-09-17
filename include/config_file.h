@@ -106,6 +106,7 @@ inline bool ensureConfigDefaults(const AmidalaParameters& params) {
         return String(buf);
     };
     const DefaultableConfigKey keys[] = {
+        {"controllertype=", String(params.controllertype)},
         {"volumeChA=",      String(params.volumeChA)},
         {"volumeChB=",      String(params.volumeChB)},
         {"auxserial3=",     fmtBool(params.auxserial3)},

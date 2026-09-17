@@ -29,6 +29,17 @@
 #define AUDIO_HW_VMUSIC 2  // VMusic2
 #endif
 
+// ---- Controller type selection (issue #203) ---------------------------------
+// Purely a persisted "what do I have" declaration for the web UI (which nav
+// cards/help banners to show, how to label the button-config page) -- it does
+// NOT gate dispatch. XBee, RC, and Bluetooth input all remain capability-driven
+// exactly as before (whichever hardware is actually talking gets to fire
+// buttons), matching the existing graceful multi-source design.
+#define CONTROLLER_TYPE_XBEE      0  // XBee Pocket Remote (default)
+#define CONTROLLER_TYPE_SNIPS     1  // Snips Controllers (hardware/protocol TBD)
+#define CONTROLLER_TYPE_BLUETOOTH 2  // Bluetooth gamepad
+#define CONTROLLER_TYPE_RC        3  // RC (PPM) radio
+
 // ---- Auxiliary string count -------------------------------------------------
 
 // ---- Default pin-role mapping (issue #133) ----------------------------------
@@ -163,6 +174,8 @@ struct AmidalaParameters {
   };
 
   char serial[5];
+  uint8_t controllertype; /* CONTROLLER_TYPE_XBEE (default), _SNIPS, _BLUETOOTH,
+                              or _RC -- see the constants above */
   uint32_t xbr;      /* Right XBEE's unique serial number (lower address) */
   uint32_t xbl;      /* Left XBEE's unique serial number (lower address) */
   uint8_t rcchn;     /* How many channels does the RC radio have */
@@ -520,6 +533,7 @@ struct AmidalaParameters {
       domeflip = DEFAULT_DOME_INVERTED;
       domeimu = true;
       domeerrlog = false;
+      controllertype = CONTROLLER_TYPE_XBEE;
       altbtn = 0;
       altdomestick = 0;
       mutebutton = 0;

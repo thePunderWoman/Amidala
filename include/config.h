@@ -153,6 +153,7 @@ private:
 
   bool cfg_xbr(const char *cmd);
   bool cfg_xbl(const char *cmd);
+  bool cfg_controllertype(const char *cmd);
 
   bool cfg_altbtn(const char *cmd);
   bool cfg_altdomestick(const char *cmd);

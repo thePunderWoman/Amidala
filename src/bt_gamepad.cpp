@@ -1,4 +1,5 @@
 #include "bt_gamepad.h"
+#include "controller.h"
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEScan.h>
@@ -66,7 +67,8 @@ BTGamepad::BTGamepad() :
     fScanDone(false),
     fDoConnect(false),
     fConnecting(false),
-    fScanResultCount(0)
+    fScanResultCount(0),
+    fDriver(nullptr)
 {
     fTargetAddr[0]    = '\0';
     fConnectedAddr[0] = '\0';
@@ -278,6 +280,11 @@ void BTGamepad::_onScanDone()
 // layout.  We detect it by report length and adjust accordingly.
 void BTGamepad::_parseReport(const uint8_t* d, size_t len)
 {
+    // Snapshot before mutating state -- _dispatchButtons() diffs against this
+    // to find button-up/long-press transitions, same as XBeePocketRemote::
+    // update() (xbee_remote.h) does for the XBee-fed drive/dome sticks.
+    State prev = state;
+
     // Some devices prepend a 1-byte report ID — skip it if len is 16 and
     // first byte is 0x01 (most common report ID).
     size_t off = 0;
@@ -320,6 +327,7 @@ void BTGamepad::_parseReport(const uint8_t* d, size_t len)
         state.button.down  = (hat == 3 || hat == 4 || hat == 5);
         state.button.left  = (hat == 5 || hat == 6 || hat == 7);
 
+        _dispatchButtons(prev);
         notify();
     } else if (len - off >= 14) {
         // Xbox Series BLE: 16-bit axes (little-endian), different byte layout.
@@ -357,7 +365,99 @@ void BTGamepad::_parseReport(const uint8_t* d, size_t len)
             state.button.down  = (hat == 5);
             state.button.left  = (hat == 7);
         }
+        _dispatchButtons(prev);
         notify();
+    }
+}
+
+// Mirrors XBeePocketRemote's CHECK_BUTTON_LONGPRESS macro (xbee_remote.h):
+// starts the press timer on button-down, clears it (and suppresses the
+// trailing button-up, via the `up` out-param) once a long-press already
+// fired, and fires exactly once after LONG_PRESS_TIME while still held.
+bool BTGamepad::_checkLongPress(LongPress& lp, bool down, bool& up, bool held)
+{
+    // Matches xbee_remote.h's LONG_PRESS_TIME default -- kept as a separate
+    // constant here rather than shared, since XBee's is overrideable via
+    // #define before including that header and this isn't.
+    static const uint32_t kLongPressTime = 3000;
+    bool longUp = false;
+    if (down) {
+        lp.pressTime = millis();
+        lp.longPress = false;
+    } else if (up) {
+        lp.pressTime = 0;
+        if (lp.longPress) up = false;
+        lp.longPress = false;
+    } else if (lp.pressTime != 0 && held) {
+        if (lp.pressTime + kLongPressTime < millis()) {
+            lp.pressTime = 0;
+            lp.longPress = true;
+            longUp = true;
+        }
+    }
+    return longUp;
+}
+
+// Dispatch face buttons + L3 (triangle/circle/cross/square/l3) through
+// AmidalaController's drive-side button slots 1-5, mirroring
+// XBeePocketRemote::update()'s CHECK_BUTTON_UP/CHECK_BUTTON_LONGPRESS diffing
+// (include/xbee_remote.h) and DriveController::notify()'s DISPATCH_BUTTON/
+// DISPATCH_LONG dispatch (src/drive_controllers.cpp) -- same slot numbers,
+// same alt/mute button config, so B[]/LB[]/AB[]/DB[]/altbtn/mutebutton apply
+// identically regardless of which physical controller triggers them.
+//
+// Dome slots 6-9 and gesture input are intentionally not handled here (see
+// the class comment in bt_gamepad.h).
+void BTGamepad::_dispatchButtons(const State& prev)
+{
+    if (!fDriver) return;
+
+    bool down_triangle = !prev.button.triangle && state.button.triangle;
+    bool down_circle   = !prev.button.circle   && state.button.circle;
+    bool down_cross    = !prev.button.cross    && state.button.cross;
+    bool down_square   = !prev.button.square   && state.button.square;
+    bool down_l3       = !prev.button.l3       && state.button.l3;
+
+    bool up_triangle = prev.button.triangle && !state.button.triangle;
+    bool up_circle   = prev.button.circle   && !state.button.circle;
+    bool up_cross    = prev.button.cross    && !state.button.cross;
+    bool up_square   = prev.button.square   && !state.button.square;
+    bool up_l3       = prev.button.l3       && !state.button.l3;
+
+    bool long_triangle = _checkLongPress(fLongPress.triangle, down_triangle, up_triangle, state.button.triangle);
+    bool long_circle   = _checkLongPress(fLongPress.circle,   down_circle,   up_circle,   state.button.circle);
+    bool long_cross    = _checkLongPress(fLongPress.cross,    down_cross,    up_cross,    state.button.cross);
+    bool long_square   = _checkLongPress(fLongPress.square,   down_square,   up_square,   state.button.square);
+    bool long_l3       = _checkLongPress(fLongPress.l3,       down_l3,       up_l3,       state.button.l3);
+
+    int altbtn = fDriver->params.altbtn;
+    if (altbtn >= 1 && altbtn <= 5) {
+        bool held = (altbtn == 1) ? state.button.triangle :
+                    (altbtn == 2) ? state.button.circle   :
+                    (altbtn == 3) ? state.button.cross    :
+                    (altbtn == 4) ? state.button.square   : state.button.l3;
+        fDriver->setAltHeld(held);
+    }
+    bool altHeld = fDriver->isAltHeld();
+
+#define BT_DISPATCH(name, num) \
+    if (up_##name && altbtn != (num)) { \
+        altHeld ? fDriver->processAltButton(num) : fDriver->noteButtonUp(num); \
+    } \
+    if (long_##name && altbtn != (num) && !altHeld) fDriver->processLongButton(num);
+
+    BT_DISPATCH(triangle, 1)
+    BT_DISPATCH(circle,   2)
+    BT_DISPATCH(cross,    3)
+    BT_DISPATCH(square,   4)
+    BT_DISPATCH(l3,       5)
+#undef BT_DISPATCH
+
+    int muteBtn = fDriver->params.mutebutton;
+    if (muteBtn >= 1 && muteBtn <= 5) {
+        bool muteUp = (muteBtn == 1) ? up_triangle : (muteBtn == 2) ? up_circle :
+                      (muteBtn == 3) ? up_cross    : (muteBtn == 4) ? up_square : up_l3;
+        if (muteUp) fDriver->noteMuteBtnUp();
     }
 }
 

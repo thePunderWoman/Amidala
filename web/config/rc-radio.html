@@ -37,15 +37,19 @@ var SCHEMA = [
   {key:'j1adjh',label:'Horizontal Adjust',   type:'number', min:0,   max:80}
 ];
 buildPage(SCHEMA, '/api/config', function(d) {
-  if (d.rcchn == 0) {
-    var banner = '<div class="info-banner">RC Radio is not configured (channel count = 0). '
-      + 'These settings have no effect until an RC receiver is connected and rcchn is set to 6 or more.</div>';
-    document.querySelector('main').insertAdjacentHTML('afterbegin', banner);
-  } else {
-    document.querySelector('main').insertAdjacentHTML('afterbegin',
-      '<div class="info-banner">These settings apply only when using an RC radio receiver (PPM/PWM input). '
-      + 'If your build uses XBee or a wired pocket remote, this page has no effect.</div>');
+  var banners = '';
+  if (d.controllertype !== 3) { // CONTROLLER_TYPE_RC
+    banners += '<div class="info-banner">Controller Type is not set to RC (PPM) on the '
+      + '<a href="/config/controllers">Controllers</a> page — set it there to use this section.</div>';
   }
+  if (d.rcchn == 0) {
+    banners += '<div class="info-banner">RC Radio is not configured (channel count = 0). '
+      + 'These settings have no effect until an RC receiver is connected and rcchn is set to 6 or more.</div>';
+  } else {
+    banners += '<div class="info-banner">These settings apply only when using an RC radio receiver (PPM/PWM input). '
+      + 'If your build uses XBee or a wired pocket remote, this page has no effect.</div>';
+  }
+  document.querySelector('main').insertAdjacentHTML('afterbegin', banners);
 });
 </script>
 </body>

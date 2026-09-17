@@ -15,6 +15,8 @@ struct BTScanResult {
     int  rssi;
 };
 
+class AmidalaController;
+
 // BLE HID gamepad that presents as a JoystickController.
 //
 // Reconnects only to an already-paired device (btaddr); never scans for an
@@ -28,6 +30,15 @@ struct BTScanResult {
 // Trigger (LT/RT, L2/R2) → button.l2 / button.r2
 // D-pad → button.up/down/left/right
 // Start/Menu → button.start   Select/Back → button.select
+//
+// Buttons: face buttons + L3 (triangle/circle/cross/square/l3) are dispatched
+// through AmidalaController's drive-side button slots 1-5 -- the same slots
+// XBee's DriveController uses (see src/drive_controllers.cpp), so B[]/LB[]/
+// AB[]/DB[]/altbtn/mutebutton configured there apply identically whether an
+// XBee drive remote or this gamepad triggers them. Dome slots 6-9 and gesture
+// input are NOT covered here -- those are tightly coupled to DomeController's
+// RoboClaw-specific gesture/abs-stick state machine and need their own design
+// pass (issue #203 follow-up).
 class BTGamepad : public JoystickController, public SetupEvent, public AnimatedEvent
 {
 public:
@@ -37,6 +48,12 @@ public:
 
     // Set target device MAC (AA:BB:CC:DD:EE:FF).  Empty string = auto (first HID).
     void setTargetAddr(const char* addr);
+
+    // Wire up the button-dispatch target. Called once from AmidalaController's
+    // setup(), mirroring DriveController(AmidalaController*) in xbee_remote.h --
+    // gBTGamepad is a global constructed before AmidalaController exists, so
+    // this can't be a constructor argument.
+    void setDriver(AmidalaController* driver) { fDriver = driver; }
 
     // --- Scanning ------------------------------------------------------------
 
@@ -101,8 +118,16 @@ private:
 
     BTScanPolicy fScanPolicy;
 
+    AmidalaController* fDriver;
+    struct LongPress { uint32_t pressTime = 0; bool longPress = false; };
+    struct {
+        LongPress l3, triangle, circle, cross, square;
+    } fLongPress;
+
     void _attemptConnect();
     void _parseReport(const uint8_t* data, size_t len);
+    void _dispatchButtons(const State& prev);
+    static bool _checkLongPress(LongPress& lp, bool down, bool& up, bool held);
 };
 
 // Global instance — declared here, defined in bt_gamepad.cpp.

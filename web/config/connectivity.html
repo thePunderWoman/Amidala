@@ -67,6 +67,12 @@ buildPage(SCHEMA, '/api/config', function() {
   else document.querySelector('main').appendChild(panel);
   refreshBTStatus();
 
+  var btHint = document.createElement('div');
+  btHint.className = 'info-banner';
+  btHint.innerHTML = 'Tip: set Controller Type &#8594; Bluetooth Gamepad on the '
+    + '<a href="/config/controllers">Controllers</a> page once this is paired.';
+  panel.insertAdjacentElement('afterend', btHint);
+
   var wcbPanel = document.createElement('div');
   wcbPanel.id = 'wcb-panel';
   var wcbRow = document.querySelector('[data-key="outboundserial"]');

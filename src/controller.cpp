@@ -190,6 +190,12 @@ void AmidalaController::setup() {
   fWCB.begin(params, fHCR, fConsole);
 #endif
 
+  // Buttons: face buttons + L3 dispatch through drive-side slots 1-5
+  // regardless of whether btcontrolleron is on yet (harmless no-op until a
+  // report actually arrives) -- mirrors setGuestStick()/setAltDomeStick()
+  // below being wired unconditionally too.
+  gBTGamepad.setDriver(this);
+
   // BT gamepad left stick drives when the primary XBee stick is absent.
   fTankDrive->setGuestStick(gBTGamepad);
   // BT gamepad right stick steers the dome when the XBee dome stick is absent.

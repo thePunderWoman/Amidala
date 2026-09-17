@@ -303,8 +303,7 @@ Promise.all([
     document.getElementById('fw-sub').textContent = 'OTA · v'+d.version;
   if (d.wifi_ip)
     document.getElementById('footer').textContent = 'SERVED LOCALLY · '+d.wifi_ip;
-  var xbeeActive = (cfg.xbr && cfg.xbr!=='00000000') || (cfg.xbl && cfg.xbl!=='00000000');
-  if (xbeeActive) {
+  if (cfg.controllertype !== 3) { // CONTROLLER_TYPE_RC
     var rc = document.getElementById('nav-rc');
     if (rc) rc.style.display = 'none';
   }
@@ -1928,6 +1927,12 @@ buildPage(SCHEMA, '/api/config', function() {
   if (btRow) btRow.insertAdjacentElement('afterend', panel);
   else document.querySelector('main').appendChild(panel);
   refreshBTStatus();
+
+  var btHint = document.createElement('div');
+  btHint.className = 'info-banner';
+  btHint.innerHTML = 'Tip: set Controller Type &#8594; Bluetooth Gamepad on the '
+    + '<a href="/config/controllers">Controllers</a> page once this is paired.';
+  panel.insertAdjacentElement('afterend', btHint);
 
   var wcbPanel = document.createElement('div');
   wcbPanel.id = 'wcb-panel';
@@ -5362,15 +5367,19 @@ var SCHEMA = [
   {key:'j1adjh',label:'Horizontal Adjust',   type:'number', min:0,   max:80}
 ];
 buildPage(SCHEMA, '/api/config', function(d) {
-  if (d.rcchn == 0) {
-    var banner = '<div class="info-banner">RC Radio is not configured (channel count = 0). '
-      + 'These settings have no effect until an RC receiver is connected and rcchn is set to 6 or more.</div>';
-    document.querySelector('main').insertAdjacentHTML('afterbegin', banner);
-  } else {
-    document.querySelector('main').insertAdjacentHTML('afterbegin',
-      '<div class="info-banner">These settings apply only when using an RC radio receiver (PPM/PWM input). '
-      + 'If your build uses XBee or a wired pocket remote, this page has no effect.</div>');
+  var banners = '';
+  if (d.controllertype !== 3) { // CONTROLLER_TYPE_RC
+    banners += '<div class="info-banner">Controller Type is not set to RC (PPM) on the '
+      + '<a href="/config/controllers">Controllers</a> page — set it there to use this section.</div>';
   }
+  if (d.rcchn == 0) {
+    banners += '<div class="info-banner">RC Radio is not configured (channel count = 0). '
+      + 'These settings have no effect until an RC receiver is connected and rcchn is set to 6 or more.</div>';
+  } else {
+    banners += '<div class="info-banner">These settings apply only when using an RC radio receiver (PPM/PWM input). '
+      + 'If your build uses XBee or a wired pocket remote, this page has no effect.</div>';
+  }
+  document.querySelector('main').insertAdjacentHTML('afterbegin', banners);
 });
 </script>
 </body>
@@ -11254,6 +11263,9 @@ footer a:hover { opacity: 1; }
 <style>
 .ctrl-type-strip{text-align:center;padding:.5rem 1rem;border-bottom:1px solid var(--border);font:500 11px/1 ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .ctrl-type-strip span{color:var(--accent)}
+.ctrl-type-sel{background:var(--surface);border:1px solid var(--border);color:var(--accent);padding:.2rem .4rem;font:inherit;letter-spacing:.12em;text-transform:uppercase;border-radius:4px;margin-left:.4rem}
+.ctrl-type-sel:focus{outline:none;border-color:var(--accent)}
+.ctrl-type-note{max-width:820px;margin:0 auto;font-size:.72rem;color:var(--muted);padding:.6rem 1rem;border-bottom:1px solid var(--border);line-height:1.6}
 .ctrl-section{max-width:820px;margin:0 auto}
 .row{display:flex;align-items:center;padding:.65rem 0;border-bottom:1px solid var(--border);gap:.5rem}
 .row-label{flex:0 0 130px;font-size:.78rem;color:var(--muted)}
@@ -11288,7 +11300,15 @@ footer a:hover { opacity: 1; }
   <a class="back" href="/">&#9664; BACK</a>
   <div class="page-title"><span class="dot"></span><span class="label">Controllers</span><span class="dot"></span></div>
 </div>
-<div class="ctrl-type-strip">Control Type: <span id="ctrl-type-val">&#8212;</span></div>
+<div class="ctrl-type-strip">Controller Type:
+  <select id="ctrl-type-sel" class="ctrl-type-sel" onchange="saveGlobal('controllertype', this.value)">
+    <option value="0">XBee Pocket Remote</option>
+    <option value="1">Snips Controllers</option>
+    <option value="2">Bluetooth Gamepad</option>
+    <option value="3">RC (PPM)</option>
+  </select>
+</div>
+<div id="ctrl-type-note" class="ctrl-type-note" style="display:none"></div>
 <div class="tabs">
   <button class="tab" data-tab="btn"  onclick="showHashTab('btn')">Buttons</button>
   <button class="tab" data-tab="gest" onclick="showHashTab('gest')">Gestures</button>
@@ -11739,11 +11759,15 @@ var BTN_NAMES = [
   'Trigger Right', 'Trigger Left', 'Top', 'Bottom'
 ];
 
-function controlTypeName(cfg) {
-  var xbeeSet = (cfg.xbr && cfg.xbr !== '00000000') || (cfg.xbl && cfg.xbl !== '00000000');
-  if (xbeeSet)       return 'XBee Pocket Remote';
-  if (cfg.rcchn > 0) return 'RC Radio';
-  return 'XBee Pocket Remote';
+var CTRL_TYPE_NOTES = {
+  '1': 'Snips Controllers hardware/firmware protocol is still in development — this reserves your preference; button mapping isn\'t wired up yet.'
+};
+
+function renderControlTypeNote() {
+  var note = document.getElementById('ctrl-type-note');
+  var text = CTRL_TYPE_NOTES[String(_cfg.controllertype)];
+  note.style.display = text ? '' : 'none';
+  note.textContent = text || '';
 }
 
 function load() {
@@ -11751,7 +11775,8 @@ function load() {
     .then(function(r) { return r.json(); })
     .then(function(d) {
       _cfg = d;
-      document.getElementById('ctrl-type-val').textContent = controlTypeName(d);
+      document.getElementById('ctrl-type-sel').value = String(d.controllertype || 0);
+      renderControlTypeNote();
       render();
     })
     .catch(function() { document.getElementById('status').textContent = 'Failed to load.'; });
@@ -11759,7 +11784,12 @@ function load() {
 
 initHashTabs('btn', function(t) { _tab = t; if (_cfg) render(); });
 
-function render() { if (!_cfg) return; _tab === 'btn' ? renderButtons() : renderGestures(); }
+function render() {
+  if (!_cfg) return;
+  document.getElementById('ctrl-type-sel').value = String(_cfg.controllertype || 0);
+  renderControlTypeNote();
+  _tab === 'btn' ? renderButtons() : renderGestures();
+}
 
 function opt(v, label, sel) {
   return '<option value="' + v + '"' + (String(sel) === String(v) ? ' selected' : '') + '>' + label + '</option>';

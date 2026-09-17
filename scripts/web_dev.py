@@ -75,6 +75,7 @@ def parse_example_config(path):
         "wifissid":      "amidala",
         "wifipassword":  "Astromech",
         "wifichannel":   1,
+        "controllertype": 0,  # CONTROLLER_TYPE_XBEE
         "xbr":           "00000000",
         "xbl":           "00000000",
         "audiohw":       "hcr",

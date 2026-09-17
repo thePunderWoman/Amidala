@@ -1025,6 +1025,14 @@ bool AmidalaConfig::cfg_xbl(const char *cmd) {
   return true;
 }
 
+// controllertype: CONTROLLER_TYPE_XBEE (default), _SNIPS, _BLUETOOTH, or _RC.
+// A UI-facing declaration of what hardware is in use -- does not gate
+// dispatch, which stays capability-driven (see params.h).
+bool AmidalaConfig::cfg_controllertype(const char *cmd) {
+  return intparam(cmd, "controllertype=", fController->params.controllertype,
+                  CONTROLLER_TYPE_XBEE, CONTROLLER_TYPE_RC);
+}
+
 // ---- Alt/mute buttons, double-press, BT, WCB, WiFi --------------------------
 
 bool AmidalaConfig::cfg_altbtn(const char *cmd) {
@@ -1468,6 +1476,7 @@ const AmidalaConfig::ConfigHandler AmidalaConfig::kConfigHandlers[] = {
     &AmidalaConfig::cfg_domech6,
     &AmidalaConfig::cfg_xbr,
     &AmidalaConfig::cfg_xbl,
+    &AmidalaConfig::cfg_controllertype,
     &AmidalaConfig::cfg_domeimu,
     &AmidalaConfig::cfg_domeflip,
     &AmidalaConfig::cfg_domespeed,
