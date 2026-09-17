@@ -277,8 +277,7 @@ Promise.all([
     document.getElementById('fw-sub').textContent = 'OTA · v'+d.version;
   if (d.wifi_ip)
     document.getElementById('footer').textContent = 'SERVED LOCALLY · '+d.wifi_ip;
-  var xbeeActive = (cfg.xbr && cfg.xbr!=='00000000') || (cfg.xbl && cfg.xbl!=='00000000');
-  if (xbeeActive) {
+  if (cfg.controllertype !== 3) { // CONTROLLER_TYPE_RC
     var rc = document.getElementById('nav-rc');
     if (rc) rc.style.display = 'none';
   }

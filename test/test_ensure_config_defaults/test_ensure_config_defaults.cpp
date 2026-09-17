@@ -27,6 +27,7 @@ static void seedFile(const char* content) { SD._fs["/config.txt"] = content; }
 static AmidalaParameters makeParams() {
     AmidalaParameters p;
     memset(&p, 0, sizeof(p));
+    p.controllertype = 2;  // CONTROLLER_TYPE_BLUETOOTH -- distinct from the 0 default
     p.volumeChA = 61;
     p.volumeChB = 62;
     p.auxserial3 = true;
@@ -86,6 +87,7 @@ void test_returns_false_when_config_missing() {
 
 void test_no_change_when_all_keys_present() {
     const char* full =
+        "controllertype=2\n"
         "volumeChA=1\nvolumeChB=2\nauxserial3=n\ndomedecelzone=5\ndomeimu=y\n"
         "domeerrlog=y\n"
         "wifion=n\nwifissid=other\nwifipassword=otherpass\nwifichannel=1\n"
@@ -156,6 +158,7 @@ void test_appends_all_when_file_has_none_of_the_keys() {
     std::string got = configTxt();
     TEST_ASSERT_TRUE(got.find("xbr=DEADBEEF") != std::string::npos);  // preserved
     TEST_ASSERT_TRUE(got.find("volume=50") != std::string::npos);     // preserved
+    TEST_ASSERT_TRUE(got.find("controllertype=2") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("volumeChA=61") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("volumeChB=62") != std::string::npos);
     TEST_ASSERT_TRUE(got.find("auxserial3=y") != std::string::npos);
