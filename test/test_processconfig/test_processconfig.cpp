@@ -256,21 +256,22 @@ void test_altbtn_accepts_zero_disabled() {
     TEST_ASSERT_EQUAL(0, p.altbtn);
 }
 
-void test_altbtn_accepts_nine_max() {
+void test_altbtn_accepts_max_buttons_max() {
     AmidalaParameters p;
     memset(&p, 0, sizeof(p));
-    bool matched = intparam("altbtn=9", "altbtn=", p.altbtn, 0, 9);
+    // MAX_BUTTONS (issue #204): real bound is 16 (Snips), not just 9 (XBee/BT).
+    bool matched = intparam("altbtn=16", "altbtn=", p.altbtn, 0, MAX_BUTTONS);
     TEST_ASSERT_TRUE(matched);
-    TEST_ASSERT_EQUAL(9, p.altbtn);
+    TEST_ASSERT_EQUAL(MAX_BUTTONS, p.altbtn);
 }
 
-void test_altbtn_clamps_above_nine() {
+void test_altbtn_clamps_above_max_buttons() {
     AmidalaParameters p;
     memset(&p, 0, sizeof(p));
-    // 10 > 9 → clamped to 9
-    bool matched = intparam("altbtn=10", "altbtn=", p.altbtn, 0, 9);
+    // 17 > MAX_BUTTONS → clamped to MAX_BUTTONS
+    bool matched = intparam("altbtn=17", "altbtn=", p.altbtn, 0, MAX_BUTTONS);
     TEST_ASSERT_TRUE(matched);
-    TEST_ASSERT_EQUAL(9, p.altbtn);
+    TEST_ASSERT_EQUAL(MAX_BUTTONS, p.altbtn);
 }
 
 // ---- Controller type (issue #203) -------------------------------------------
@@ -443,20 +444,21 @@ void test_mutebutton_accepts_zero_disabled() {
     TEST_ASSERT_EQUAL(0, p.mutebutton);
 }
 
-void test_mutebutton_accepts_nine_max() {
+void test_mutebutton_accepts_max_buttons_max() {
     AmidalaParameters p;
     memset(&p, 0, sizeof(p));
-    bool matched = intparam("mutebutton=9", "mutebutton=", p.mutebutton, 0, 9);
+    // MAX_BUTTONS (issue #204): real bound is 16 (Snips), not just 9 (XBee/BT).
+    bool matched = intparam("mutebutton=16", "mutebutton=", p.mutebutton, 0, MAX_BUTTONS);
     TEST_ASSERT_TRUE(matched);
-    TEST_ASSERT_EQUAL(9, p.mutebutton);
+    TEST_ASSERT_EQUAL(MAX_BUTTONS, p.mutebutton);
 }
 
-void test_mutebutton_clamps_above_nine() {
+void test_mutebutton_clamps_above_max_buttons() {
     AmidalaParameters p;
     memset(&p, 0, sizeof(p));
-    bool matched = intparam("mutebutton=10", "mutebutton=", p.mutebutton, 0, 9);
+    bool matched = intparam("mutebutton=17", "mutebutton=", p.mutebutton, 0, MAX_BUTTONS);
     TEST_ASSERT_TRUE(matched);
-    TEST_ASSERT_EQUAL(9, p.mutebutton);
+    TEST_ASSERT_EQUAL(MAX_BUTTONS, p.mutebutton);
 }
 
 void test_mutebutton_default_is_zero_after_init() {
@@ -1094,8 +1096,8 @@ int main(int argc, char **argv) {
 
     RUN_TEST(test_altbtn_intparam_routes_to_correct_field);
     RUN_TEST(test_altbtn_accepts_zero_disabled);
-    RUN_TEST(test_altbtn_accepts_nine_max);
-    RUN_TEST(test_altbtn_clamps_above_nine);
+    RUN_TEST(test_altbtn_accepts_max_buttons_max);
+    RUN_TEST(test_altbtn_clamps_above_max_buttons);
     RUN_TEST(test_altdomestick_intparam_zero);
     RUN_TEST(test_altdomestick_intparam_one);
     RUN_TEST(test_altdomestick_clamps_above_one);
@@ -1114,8 +1116,8 @@ int main(int argc, char **argv) {
 
     RUN_TEST(test_mutebutton_intparam_routes_to_correct_field);
     RUN_TEST(test_mutebutton_accepts_zero_disabled);
-    RUN_TEST(test_mutebutton_accepts_nine_max);
-    RUN_TEST(test_mutebutton_clamps_above_nine);
+    RUN_TEST(test_mutebutton_accepts_max_buttons_max);
+    RUN_TEST(test_mutebutton_clamps_above_max_buttons);
     RUN_TEST(test_mutebutton_default_is_zero_after_init);
     RUN_TEST(test_mutebutton_field_is_distinct_from_altbtn);
 

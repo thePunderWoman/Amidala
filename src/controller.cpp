@@ -55,6 +55,7 @@ AmidalaController::AmidalaController()
       fVMusic(VMUSIC_SERIAL),
 #endif
       fDriveStick(this), fDomeStick(this),
+      fSnipsRight(this, SnipsRemote::kRight), fSnipsLeft(this, SnipsRemote::kLeft),
       params(allocParamsInPSRAM()),
 #ifdef RDH_SERIAL
       fAutoDome(RDH_SERIAL),
@@ -235,6 +236,11 @@ void AmidalaController::setup() {
   remote[1]->addr = params.xbl;
   remote[0]->type = remote[0]->kFailsafe;
   remote[1]->type = remote[1]->kFailsafe;
+  // Snips Controllers (issue #204) reuse the same xbr/xbl addresses --
+  // xbr/xbl and the Snips receive path are mutually exclusive at runtime
+  // (see params.controllertype), so there's no collision in sharing them.
+  fSnipsRight.addr = params.xbr;
+  fSnipsLeft.addr = params.xbl;
 
 #ifdef STATUS_J1_PIN
   pinMode(STATUS_J1_PIN, OUTPUT);
@@ -406,67 +412,81 @@ void AmidalaController::animate() {
   }
 #endif
 
-  if (checkRCMode() && remote[0]->failsafe() && remote[0]->failsafeNotice &&
-      remote[1]->failsafe() && remote[1]->failsafeNotice) {
-    // Both Pocket Remotes are disabled enable RC controller
-    fPPMDecoder.init();
-    remote[0]->type = remote[0]->kRC;
-    remote[1]->type = remote[1]->kRC;
-  }
-  xbeeSPIReceiveAll(remote, sizeof(remote) / sizeof(remote[0]));
-
-  if (checkRCMode() && remote[0]->type == remote[0]->kRC &&
-      digitalRead(XBEE_ATTN_PIN) == HIGH) {
-    if (fPPMDecoder.decode()) {
-      remote[0]->x = fPPMDecoder.channel(0, 0, 1024, 512);
-      remote[0]->y = fPPMDecoder.channel(1, 0, 1024, 512);
-      remote[0]->w1 = fPPMDecoder.channel(4, 0, 1024, 0);
-      remote[0]->update();
-
-      remote[1]->x = fPPMDecoder.channel(2, 0, 1024, 512);
-      remote[1]->y = fPPMDecoder.channel(3, 0, 1024, 512);
-      remote[1]->w1 = fPPMDecoder.channel(5, 0, 1024, 0);
-      remote[1]->update();
-    }
+  // Snips Controllers (issue #204) speak a different payload format (custom
+  // UplinkPacket over Receive Packet/0x90) than the XBee pocket remote's IO
+  // Sample frames (0x92/0x82) over the same shared SPI link -- an
+  // intentional, narrow exception to the "controllertype doesn't gate
+  // dispatch" principle noted in params.h, needed because this is the only
+  // way to know which parser to run over that one link. RC/failsafe
+  // fallback and XBee pocket remote input are otherwise untouched below.
+  if (params.controllertype == CONTROLLER_TYPE_SNIPS) {
+    SnipsRemote* snipsRemotes[2] = {&fSnipsRight, &fSnipsLeft};
+    xbeeSPIReceiveAllSnips(snipsRemotes, 2);
+    fSnipsRight.checkFailsafe(params.fst);
+    fSnipsLeft.checkFailsafe(params.fst);
   } else {
-    bool stickActive = false;
-    for (unsigned i = 0; i < sizeof(remote) / sizeof(remote[0]); i++) {
-      auto r = remote[i];
-      if (r->type == r->kXBee) {
-        stickActive = true;
-#ifdef USE_POCKET_REMOTE_DEBUG
-        if (i == 0) {
-          DEBUG_PRINT(F("J1 x="));
-          DEBUG_PRINT(r->x);
-          DEBUG_PRINT(F(" y="));
-          DEBUG_PRINTLN(r->y);
-        }
-#endif
-        if (r->lastPacket + params.fst < millis())
-          r->type = r->kFailsafe;
-        r->update();
-      }
+    if (checkRCMode() && remote[0]->failsafe() && remote[0]->failsafeNotice &&
+        remote[1]->failsafe() && remote[1]->failsafeNotice) {
+      // Both Pocket Remotes are disabled enable RC controller
+      fPPMDecoder.init();
+      remote[0]->type = remote[0]->kRC;
+      remote[1]->type = remote[1]->kRC;
     }
-    (void)stickActive;
-    for (unsigned i = 0; i < sizeof(remote) / sizeof(remote[0]); i++) {
-      auto r = remote[i];
-      if (r->failsafe() != r->failsafeNotice) {
-        if (stickActive)
-          fConsole.println();
-        fConsole.print('J');
-        fConsole.print(i + 1);
-        fConsole.print(F(" FS "));
-        fConsole.println(r->failsafe() ? F("ON") : F("OFF"));
-        if (i == 0) {
-#ifdef STATUS_J1_PIN
-          digitalWrite(STATUS_J1_PIN, r->failsafe() ? LOW : HIGH);
+    xbeeSPIReceiveAll(remote, sizeof(remote) / sizeof(remote[0]));
+
+    if (checkRCMode() && remote[0]->type == remote[0]->kRC &&
+        digitalRead(XBEE_ATTN_PIN) == HIGH) {
+      if (fPPMDecoder.decode()) {
+        remote[0]->x = fPPMDecoder.channel(0, 0, 1024, 512);
+        remote[0]->y = fPPMDecoder.channel(1, 0, 1024, 512);
+        remote[0]->w1 = fPPMDecoder.channel(4, 0, 1024, 0);
+        remote[0]->update();
+
+        remote[1]->x = fPPMDecoder.channel(2, 0, 1024, 512);
+        remote[1]->y = fPPMDecoder.channel(3, 0, 1024, 512);
+        remote[1]->w1 = fPPMDecoder.channel(5, 0, 1024, 0);
+        remote[1]->update();
+      }
+    } else {
+      bool stickActive = false;
+      for (unsigned i = 0; i < sizeof(remote) / sizeof(remote[0]); i++) {
+        auto r = remote[i];
+        if (r->type == r->kXBee) {
+          stickActive = true;
+#ifdef USE_POCKET_REMOTE_DEBUG
+          if (i == 0) {
+            DEBUG_PRINT(F("J1 x="));
+            DEBUG_PRINT(r->x);
+            DEBUG_PRINT(F(" y="));
+            DEBUG_PRINTLN(r->y);
+          }
 #endif
-        } else if (i == 1) {
-#ifdef STATUS_J2_PIN
-          digitalWrite(STATUS_J2_PIN, r->failsafe() ? LOW : HIGH);
-#endif
+          if (r->lastPacket + params.fst < millis())
+            r->type = r->kFailsafe;
+          r->update();
         }
-        r->failsafeNotice = r->failsafe();
+      }
+      (void)stickActive;
+      for (unsigned i = 0; i < sizeof(remote) / sizeof(remote[0]); i++) {
+        auto r = remote[i];
+        if (r->failsafe() != r->failsafeNotice) {
+          if (stickActive)
+            fConsole.println();
+          fConsole.print('J');
+          fConsole.print(i + 1);
+          fConsole.print(F(" FS "));
+          fConsole.println(r->failsafe() ? F("ON") : F("OFF"));
+          if (i == 0) {
+#ifdef STATUS_J1_PIN
+            digitalWrite(STATUS_J1_PIN, r->failsafe() ? LOW : HIGH);
+#endif
+          } else if (i == 1) {
+#ifdef STATUS_J2_PIN
+            digitalWrite(STATUS_J2_PIN, r->failsafe() ? LOW : HIGH);
+#endif
+          }
+          r->failsafeNotice = r->failsafe();
+        }
       }
     }
   }

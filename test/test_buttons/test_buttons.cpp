@@ -26,9 +26,11 @@ void tearDown(void) {}
 // processButton(1) accesses B[0], processButton(9) accesses B[8].
 // So valid range is [1, getButtonCount()].
 
-void test_button_count_is_9() {
+void test_button_count_matches_max_buttons() {
     AmidalaParameters p;
-    TEST_ASSERT_EQUAL(9, p.getButtonCount());
+    // MAX_BUTTONS (issue #204): sized for Snips Controllers' 16 buttons, not
+    // just XBee/Bluetooth's 9 -- see params.h.
+    TEST_ASSERT_EQUAL(MAX_BUTTONS, p.getButtonCount());
 }
 
 void test_button_array_size_matches_count() {
@@ -100,7 +102,7 @@ int main(int argc, char **argv) {
     (void)argc; (void)argv;
     UNITY_BEGIN();
 
-    RUN_TEST(test_button_count_is_9);
+    RUN_TEST(test_button_count_matches_max_buttons);
     RUN_TEST(test_button_array_size_matches_count);
 
     RUN_TEST(test_guard_rejects_zero);

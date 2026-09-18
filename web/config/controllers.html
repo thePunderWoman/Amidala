@@ -67,14 +67,24 @@
 var _cfg = null;
 var _tab = 'btn';
 
+var CONTROLLER_TYPE_SNIPS = 1;
+
 var BTN_NAMES = [
   '', // index 0 unused (buttons are 1-based)
   'Trigger Right', 'Trigger Left', 'Top', 'Bottom', 'Stick Press',
   'Trigger Right', 'Trigger Left', 'Top', 'Bottom'
 ];
 
+// 8 fire-and-forget buttons per Snips controller (see include/snips_buttons.h):
+// Macro1-6, Bumper, Stick Click. Right controller = 1-8, Left = 9-16.
+var SNIPS_BTN_NAMES = [
+  '', // index 0 unused (buttons are 1-based)
+  'Macro 1', 'Macro 2', 'Macro 3', 'Macro 4', 'Macro 5', 'Macro 6', 'Bumper', 'Stick Click',
+  'Macro 1', 'Macro 2', 'Macro 3', 'Macro 4', 'Macro 5', 'Macro 6', 'Bumper', 'Stick Click'
+];
+
 var CTRL_TYPE_NOTES = {
-  '1': 'Snips Controllers hardware/firmware protocol is still in development — this reserves your preference; button mapping isn\'t wired up yet.'
+  '1': 'Button mapping (press/long-press/alt/double-press) is live for Snips Controllers. Stick/trigger input and the controller\'s own OLED display are not wired up yet.'
 };
 
 function renderControlTypeNote() {
@@ -216,10 +226,20 @@ function saveBtn(n, lyr, sel) {
 }
 
 function renderButtons() {
+  var isSnips   = Number(_cfg.controllertype) === CONTROLLER_TYPE_SNIPS;
+  var names     = isSnips ? SNIPS_BTN_NAMES : BTN_NAMES;
+  var maxBtn    = isSnips ? 16 : 9;
+  var splitAt   = isSnips ? 8  : 5;
+  var rightHdr  = isSnips ? 'Right Snips Controller' : 'Right Controller';
+  var leftHdr   = isSnips ? 'Left Snips Controller'  : 'Left Controller';
+
   var altbtn    = _cfg.altbtn     || 0;
   var mutebutton= _cfg.mutebutton || 0;
   var ads       = _cfg.altdomestick || 0;
-  var showAlt   = altbtn > 0;
+  // Guard against a stale altbtn left over from switching controllertype --
+  // B[]/LB[]/AB[]/DB[] are shared storage (see params.h), so a button number
+  // valid under one scheme may be out of range under the other.
+  var showAlt   = altbtn > 0 && altbtn <= maxBtn;
   var h = '<div class="ctrl-section">';
 
   h += '<div class="sec-hdr">Controller Settings</div>';
@@ -227,18 +247,18 @@ function renderButtons() {
   h += '<div class="row"><div class="row-label">Alt Button</div>';
   h += '<select name="altbtn" class="row-sel" onchange="saveGlobal(\'altbtn\',this.value)">';
   h += opt('0', 'None', altbtn === 0 ? '0' : String(altbtn));
-  for (var i = 1; i <= 9; i++) {
-    var ctrl = i <= 5 ? 'Right' : 'Left';
-    h += opt(String(i), ctrl + ' — ' + BTN_NAMES[i], String(altbtn));
+  for (var i = 1; i <= maxBtn; i++) {
+    var ctrl = i <= splitAt ? 'Right' : 'Left';
+    h += opt(String(i), ctrl + ' — ' + names[i], String(altbtn));
   }
   h += '</select></div>';
 
   h += '<div class="row"><div class="row-label">Mute Button</div>';
   h += '<select name="mutebutton" class="row-sel" onchange="saveGlobal(\'mutebutton\',this.value)">';
   h += opt('0', 'None', mutebutton === 0 ? '0' : String(mutebutton));
-  for (var i = 1; i <= 9; i++) {
-    var ctrl = i <= 5 ? 'Right' : 'Left';
-    h += opt(String(i), ctrl + ' — ' + BTN_NAMES[i], String(mutebutton));
+  for (var i = 1; i <= maxBtn; i++) {
+    var ctrl = i <= splitAt ? 'Right' : 'Left';
+    h += opt(String(i), ctrl + ' — ' + names[i], String(mutebutton));
   }
   h += '</select></div>';
 
@@ -259,24 +279,24 @@ function renderButtons() {
   h += '</select></div>';
 
   h += '<div class="sec-hdr">Button Assignments</div>';
-  if (showAlt) h += '<div class="gest-note" style="font-size:.65rem;margin:0">Alt Press column active (Alt Button = ' + BTN_NAMES[altbtn] + ').</div>';
+  if (showAlt) h += '<div class="gest-note" style="font-size:.65rem;margin:0">Alt Press column active (Alt Button = ' + names[altbtn] + ').</div>';
 
-  h += '<div class="sub-hdr">Right Controller</div>';
-  for (var i = 1; i <= 5; i++) h += renderBtnCard(i, showAlt, altbtn, mutebutton);
-  h += '<div class="sub-hdr">Left Controller</div>';
-  for (var i = 6; i <= 9; i++) h += renderBtnCard(i, showAlt, altbtn, mutebutton);
+  h += '<div class="sub-hdr">' + rightHdr + '</div>';
+  for (var i = 1; i <= splitAt; i++) h += renderBtnCard(i, showAlt, altbtn, mutebutton, names);
+  h += '<div class="sub-hdr">' + leftHdr + '</div>';
+  for (var i = splitAt + 1; i <= maxBtn; i++) h += renderBtnCard(i, showAlt, altbtn, mutebutton, names);
 
-  h += '<div class="gest-note" style="font-size:.65rem;margin:0">Left Stick Press (button 10) initiates gesture sequences and is not configurable here.</div>';
+  if (!isSnips) h += '<div class="gest-note" style="font-size:.65rem;margin:0">Left Stick Press (button 10) initiates gesture sequences and is not configurable here.</div>';
 
   h += '</div>';
   document.getElementById('main').innerHTML = h;
 }
 
-function renderBtnCard(n, showAlt, altbtn, mutebutton) {
+function renderBtnCard(n, showAlt, altbtn, mutebutton, names) {
   var isAlt  = (altbtn    === n);
   var isMute = (mutebutton === n);
   var showDbl = (_cfg.dbtimeout !== undefined && _cfg.dbtimeout > 0);
-  var title  = BTN_NAMES[n];
+  var title  = names[n];
   if (isAlt)  title += '<span class="badge">ALT</span>';
   if (isMute) title += '<span class="badge">MUTE</span>';
   var h = '<div class="btn-card">';

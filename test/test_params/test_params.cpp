@@ -39,7 +39,9 @@ void test_servo_storage_capacity() {
 
 void test_button_count() {
     AmidalaParameters p;
-    TEST_ASSERT_EQUAL(9, p.getButtonCount());
+    // MAX_BUTTONS (issue #204): sized for Snips Controllers' 16 buttons, not
+    // just XBee/Bluetooth's 9 -- see params.h.
+    TEST_ASSERT_EQUAL(MAX_BUTTONS, p.getButtonCount());
 }
 
 void test_gesture_count() {

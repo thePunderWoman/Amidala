@@ -307,6 +307,43 @@ void test_xbee_update_button_up_event_fires_on_release() {
     TEST_ASSERT_TRUE(r.event.button_up.circle);
 }
 
+// ---- XBeePocketRemote: long-press (via ButtonLongPress, issue #204) ---------
+// End-to-end coverage through update()'s CHECK_BUTTON_LONGPRESS macro --
+// previously this file had no coverage of long_button_up at all.
+
+void test_xbee_update_long_press_fires_after_threshold_and_suppresses_up() {
+    XBeePocketRemote r;
+    r.type = XBeePocketRemote::kXBee;
+
+    mock_millis_value = 1;
+    r.button[1] = true;  // circle down at t=1
+    r.update();
+    TEST_ASSERT_FALSE(r.event.long_button_up.circle);
+
+    mock_millis_value = 1 + LONG_PRESS_TIME + 1;  // still held, past threshold
+    r.update();
+    TEST_ASSERT_TRUE(r.event.long_button_up.circle);
+
+    r.button[1] = false;  // release after the long-press already fired
+    r.update();
+    TEST_ASSERT_FALSE(r.event.button_up.circle);  // suppressed
+}
+
+void test_xbee_update_released_before_threshold_does_not_long_press() {
+    XBeePocketRemote r;
+    r.type = XBeePocketRemote::kXBee;
+
+    mock_millis_value = 1;
+    r.button[2] = true;  // cross down at t=1
+    r.update();
+
+    mock_millis_value = 1 + LONG_PRESS_TIME - 1;  // released just under threshold
+    r.button[2] = false;
+    r.update();
+    TEST_ASSERT_FALSE(r.event.long_button_up.cross);
+    TEST_ASSERT_TRUE(r.event.button_up.cross);  // normal press, not suppressed
+}
+
 // ---- DriveController / DomeController: construction -------------------------
 
 void test_drive_controller_constructs() {
@@ -362,6 +399,8 @@ int main(int argc, char **argv) {
 
     RUN_TEST(test_xbee_update_button_down_event_fires_on_press);
     RUN_TEST(test_xbee_update_button_up_event_fires_on_release);
+    RUN_TEST(test_xbee_update_long_press_fires_after_threshold_and_suppresses_up);
+    RUN_TEST(test_xbee_update_released_before_threshold_does_not_long_press);
 
     RUN_TEST(test_drive_controller_constructs);
     RUN_TEST(test_dome_controller_constructs);

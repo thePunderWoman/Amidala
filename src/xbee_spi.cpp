@@ -27,6 +27,9 @@
 #include "xbee_spi.h"
 #include "xbee_frame_checksum.h"
 #include "xbee_io_sample.h"
+#include "xbee_receive_packet.h"
+#include "snips_packet.h"
+#include "snips_remote.h"
 #include "pin_config.h"
 #include <SPI.h>
 
@@ -75,17 +78,22 @@ static int32_t xbeeReadFrame(uint8_t* buf, uint16_t maxLen) {
     return length;
 }
 
-void xbeeSPIReceiveAll(XBeePocketRemote** remotes, unsigned count) {
+// Drains all queued frames (cap 8 per call) into `handler(buf, length)`,
+// shared by xbeeSPIReceiveAll()/xbeeSPIReceiveAllSnips() below -- the two
+// differ only in how they parse/dispatch a frame's body, not in how frames
+// are pumped off the SPI link.
+//
+// Cap at 8 frames per animate() cycle. If xbeeReadFrame() returns -1 (no
+// start delimiter found at all — ATTN may be stuck low with nothing
+// actually queued), break immediately — looping forever would block
+// fDomeDrive->animate() and prevent the RoboClaw homing timeout from
+// firing. A 0 return (delimiter found, but the frame itself was bad — see
+// xbeeReadFrame()'s comment) is different: the SPI stream is still in
+// sync, so keep draining — more valid frames may be queued right behind a
+// single corrupt one (issue #185).
+template <typename FrameHandler>
+static void xbeeSPIPumpFrames(FrameHandler handler) {
     uint8_t buf[64];
-
-    // Cap at 8 frames per animate() cycle. If xbeeReadFrame() returns -1 (no
-    // start delimiter found at all — ATTN may be stuck low with nothing
-    // actually queued), break immediately — looping forever would block
-    // fDomeDrive->animate() and prevent the RoboClaw homing timeout from
-    // firing. A 0 return (delimiter found, but the frame itself was bad —
-    // see xbeeReadFrame()'s comment) is different: the SPI stream is still
-    // in sync, so keep draining — more valid frames may be queued right
-    // behind a single corrupt one (issue #185).
     for (int limit = 8; limit > 0 && digitalRead(XBEE_ATTN_PIN) == LOW; limit--) {
         SPI.beginTransaction(kXBeeSettings);
         digitalWrite(XBEE_CS_PIN, LOW);
@@ -96,13 +104,19 @@ void xbeeSPIReceiveAll(XBeePocketRemote** remotes, unsigned count) {
         if (length < 0) break;
         if (length == 0) continue;
 
+        handler(buf, (uint16_t)length);
+    }
+}
+
+void xbeeSPIReceiveAll(XBeePocketRemote** remotes, unsigned count) {
+    xbeeSPIPumpFrames([remotes, count](const uint8_t *buf, uint16_t length) {
         XBeeIOSample sample;
-        if (!xbeeParseIOSample(buf, (uint16_t)length, &sample)) {
+        if (!xbeeParseIOSample(buf, length, &sample)) {
             DEBUG_PRINT("XBee: unrecognized/short frame type=0x");
             DEBUG_PRINT_HEX(buf[0]);
             DEBUG_PRINT(" len=");
             DEBUG_PRINTLN(length);
-            continue;
+            return;
         }
 
         bool matched = false;
@@ -139,5 +153,38 @@ void xbeeSPIReceiveAll(XBeePocketRemote** remotes, unsigned count) {
             DEBUG_PRINT_HEX(sample.addrLsb);
             DEBUG_PRINTLN("");
         }
-    }
+    });
+}
+
+void xbeeSPIReceiveAllSnips(SnipsRemote** remotes, unsigned count) {
+    xbeeSPIPumpFrames([remotes, count](const uint8_t *buf, uint16_t length) {
+        XBeeReceivePacket rx;
+        if (!xbeeParseReceivePacket(buf, length, &rx)) {
+            DEBUG_PRINT("XBee: unrecognized/short frame type=0x");
+            DEBUG_PRINT_HEX(buf[0]);
+            DEBUG_PRINT(" len=");
+            DEBUG_PRINTLN(length);
+            return;
+        }
+
+        Snips::UplinkPacket pkt;
+        if (!Snips::decodeUplink(rx.payload, rx.payloadLength, &pkt)) {
+            DEBUG_PRINTLN("XBee: short Snips uplink payload");
+            return;
+        }
+
+        bool matched = false;
+        for (unsigned i = 0; i < count; i++) {
+            auto r = remotes[i];
+            if (rx.addrLsb != r->addr) continue;
+            matched = true;
+            r->onUplinkReceived(pkt);
+            break;
+        }
+        if (!matched) {
+            DEBUG_PRINT("XBee: no configured Snips controller for addr 0x");
+            DEBUG_PRINT_HEX(rx.addrLsb);
+            DEBUG_PRINTLN("");
+        }
+    });
 }

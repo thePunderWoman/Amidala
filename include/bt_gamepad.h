@@ -5,6 +5,7 @@
 #include "core/AnimatedEvent.h"
 #include "JoystickController.h"
 #include "bt_scan_policy.h"
+#include "button_dispatch.h"
 
 // Maximum number of devices returned by a BLE scan.
 #define BT_SCAN_MAX_RESULTS 10
@@ -119,15 +120,13 @@ private:
     BTScanPolicy fScanPolicy;
 
     AmidalaController* fDriver;
-    struct LongPress { uint32_t pressTime = 0; bool longPress = false; };
     struct {
-        LongPress l3, triangle, circle, cross, square;
+        ButtonLongPress l3, triangle, circle, cross, square;
     } fLongPress;
 
     void _attemptConnect();
     void _parseReport(const uint8_t* data, size_t len);
     void _dispatchButtons(const State& prev);
-    static bool _checkLongPress(LongPress& lp, bool down, bool& up, bool held);
 };
 
 // Global instance — declared here, defined in bt_gamepad.cpp.

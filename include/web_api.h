@@ -327,7 +327,7 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     json += "\"dbtimeout\":"    + String(p.dbtimeout)    + ",";
     json += "\"gesturetimeout\":" + String(p.gesturetimeout) + ",";
 
-    // Button assignments — 9 buttons × 4 layers {p=press, l=long, a=alt, d=double}
+    // Button assignments — MAX_BUTTONS buttons × 4 layers {p=press, l=long, a=alt, d=double}
     json += "\"buttons\":[";
     for (unsigned i = 0; i < sizeof(p.B) / sizeof(p.B[0]); i++) {
         if (i > 0) json += ",";

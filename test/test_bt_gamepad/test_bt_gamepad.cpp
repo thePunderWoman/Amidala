@@ -11,6 +11,7 @@
 #include <string.h>
 #include "arduino_mock.h"
 #include "JoystickController.h"
+#include "button_dispatch.h"
 
 void setUp(void)    { mock_millis_value = 0; }
 void tearDown(void) {}
@@ -280,13 +281,16 @@ void test_short_report_ignored() {
 }
 
 // ---------------------------------------------------------------------------
-// Button dispatch (issue #203) — mirror of BTGamepad::_checkLongPress() /
-// _dispatchButtons() in src/bt_gamepad.cpp. Same "hand-duplicated, must stay
-// in sync" approach as parse_report() above, for the same reason: the real
-// class depends on BLE headers that don't compile natively, and the real
-// dispatch target is AmidalaController, which pulls in the whole firmware.
-// A fake driver stands in for AmidalaController here, recording calls
-// instead of acting on them.
+// Button dispatch (issue #203/#204) — BTGamepad::_dispatchButtons() itself
+// can't be called directly (BTGamepad depends on BLE headers that don't
+// compile natively), so this mirrors just its down/up diffing and altbtn/
+// mutebutton ternary lookups (bt_gamepad.cpp's own glue) -- NOT the
+// long-press timer or the alt/dispatch decision, which now live in
+// button_dispatch.h's ButtonLongPress/dispatchButtonPress() and are called
+// here for real (no BLE dependency, see test_button_dispatch.cpp for direct
+// coverage of those). This mirror is deliberately much smaller than before
+// #204 -- same "must stay in sync with bt_gamepad.cpp" caveat as
+// _parseReport()'s mirror above, just for a much smaller surface now.
 // ---------------------------------------------------------------------------
 
 struct FakeDriver {
@@ -307,49 +311,32 @@ struct FakeDriver {
     void noteMuteBtnUp()           { muteBtnUpCount++; }
 };
 
-struct LongPress { uint32_t pressTime = 0; bool longPress = false; };
-struct LongPressSet { LongPress l3, triangle, circle, cross, square; };
+struct FakeLongPressSet { ButtonLongPress l3, triangle, circle, cross, square; };
 
-static bool checkLongPress(LongPress& lp, bool down, bool& up, bool held) {
-    static const uint32_t kLongPressTime = 3000;
-    bool longUp = false;
-    if (down) {
-        lp.pressTime = millis();
-        lp.longPress = false;
-    } else if (up) {
-        lp.pressTime = 0;
-        if (lp.longPress) up = false;
-        lp.longPress = false;
-    } else if (lp.pressTime != 0 && held) {
-        if (lp.pressTime + kLongPressTime < millis()) {
-            lp.pressTime = 0;
-            lp.longPress = true;
-            longUp = true;
-        }
-    }
-    return longUp;
-}
-
-static void dispatchButtons(FakeDriver& driver, LongPressSet& lp,
+// Mirror of BTGamepad::_dispatchButtons()'s diffing/ternary glue
+// (src/bt_gamepad.cpp) -- the long-press timing and alt/mute dispatch
+// decisions below call the real button_dispatch.h functions.
+static void dispatchButtons(FakeDriver& driver, FakeLongPressSet& lp,
                              const JoystickController::State& prev,
                              const JoystickController::State& state) {
-    bool up_triangle = prev.button.triangle && !state.button.triangle;
-    bool up_circle   = prev.button.circle   && !state.button.circle;
-    bool up_cross    = prev.button.cross    && !state.button.cross;
-    bool up_square   = prev.button.square   && !state.button.square;
-    bool up_l3       = prev.button.l3       && !state.button.l3;
-
     bool down_triangle = !prev.button.triangle && state.button.triangle;
     bool down_circle   = !prev.button.circle   && state.button.circle;
     bool down_cross    = !prev.button.cross    && state.button.cross;
     bool down_square   = !prev.button.square   && state.button.square;
     bool down_l3       = !prev.button.l3       && state.button.l3;
 
-    bool long_triangle = checkLongPress(lp.triangle, down_triangle, up_triangle, state.button.triangle);
-    bool long_circle   = checkLongPress(lp.circle,   down_circle,   up_circle,   state.button.circle);
-    bool long_cross    = checkLongPress(lp.cross,    down_cross,    up_cross,    state.button.cross);
-    bool long_square   = checkLongPress(lp.square,   down_square,   up_square,   state.button.square);
-    bool long_l3       = checkLongPress(lp.l3,       down_l3,       up_l3,       state.button.l3);
+    bool up_triangle = prev.button.triangle && !state.button.triangle;
+    bool up_circle   = prev.button.circle   && !state.button.circle;
+    bool up_cross    = prev.button.cross    && !state.button.cross;
+    bool up_square   = prev.button.square   && !state.button.square;
+    bool up_l3       = prev.button.l3       && !state.button.l3;
+
+    uint32_t now = millis();
+    auto rTriangle = lp.triangle.update(down_triangle, up_triangle, state.button.triangle, now, DEFAULT_LONG_PRESS_MS);
+    auto rCircle   = lp.circle.update(down_circle,   up_circle,   state.button.circle,   now, DEFAULT_LONG_PRESS_MS);
+    auto rCross    = lp.cross.update(down_cross,    up_cross,    state.button.cross,    now, DEFAULT_LONG_PRESS_MS);
+    auto rSquare   = lp.square.update(down_square,   up_square,   state.button.square,   now, DEFAULT_LONG_PRESS_MS);
+    auto rL3       = lp.l3.update(down_l3,       up_l3,       state.button.l3,       now, DEFAULT_LONG_PRESS_MS);
 
     int altbtn = driver.altbtn;
     if (altbtn >= 1 && altbtn <= 5) {
@@ -361,30 +348,23 @@ static void dispatchButtons(FakeDriver& driver, LongPressSet& lp,
     }
     bool altHeld = driver.isAltHeld();
 
-#define BT_DISPATCH(name, num) \
-    if (up_##name && altbtn != (num)) { \
-        altHeld ? driver.processAltButton(num) : driver.noteButtonUp(num); \
-    } \
-    if (long_##name && altbtn != (num) && !altHeld) driver.processLongButton(num);
-
-    BT_DISPATCH(triangle, 1)
-    BT_DISPATCH(circle,   2)
-    BT_DISPATCH(cross,    3)
-    BT_DISPATCH(square,   4)
-    BT_DISPATCH(l3,       5)
-#undef BT_DISPATCH
+    dispatchButtonPress(driver, 1, rTriangle.up, rTriangle.longUp, altbtn, altHeld);
+    dispatchButtonPress(driver, 2, rCircle.up,   rCircle.longUp,   altbtn, altHeld);
+    dispatchButtonPress(driver, 3, rCross.up,    rCross.longUp,    altbtn, altHeld);
+    dispatchButtonPress(driver, 4, rSquare.up,   rSquare.longUp,   altbtn, altHeld);
+    dispatchButtonPress(driver, 5, rL3.up,       rL3.longUp,       altbtn, altHeld);
 
     int muteBtn = driver.mutebutton;
     if (muteBtn >= 1 && muteBtn <= 5) {
-        bool muteUp = (muteBtn == 1) ? up_triangle : (muteBtn == 2) ? up_circle :
-                      (muteBtn == 3) ? up_cross    : (muteBtn == 4) ? up_square : up_l3;
+        bool muteUp = (muteBtn == 1) ? rTriangle.up : (muteBtn == 2) ? rCircle.up :
+                      (muteBtn == 3) ? rCross.up    : (muteBtn == 4) ? rSquare.up : rL3.up;
         if (muteUp) driver.noteMuteBtnUp();
     }
 }
 
 void test_dispatch_triangle_press_release_fires_slot1() {
     FakeDriver driver;
-    LongPressSet lp;
+    FakeLongPressSet lp;
     JoystickController::State prev = {}, state = {};
 
     state.button.triangle = 1;
@@ -397,23 +377,10 @@ void test_dispatch_triangle_press_release_fires_slot1() {
     TEST_ASSERT_EQUAL(1, driver.buttonUpCount[1]);
 }
 
-void test_dispatch_l3_press_release_fires_slot5() {
-    FakeDriver driver;
-    LongPressSet lp;
-    JoystickController::State prev = {}, state = {};
-
-    state.button.l3 = 1;
-    dispatchButtons(driver, lp, prev, state);
-    prev = state;
-    state.button.l3 = 0;
-    dispatchButtons(driver, lp, prev, state);
-    TEST_ASSERT_EQUAL(1, driver.buttonUpCount[5]);
-}
-
 void test_dispatch_altbtn_suppresses_its_own_button_and_sets_held() {
     FakeDriver driver;
     driver.altbtn = 1;  // triangle is the alt modifier
-    LongPressSet lp;
+    FakeLongPressSet lp;
     JoystickController::State prev = {}, state = {};
 
     state.button.triangle = 1;  // hold alt
@@ -430,7 +397,7 @@ void test_dispatch_altbtn_suppresses_its_own_button_and_sets_held() {
 void test_dispatch_routes_to_alt_layer_while_alt_held() {
     FakeDriver driver;
     driver.altbtn = 1;  // triangle is the alt modifier
-    LongPressSet lp;
+    FakeLongPressSet lp;
     JoystickController::State prev = {}, state = {};
 
     // Hold triangle (alt), then press+release circle.
@@ -447,33 +414,10 @@ void test_dispatch_routes_to_alt_layer_while_alt_held() {
     TEST_ASSERT_EQUAL(0, driver.buttonUpCount[2]);
 }
 
-void test_dispatch_long_press_fires_after_threshold_and_suppresses_up() {
-    FakeDriver driver;
-    LongPressSet lp;
-    JoystickController::State prev = {}, state = {};
-
-    // Starts at t=1, not t=0 -- a pressTime of exactly 0 is indistinguishable
-    // from "no press in progress" in both this and the real long-press timer
-    // (xbee_remote.h has the same property), so t=0 itself can't be used here.
-    mock_millis_value = 1;
-    state.button.cross = 1;
-    dispatchButtons(driver, lp, prev, state);  // down at t=1
-    prev = state;  // next "report" arrives with cross still held
-
-    mock_millis_value = 3002;  // past the 3000ms long-press threshold
-    dispatchButtons(driver, lp, prev, state);  // still held -- long-press fires
-    TEST_ASSERT_EQUAL(1, driver.longButtonCount[3]);
-
-    prev = state;
-    state.button.cross = 0;
-    dispatchButtons(driver, lp, prev, state);  // release after a long-press
-    TEST_ASSERT_EQUAL(0, driver.buttonUpCount[3]);  // suppressed, same as XBee
-}
-
 void test_dispatch_mutebutton_slot_notifies_on_up() {
     FakeDriver driver;
     driver.mutebutton = 4;  // square
-    LongPressSet lp;
+    FakeLongPressSet lp;
     JoystickController::State prev = {}, state = {};
 
     state.button.square = 1;
@@ -516,12 +460,10 @@ int main(int argc, char **argv) {
     RUN_TEST(test_report_id_prefix_skipped_when_first_byte_is_0x01);
     RUN_TEST(test_short_report_ignored);
 
-    // Button dispatch (issue #203)
+    // Button dispatch (issue #203/#204)
     RUN_TEST(test_dispatch_triangle_press_release_fires_slot1);
-    RUN_TEST(test_dispatch_l3_press_release_fires_slot5);
     RUN_TEST(test_dispatch_altbtn_suppresses_its_own_button_and_sets_held);
     RUN_TEST(test_dispatch_routes_to_alt_layer_while_alt_held);
-    RUN_TEST(test_dispatch_long_press_fires_after_threshold_and_suppresses_up);
     RUN_TEST(test_dispatch_mutebutton_slot_notifies_on_up);
 
     return UNITY_END();
