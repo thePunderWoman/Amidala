@@ -86,6 +86,8 @@ inline String buildInfoJson(const char* drive, const char* dome,
 //   {t:5, x:ID}         for kSerialStr   (stable ID of serial string)
 //   {t:7, x:EMO, y:LVL} for kHCREmote
 //   {t:9, x:SUBCMD}     for kDomeCmd
+//   {t:10,x:DIR,y:TGT}  for kVolumeStep
+//   {t:11,x:DIR}        for kThrottleStep
 // ---------------------------------------------------------------------------
 inline String buttonActionJson(const ButtonAction& b) {
     String j = "{\"t\":";
@@ -100,6 +102,13 @@ inline String buttonActionJson(const ButtonAction& b) {
         break;
     case ButtonAction::kDomeCmd:
         j += ",\"x\":"; j += String(b.dome.subcmd);
+        break;
+    case ButtonAction::kVolumeStep:
+        j += ",\"x\":"; j += String(b.volstep.dir);
+        j += ",\"y\":"; j += String(b.volstep.target);
+        break;
+    case ButtonAction::kThrottleStep:
+        j += ",\"x\":"; j += String(b.throttlestep.dir);
         break;
     default: break;
     }
@@ -178,6 +187,9 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     json += "\"volumeChB\":"      + String(p.volumeChB)               + ",";
     json += "\"volumewheel\":"    + String(p.volumewheel)             + ",";
     json += "\"altvolumewheel\":" + String(p.altvolumewheel)          + ",";
+    json += "\"snipsvolumestep\":"   + String(p.snipsVolumeStep)      + ",";
+    json += "\"snipsthrottlestep\":" + String(p.snipsThrottleStep)    + ",";
+    json += "\"drivespeedpct\":"     + String(p.driveSpeedPct)        + ",";
     json += "\"startupem\":"      + String(p.startupem)               + ",";
     json += "\"startuplvl\":"     + String(p.startuplvl)              + ",";
     json += "\"ackem\":"          + String(p.ackem)                   + ",";
@@ -375,6 +387,13 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
             break;
         case ButtonAction::kDomeCmd:
             json += ",\"x\":"; json += String(p.G[gi].action.dome.subcmd);
+            break;
+        case ButtonAction::kVolumeStep:
+            json += ",\"x\":"; json += String(p.G[gi].action.volstep.dir);
+            json += ",\"y\":"; json += String(p.G[gi].action.volstep.target);
+            break;
+        case ButtonAction::kThrottleStep:
+            json += ",\"x\":"; json += String(p.G[gi].action.throttlestep.dir);
             break;
         default: break;
         }

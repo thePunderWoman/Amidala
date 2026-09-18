@@ -48,14 +48,15 @@
 #define CONTROLLER_TYPE_RC        3  // RC (PPM) radio
 
 // ---- Button action storage (issue #204) -------------------------------------
-// Sized for Snips Controllers' 16 buttons (8 fire-and-forget buttons x 2
-// physical controllers) -- more than the XBee pocket remote/Bluetooth
-// gamepad's 9 (5 drive + 4 dome). Safe to share one set of arrays across
-// controller types because only one type is ever active at runtime: a saved
+// Sized for Snips Controllers' 24 buttons (12 per physical controller: 6
+// macros + bumper + stick click + 4 stateful up/down buttons, x2
+// controllers) -- more than the XBee pocket remote/Bluetooth gamepad's 9
+// (5 drive + 4 dome). Safe to share one set of arrays across controller
+// types because only one type is ever active at runtime: a saved
 // "button 7" means dome-stick "cross" under CONTROLLER_TYPE_XBEE/BLUETOOTH,
 // but Snips right-controller "Bumper" under CONTROLLER_TYPE_SNIPS. See the
 // altbtn/mutebutton comment below for both numbering schemes.
-#define MAX_BUTTONS 16
+#define MAX_BUTTONS 24
 
 // ---- Auxiliary string count -------------------------------------------------
 
@@ -247,6 +248,17 @@ struct AmidalaParameters {
   // Which channel alt+wheel controls (same enum as volumewheel).
   // 0 = fall through to volumewheel behaviour (no separate alt channel).
   uint8_t altvolumewheel;
+  // ---- Snips Controllers stateful button step sizes (issue #204 phase 2) ----
+  // How much a single ButtonAction::kVolumeStep/kThrottleStep press changes
+  // its value by (0-100 scale), independently for each. Defaults: 5 for
+  // volume, 10 for throttle.
+  uint8_t snipsVolumeStep;
+  uint8_t snipsThrottleStep;
+  // Live-adjustable drive speed cap, as a percentage of MAXIMUM_SPEED (see
+  // AmidalaController::stepDriveSpeed()). Default 100 (uncapped). Applied
+  // at boot from this configured value; runtime adjustments via
+  // kThrottleStep are session-only, same as volume.
+  uint8_t driveSpeedPct;
   bool startup;
   bool rndon;
   bool ackon;
@@ -313,9 +325,19 @@ struct AmidalaParameters {
   //     CONTROLLER_TYPE_XBEE/_BLUETOOTH (1-9): drive stick triangle=1,
   //       circle=2, cross=3, square=4, l3=5; dome stick triangle=6, circle=7,
   //       cross=8, square=9.  (Dome l3 is reserved for gesture input.)
-  //     CONTROLLER_TYPE_SNIPS (1-16): right controller Macro1-6=1-6,
-  //       Bumper=7, StickClick=8; left controller Macro1-6=9-14, Bumper=15,
-  //       StickClick=16.
+  //     CONTROLLER_TYPE_SNIPS (1-24, NOT a simple contiguous per-side split
+  //       -- see SnipsRemote::buttonNumberFor()'s comment for why): right
+  //       controller Macro1-6=1-6, Bumper=7, StickClick=8; left controller
+  //       Macro1-6=9-14, Bumper=15, StickClick=16; left controller's
+  //       stateful LeftUp/LeftDown/RightUp/RightDown=17-20; right
+  //       controller's stateful LeftUp/LeftDown/RightUp/RightDown=21-24.
+  //       The stateful buttons are fully reassignable like any other button
+  //       (see ButtonAction::kVolumeStep/kThrottleStep), not fixed to a
+  //       particular meaning by hardware position -- they're deliberately
+  //       numbered past 16 (rather than immediately following each side's
+  //       fire-and-forget buttons) so that a compiled-in default for one of
+  //       them (see init() below) can never land on 1-9 and silently change
+  //       stock CONTROLLER_TYPE_XBEE/_BLUETOOTH behavior.
   //   Safe to share B[]/LB[]/AB[]/DB[] storage across both schemes only
   //   because XBee/Bluetooth and Snips are never active at the same time.
   // altdomestick: what happens to the dome stick while alt is held.
@@ -478,6 +500,9 @@ struct AmidalaParameters {
       volumeChB = 50;
       volumewheel = 0;
       altvolumewheel = 0;
+      snipsVolumeStep = 5;
+      snipsThrottleStep = 10;
+      driveSpeedPct = 100;
       startup = true;
       rndon = true;
       rnd.setGesture("3");
@@ -562,6 +587,23 @@ struct AmidalaParameters {
       mutebutton = 0;
       dbtimeout = 300;
       gesturetimeout = 1000;
+      // Default Snips Controllers stateful-button assignments (issue #204
+      // phase 2). Buttons 17-24 only -- see the numbering comment above and
+      // SnipsRemote::buttonNumberFor() for why these can never be 1-9 --
+      // so this is harmless for XBee/Bluetooth. Fully reassignable
+      // afterward like any other button.
+      // Right controller's LeftUp/LeftDown (buttons 21/22) -> Drive Throttle.
+      B[20].action = ButtonAction::kThrottleStep;
+      B[20].throttlestep.dir = 1;   // LeftUp -> up
+      B[21].action = ButtonAction::kThrottleStep;
+      B[21].throttlestep.dir = 0;   // LeftDown -> down
+      // Left controller's RightUp/RightDown (buttons 19/20) -> Volume.
+      B[18].action = ButtonAction::kVolumeStep;
+      B[18].volstep.dir = 1;       // RightUp -> up
+      B[18].volstep.target = 0;    // plain/global
+      B[19].action = ButtonAction::kVolumeStep;
+      B[19].volstep.dir = 0;       // RightDown -> down
+      B[19].volstep.target = 0;
       auxserial3 = false;
       btcontrolleron = false;
       wcbenable = false;

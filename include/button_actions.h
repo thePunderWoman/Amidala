@@ -41,7 +41,9 @@ struct ButtonAction {
     kI2CStr    = 6,
     kHCREmote  = 7,  // Trigger an HCR emotion (emotion, level)
     kHCRMuse   = 8,  // Toggle HCR musing on/off
-    kDomeCmd   = 9   // Dome drive command (subcmd, arg)
+    kDomeCmd   = 9,  // Dome drive command (subcmd, arg)
+    kVolumeStep = 10,   // Step volume up/down by params.snipsVolumeStep (dir, target)
+    kThrottleStep = 11  // Step drive speed cap up/down by params.snipsThrottleStep (dir)
   };
 
   // Sub-commands for kDomeCmd.  Stored in dome.subcmd.
@@ -90,6 +92,13 @@ struct ButtonAction {
       uint8_t subcmd;    // DomeCmdType
       uint8_t arg;       // Angle (0–255°) for kDomeGotoAbs; delta for kDomeRelPos/kDomeRelNeg
     } dome;
+    struct {
+      uint8_t dir;       // 0 = down, 1 = up
+      uint8_t target;    // 0 = plain (params.volumewheel), 1 = alt (params.altvolumewheel)
+    } volstep;
+    struct {
+      uint8_t dir;       // 0 = down, 1 = up
+    } throttlestep;
   };
   // Stable ID of the serial string to send.  0 = none.
   // For kSerialStr: the string to send (primary ref).
@@ -183,6 +192,14 @@ struct ButtonAction {
         case kDomeAbsStick:  stream->print(F("Absolute-Stick Toggle"));   break;
         default:             stream->print(dome.subcmd);                 break;
       }
+      break;
+    case kVolumeStep:
+      stream->print(volstep.target ? F("Alt Volume ") : F("Volume "));
+      stream->print(volstep.dir ? F("Up") : F("Down"));
+      break;
+    case kThrottleStep:
+      stream->print(F("Drive Throttle "));
+      stream->print(throttlestep.dir ? F("Up") : F("Down"));
       break;
     }
     if (action != kSerialStr && action != kI2CStr && serialid != 0) {

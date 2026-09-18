@@ -279,7 +279,13 @@ void AmidalaController::setup() {
     setDigitalPin(i, false);
   }
 
-  fTankDrive->setMaxSpeed(MAXIMUM_SPEED);
+  // params.driveSpeedPct (issue #204 phase 2) is the live-adjustable drive
+  // speed cap, applied here from its configured default (config.txt) at
+  // boot via the same applyDriveSpeedPct() stepDriveSpeed()/
+  // cfg_drivespeedpct() use. Like volume, adjustments made at runtime via
+  // ButtonAction::kThrottleStep are session-only and are not written back
+  // to config.txt -- a reboot resets to this configured value.
+  applyDriveSpeedPct();
   fTankDrive->setThrottleAccelerationScale(ACCELERATION_SCALE);
   fTankDrive->setThrottleDecelerationScale(DECELRATION_SCALE);
   fTankDrive->setTurnAccelerationScale(ACCELERATION_SCALE * 2);

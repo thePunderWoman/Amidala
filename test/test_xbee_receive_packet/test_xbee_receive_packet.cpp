@@ -14,14 +14,14 @@ void tearDown(void) {}
 // Builds a well-formed 0x90 frame body: type(1) addr64(8) addr16(2)
 // options(1) payload(N).
 static void buildFrame(uint8_t *buf, uint32_t addrLsb, const uint8_t *payload,
-                        uint16_t payloadLen) {
+                        uint16_t payloadLen, uint16_t addr16 = 0) {
     buf[0] = 0x90;
     buf[1] = 0x00; buf[2] = 0x00; buf[3] = 0x00; buf[4] = 0x00;  // addr64 high 32 (unused)
     buf[5] = (uint8_t)(addrLsb >> 24);
     buf[6] = (uint8_t)(addrLsb >> 16);
     buf[7] = (uint8_t)(addrLsb >> 8);
     buf[8] = (uint8_t)(addrLsb);
-    buf[9] = 0x00; buf[10] = 0x00;  // addr16
+    buf[9] = (uint8_t)(addr16 >> 8); buf[10] = (uint8_t)(addr16);
     buf[11] = 0x01;                 // options
     memcpy(buf + 12, payload, payloadLen);
 }
@@ -29,11 +29,12 @@ static void buildFrame(uint8_t *buf, uint32_t addrLsb, const uint8_t *payload,
 void test_valid_frame_extracts_addr_and_payload() {
     uint8_t payload[] = {0xAA, 0xBB, 0xCC};
     uint8_t buf[12 + sizeof(payload)];
-    buildFrame(buf, 0x12345678, payload, sizeof(payload));
+    buildFrame(buf, 0x12345678, payload, sizeof(payload), 0xBEEF);
 
     XBeeReceivePacket out;
     TEST_ASSERT_TRUE(xbeeParseReceivePacket(buf, sizeof(buf), &out));
     TEST_ASSERT_EQUAL_HEX32(0x12345678, out.addrLsb);
+    TEST_ASSERT_EQUAL_HEX16(0xBEEF, out.addr16);
     TEST_ASSERT_EQUAL(sizeof(payload), out.payloadLength);
     TEST_ASSERT_EQUAL_UINT8_ARRAY(payload, out.payload, sizeof(payload));
 }

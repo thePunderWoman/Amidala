@@ -39,6 +39,14 @@ public:
   //   0=global, 1=voice, 2=chA, 3=chB, 4=chA+chB.
   void setChannelVolume(uint8_t ch, uint8_t volume);
 
+  // Reads back the current live volume (0-100) for the channel(s) selected
+  // by `wheel` (same enum as volumewheel/altvolumewheel) -- the read-side
+  // mirror of applyHCRVolume()'s write-side switch, since "plain" and "alt"
+  // aren't two independent value spaces, just two configurable routings
+  // onto the same fSavedVolV/A/B (issue #204 phase 2, for the Snips
+  // controller OLED echo-back).
+  uint8_t getEffectiveVolume(uint8_t wheel) const;
+
   // Play a sound from the given sound bank (1-based).
   // If snd == 0, selects the next/random file based on the bank's mode.
   void playSound(int sndbank, int snd = 0);

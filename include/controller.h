@@ -10,6 +10,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "drive_config.h"
+#include "step_value.h"
 #include "ReelTwo.h"
 #include "debug_monitor_tee.h"  // must follow ReelTwo.h -- see its own header comment
 // Needed unconditionally: globals.cpp/controller.cpp/servo.cpp reference the
@@ -127,6 +128,47 @@ public:
   }
   inline void setAltVolumeNoResponse(unsigned volume) {
     fAudio.setAltVolumeNoResponse(volume);
+  }
+
+  // ButtonAction::kVolumeStep handler (issue #204 phase 2) -- target 0 =
+  // plain (routes via params.volumewheel), 1 = alt (params.altvolumewheel,
+  // falling through to params.volumewheel when altvolumewheel==0 -- must
+  // match AmidalaAudio::setAltVolumeNoResponse()'s own fallthrough exactly,
+  // or this reads back the wrong channel's current value before stepping
+  // it). "Alt" isn't a second value space -- see
+  // AmidalaAudio::getEffectiveVolume() -- so this just reads back whichever
+  // channel that wheel selector currently points at, steps it, and writes
+  // it back through the same routing.
+  inline void stepVolume(uint8_t dir, uint8_t target) {
+    uint8_t wheel = (target && params.altvolumewheel != 0) ? params.altvolumewheel
+                                                            : params.volumewheel;
+    uint8_t current = fAudio.getEffectiveVolume(wheel);
+    uint8_t next = stepValue(current, params.snipsVolumeStep, dir != 0);
+    if (target) setAltVolumeNoResponse(next);
+    else setVolumeNoResponse(next);
+  }
+
+  // Applies params.driveSpeedPct (percentage of MAXIMUM_SPEED) to
+  // fTankDrive -- the single formula shared by setup() (boot-time), this
+  // class's stepDriveSpeed() (live button adjustment), and
+  // AmidalaConfig::cfg_drivespeedpct() (live config-key set), so a future
+  // change to the formula (clamping, a non-linear curve, etc.) can't land
+  // on only one of the three call sites.
+  inline void applyDriveSpeedPct() {
+#ifdef DRIVE_SYSTEM
+    if (fTankDrive) fTankDrive->setMaxSpeed(MAXIMUM_SPEED * (params.driveSpeedPct / 100.0f));
+#endif
+  }
+
+  // ButtonAction::kThrottleStep handler (issue #204 phase 2). Drive-only --
+  // there is no dome throttle. params.driveSpeedPct is the persisted,
+  // live-adjustable cap (percentage of MAXIMUM_SPEED); fTankDrive's actual
+  // fSpeedModifier (see Reeltwo's TankDrive::setMaxSpeed()) has no live
+  // getter of its own, so params.driveSpeedPct is the single source of
+  // truth for both applying and echoing this value.
+  inline void stepDriveSpeed(uint8_t dir) {
+    params.driveSpeedPct = stepValue(params.driveSpeedPct, params.snipsThrottleStep, dir != 0);
+    applyDriveSpeedPct();
   }
 
   inline void toggleMute() { fAudio.toggleMute(); }

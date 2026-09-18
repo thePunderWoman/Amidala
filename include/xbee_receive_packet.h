@@ -16,12 +16,19 @@
 // see xbee_io_sample.h's header comment -- so the existing
 // params.xbr/params.xbl low-address remote-matching convention carries over
 // unchanged.
+//
+// addr16 (bytes 9-10) is the sender's 16-bit network address -- captured
+// so a downlink reply (issue #204 phase 2) can address the Transmit
+// Request frame back to this specific controller via Digi's "unknown
+// 64-bit + explicit 16-bit" routing convention, without needing to
+// reconstruct or store the full 64-bit address anywhere.
 #pragma once
 
 #include <stdint.h>
 
 struct XBeeReceivePacket {
   uint32_t addrLsb;          // low 32 bits of the 64-bit source address
+  uint16_t addr16;           // sender's 16-bit network address
   const uint8_t *payload;    // points into the buffer passed to parse()
   uint16_t payloadLength;
 };
@@ -38,6 +45,7 @@ static inline bool xbeeParseReceivePacket(const uint8_t *buf, uint16_t length,
   }
   out->addrLsb = ((uint32_t)buf[5] << 24) | ((uint32_t)buf[6] << 16) |
                  ((uint32_t)buf[7] << 8) | (uint32_t)buf[8];
+  out->addr16 = ((uint16_t)buf[9] << 8) | buf[10];
   out->payload = buf + kHeaderLength;
   out->payloadLength = length - kHeaderLength;
   return true;

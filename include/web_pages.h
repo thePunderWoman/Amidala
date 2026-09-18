@@ -11761,16 +11761,32 @@ var BTN_NAMES = [
   'Trigger Right', 'Trigger Left', 'Top', 'Bottom'
 ];
 
-// 8 fire-and-forget buttons per Snips controller (see include/snips_buttons.h):
-// Macro1-6, Bumper, Stick Click. Right controller = 1-8, Left = 9-16.
+// 12 buttons per Snips controller (see include/snips_buttons.h): Macro1-6,
+// Bumper, Stick Click, then the 4 stateful "step a value" buttons (Left
+// Up/Down, Right Up/Down -- fully reassignable, not fixed to volume/
+// throttle by hardware position). Numbering matches
+// SnipsRemote::buttonNumberFor() (include/snips_remote.h) -- NOT a simple
+// contiguous per-side split: fire-and-forget buttons are 1-8 (Right) /
+// 9-16 (Left), but the stateful buttons are pushed past 16 for BOTH sides
+// (Left's at 17-20, Right's at 21-24) so a compiled-in default for one of
+// them (see params.h's init()) can never land on 1-9, which
+// CONTROLLER_TYPE_XBEE/_BLUETOOTH give a real, live meaning.
 var SNIPS_BTN_NAMES = [
   '', // index 0 unused (buttons are 1-based)
-  'Macro 1', 'Macro 2', 'Macro 3', 'Macro 4', 'Macro 5', 'Macro 6', 'Bumper', 'Stick Click',
-  'Macro 1', 'Macro 2', 'Macro 3', 'Macro 4', 'Macro 5', 'Macro 6', 'Bumper', 'Stick Click'
+  'Macro 1', 'Macro 2', 'Macro 3', 'Macro 4', 'Macro 5', 'Macro 6', 'Bumper', 'Stick Click',   // 1-8 Right
+  'Macro 1', 'Macro 2', 'Macro 3', 'Macro 4', 'Macro 5', 'Macro 6', 'Bumper', 'Stick Click',   // 9-16 Left
+  'Left Up', 'Left Down', 'Right Up', 'Right Down',   // 17-20 Left's stateful
+  'Left Up', 'Left Down', 'Right Up', 'Right Down'    // 21-24 Right's stateful
 ];
 
+// Which button numbers belong to which physical Snips controller -- see
+// the numbering comment above. Rendered/iterated explicitly (not as a
+// numeric range) since Right's set isn't contiguous.
+var SNIPS_RIGHT_BUTTONS = [1, 2, 3, 4, 5, 6, 7, 8, 21, 22, 23, 24];
+var SNIPS_LEFT_BUTTONS  = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+
 var CTRL_TYPE_NOTES = {
-  '1': 'Button mapping (press/long-press/alt/double-press) is live for Snips Controllers. Stick/trigger input and the controller\'s own OLED display are not wired up yet.'
+  '1': 'Button mapping (press/long-press/alt/double-press) is live for Snips Controllers, including the stateful Left/Right Up/Down buttons (Volume/Drive Throttle step, or anything else). Stick/trigger input is not wired up yet.'
 };
 
 function renderControlTypeNote() {
@@ -11840,6 +11856,14 @@ function actionOptions(sel) {
     h += '</optgroup>';
   });
 
+  h += '<optgroup label="Value Adjust">';
+  h += opt('10,1,0', 'Volume Up',        sel);
+  h += opt('10,0,0', 'Volume Down',      sel);
+  h += opt('10,1,1', 'Alt Volume Up',    sel);
+  h += opt('10,0,1', 'Alt Volume Down',  sel);
+  h += opt('11,1',   'Drive Throttle Up',   sel);
+  h += opt('11,0',   'Drive Throttle Down', sel);
+  h += '</optgroup>';
   h += '<optgroup label="Dome">';
   h += opt('9,0', 'Random Mode Toggle', sel);
   h += opt('9,8', 'Abs-Stick Toggle',   sel);
@@ -11869,6 +11893,8 @@ function actToVal(act) {
   if (act.t === 7) return '7,' + (act.x || 0) + ',' + (act.y || 0);
   if (act.t === 8) return '8';
   if (act.t === 9) return '9,' + (act.x || 0);
+  if (act.t === 10) return '10,' + (act.x || 0) + ',' + (act.y || 0);
+  if (act.t === 11) return '11,' + (act.x || 0);
   return '0';
 }
 
@@ -11914,8 +11940,9 @@ function saveBtn(n, lyr, sel) {
 function renderButtons() {
   var isSnips   = Number(_cfg.controllertype) === CONTROLLER_TYPE_SNIPS;
   var names     = isSnips ? SNIPS_BTN_NAMES : BTN_NAMES;
-  var maxBtn    = isSnips ? 16 : 9;
-  var splitAt   = isSnips ? 8  : 5;
+  var rightBtns = isSnips ? SNIPS_RIGHT_BUTTONS : [1, 2, 3, 4, 5];
+  var leftBtns  = isSnips ? SNIPS_LEFT_BUTTONS  : [6, 7, 8, 9];
+  var allBtns   = rightBtns.concat(leftBtns);
   var rightHdr  = isSnips ? 'Right Snips Controller' : 'Right Controller';
   var leftHdr   = isSnips ? 'Left Snips Controller'  : 'Left Controller';
 
@@ -11925,7 +11952,7 @@ function renderButtons() {
   // Guard against a stale altbtn left over from switching controllertype --
   // B[]/LB[]/AB[]/DB[] are shared storage (see params.h), so a button number
   // valid under one scheme may be out of range under the other.
-  var showAlt   = altbtn > 0 && altbtn <= maxBtn;
+  var showAlt   = altbtn > 0 && allBtns.indexOf(altbtn) >= 0;
   var h = '<div class="ctrl-section">';
 
   h += '<div class="sec-hdr">Controller Settings</div>';
@@ -11933,19 +11960,19 @@ function renderButtons() {
   h += '<div class="row"><div class="row-label">Alt Button</div>';
   h += '<select name="altbtn" class="row-sel" onchange="saveGlobal(\'altbtn\',this.value)">';
   h += opt('0', 'None', altbtn === 0 ? '0' : String(altbtn));
-  for (var i = 1; i <= maxBtn; i++) {
-    var ctrl = i <= splitAt ? 'Right' : 'Left';
+  allBtns.forEach(function(i) {
+    var ctrl = rightBtns.indexOf(i) >= 0 ? 'Right' : 'Left';
     h += opt(String(i), ctrl + ' — ' + names[i], String(altbtn));
-  }
+  });
   h += '</select></div>';
 
   h += '<div class="row"><div class="row-label">Mute Button</div>';
   h += '<select name="mutebutton" class="row-sel" onchange="saveGlobal(\'mutebutton\',this.value)">';
   h += opt('0', 'None', mutebutton === 0 ? '0' : String(mutebutton));
-  for (var i = 1; i <= maxBtn; i++) {
-    var ctrl = i <= splitAt ? 'Right' : 'Left';
+  allBtns.forEach(function(i) {
+    var ctrl = rightBtns.indexOf(i) >= 0 ? 'Right' : 'Left';
     h += opt(String(i), ctrl + ' — ' + names[i], String(mutebutton));
-  }
+  });
   h += '</select></div>';
 
   h += '<div class="row"><div class="row-label">Alt Dome Stick</div>';
@@ -11964,13 +11991,29 @@ function renderButtons() {
   h += opt('500', '500 ms',    String(dbt));
   h += '</select></div>';
 
+  // Step sizes for the Volume Up/Down / Drive Throttle Up/Down actions
+  // (issue #204 phase 2) -- these ButtonAction types are usable on any
+  // button, on any controller type, not just Snips, so shown unconditionally.
+  var volStep = _cfg.snipsvolumestep   !== undefined ? _cfg.snipsvolumestep   : 5;
+  var thrStep = _cfg.snipsthrottlestep !== undefined ? _cfg.snipsthrottlestep : 10;
+  var drvPct  = _cfg.drivespeedpct     !== undefined ? _cfg.drivespeedpct     : 100;
+  h += '<div class="row"><div class="row-label">Volume Step</div>';
+  h += '<input type="number" class="row-sel" min="1" max="100" value="' + volStep + '" ';
+  h += 'onchange="saveGlobal(\'snipsvolumestep\',this.value)"> <span style="font-size:.7rem;color:var(--muted)">% per press</span></div>';
+  h += '<div class="row"><div class="row-label">Throttle Step</div>';
+  h += '<input type="number" class="row-sel" min="1" max="100" value="' + thrStep + '" ';
+  h += 'onchange="saveGlobal(\'snipsthrottlestep\',this.value)"> <span style="font-size:.7rem;color:var(--muted)">% per press</span></div>';
+  h += '<div class="row"><div class="row-label">Drive Speed Cap</div>';
+  h += '<input type="number" class="row-sel" min="0" max="100" value="' + drvPct + '" ';
+  h += 'onchange="saveGlobal(\'drivespeedpct\',this.value)"> <span style="font-size:.7rem;color:var(--muted)">% of max, at boot</span></div>';
+
   h += '<div class="sec-hdr">Button Assignments</div>';
   if (showAlt) h += '<div class="gest-note" style="font-size:.65rem;margin:0">Alt Press column active (Alt Button = ' + names[altbtn] + ').</div>';
 
   h += '<div class="sub-hdr">' + rightHdr + '</div>';
-  for (var i = 1; i <= splitAt; i++) h += renderBtnCard(i, showAlt, altbtn, mutebutton, names);
+  rightBtns.forEach(function(i) { h += renderBtnCard(i, showAlt, altbtn, mutebutton, names); });
   h += '<div class="sub-hdr">' + leftHdr + '</div>';
-  for (var i = splitAt + 1; i <= maxBtn; i++) h += renderBtnCard(i, showAlt, altbtn, mutebutton, names);
+  leftBtns.forEach(function(i) { h += renderBtnCard(i, showAlt, altbtn, mutebutton, names); });
 
   if (!isSnips) h += '<div class="gest-note" style="font-size:.65rem;margin:0">Left Stick Press (button 10) initiates gesture sequences and is not configurable here.</div>';
 

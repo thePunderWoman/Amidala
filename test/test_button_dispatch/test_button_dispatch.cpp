@@ -16,9 +16,9 @@ void setUp(void) { mock_millis_value = 0; }
 void tearDown(void) {}
 
 struct FakeDriver {
-    int buttonUpCount[17]   = {0};  // 1-based, index 0 unused
-    int altButtonCount[17]  = {0};
-    int longButtonCount[17] = {0};
+    int buttonUpCount[25]   = {0};  // 1-based, index 0 unused
+    int altButtonCount[25]  = {0};
+    int longButtonCount[25] = {0};
 
     void noteButtonUp(unsigned num)      { buttonUpCount[num]++; }
     void processAltButton(unsigned num)  { altButtonCount[num]++; }
@@ -120,12 +120,12 @@ void test_dispatch_long_press_suppressed_for_alt_buttons_own_button() {
     TEST_ASSERT_EQUAL(0, driver.longButtonCount[1]);
 }
 
-void test_dispatch_button_16_supported() {
-    // MAX_BUTTONS (issue #204) is 16 -- confirm the dispatch path isn't
+void test_dispatch_button_24_supported() {
+    // MAX_BUTTONS (issue #204) is 24 -- confirm the dispatch path isn't
     // hardcoded to the old 9-button range.
     FakeDriver driver;
-    dispatchButtonPress(driver, 16, true, false, 0, false);
-    TEST_ASSERT_EQUAL(1, driver.buttonUpCount[16]);
+    dispatchButtonPress(driver, 24, true, false, 0, false);
+    TEST_ASSERT_EQUAL(1, driver.buttonUpCount[24]);
 }
 
 // ---- main -------------------------------------------------------------------
@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_dispatch_long_press_fires_when_alt_not_held);
     RUN_TEST(test_dispatch_long_press_suppressed_while_alt_held);
     RUN_TEST(test_dispatch_long_press_suppressed_for_alt_buttons_own_button);
-    RUN_TEST(test_dispatch_button_16_supported);
+    RUN_TEST(test_dispatch_button_24_supported);
 
     return UNITY_END();
 }

@@ -512,6 +512,15 @@ static bool parseButtonLine(const char *cmd, AmidalaParameters &params,
     b->dome.arg    = (argcount >= 4) ? (uint8_t)args[3] : 0;
     b->serialid = (argcount >= 5) ? args[4] : 0;
     break;
+  case ButtonAction::kVolumeStep:
+    b->volstep.dir    = (uint8_t)args[2];
+    b->volstep.target = (argcount >= 4) ? (uint8_t)args[3] : 0;
+    b->serialid = (argcount >= 5) ? args[4] : 0;
+    break;
+  case ButtonAction::kThrottleStep:
+    b->throttlestep.dir = (uint8_t)args[2];
+    b->serialid = (argcount >= 4) ? args[3] : 0;
+    break;
   default:
     b->action = 0;
     break;
@@ -863,6 +872,15 @@ bool AmidalaConfig::cfg_gesture(const char *cmd) {
         b->dome.arg    = (argcount >= 3) ? (uint8_t)args[2] : 0;
         b->serialid = (argcount >= 4) ? args[3] : 0;
         break;
+      case ButtonAction::kVolumeStep:
+        b->volstep.dir    = (uint8_t)args[1];
+        b->volstep.target = (argcount >= 3) ? (uint8_t)args[2] : 0;
+        b->serialid = (argcount >= 4) ? args[3] : 0;
+        break;
+      case ButtonAction::kThrottleStep:
+        b->throttlestep.dir = (uint8_t)args[1];
+        b->serialid = (argcount >= 3) ? args[2] : 0;
+        break;
       default:
         b->action = 0;
         break;
@@ -908,6 +926,21 @@ bool AmidalaConfig::cfg_volumewheel(const char *cmd) {
 }
 bool AmidalaConfig::cfg_altvolumewheel(const char *cmd) {
   return intparam(cmd, "altvolumewheel=", fController->params.altvolumewheel, 0, 4);
+}
+bool AmidalaConfig::cfg_snipsvolumestep(const char *cmd) {
+  return intparam(cmd, "snipsvolumestep=", fController->params.snipsVolumeStep, 1, 100);
+}
+bool AmidalaConfig::cfg_snipsthrottlestep(const char *cmd) {
+  return intparam(cmd, "snipsthrottlestep=", fController->params.snipsThrottleStep, 1, 100);
+}
+bool AmidalaConfig::cfg_drivespeedpct(const char *cmd) {
+  if (!intparam(cmd, "drivespeedpct=", fController->params.driveSpeedPct, 0, 100))
+    return false;
+  // applyDriveSpeedPct() itself no-ops if fTankDrive is still null (config.txt
+  // parsed at boot, before setup() constructs it) -- mirrors cfg_domespeed()'s
+  // pattern, see its comment.
+  fController->applyDriveSpeedPct();
+  return true;
 }
 bool AmidalaConfig::cfg_startupem(const char *cmd) {
   return intparam(cmd, "startupem=", fController->params.startupem, 0, 4);
@@ -1441,6 +1474,9 @@ const AmidalaConfig::ConfigHandler AmidalaConfig::kConfigHandlers[] = {
     &AmidalaConfig::cfg_volumeChB,
     &AmidalaConfig::cfg_volumewheel,
     &AmidalaConfig::cfg_altvolumewheel,
+    &AmidalaConfig::cfg_snipsvolumestep,
+    &AmidalaConfig::cfg_snipsthrottlestep,
+    &AmidalaConfig::cfg_drivespeedpct,
     &AmidalaConfig::cfg_startupem,
     &AmidalaConfig::cfg_startuplvl,
     &AmidalaConfig::cfg_ackem,

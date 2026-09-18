@@ -28,6 +28,7 @@
 #include "xbee_frame_checksum.h"
 #include "xbee_io_sample.h"
 #include "xbee_receive_packet.h"
+#include "xbee_transmit_frame.h"
 #include "snips_packet.h"
 #include "snips_remote.h"
 #include "pin_config.h"
@@ -108,6 +109,37 @@ static void xbeeSPIPumpFrames(FrameHandler handler) {
     }
 }
 
+// Sends a Transmit Request (0x10) frame addressed to `dest16` (issue #204
+// phase 2 downlink) -- its own SPI transaction, independent of
+// xbeeSPIPumpFrames() above, since ATTN only signals inbound data and has
+// no bearing on write-readiness. Wraps XBeeTransmitFrame::buildTransmitRequest()
+// with the outer 0x7E start delimiter, 2-byte length, and trailing checksum
+// xbeeReadFrame() strips on the receive side.
+static void xbeeSPISendPacket(uint16_t dest16, const uint8_t *payload, uint16_t payloadLength) {
+    // Sized for the current Snips::DownlinkPacket (the only caller, 33
+    // bytes + 14-byte Transmit Request header = 47) with headroom -- if the
+    // packet format ever grows past this, fail loudly at compile time
+    // rather than have buildTransmitRequest() silently drop the frame
+    // (returns 0 on an undersized output buffer).
+    static_assert(XBeeTransmitFrame::kHeaderLength + Snips::kDownlinkEncodedSize <= 64,
+                  "xbeeSPISendPacket's frameData buffer is too small for a downlink packet");
+    uint8_t frameData[64];
+    uint16_t frameLength = XBeeTransmitFrame::buildTransmitRequest(
+        frameData, sizeof(frameData), payload, payloadLength, dest16);
+    if (frameLength == 0) return;
+    uint8_t checksum = xbeeComputeChecksum(frameData, frameLength);
+
+    SPI.beginTransaction(kXBeeSettings);
+    digitalWrite(XBEE_CS_PIN, LOW);
+    SPI.transfer(0x7E);
+    SPI.transfer((uint8_t)(frameLength >> 8));
+    SPI.transfer((uint8_t)(frameLength));
+    for (uint16_t i = 0; i < frameLength; i++) SPI.transfer(frameData[i]);
+    SPI.transfer(checksum);
+    digitalWrite(XBEE_CS_PIN, HIGH);
+    SPI.endTransaction();
+}
+
 void xbeeSPIReceiveAll(XBeePocketRemote** remotes, unsigned count) {
     xbeeSPIPumpFrames([remotes, count](const uint8_t *buf, uint16_t length) {
         XBeeIOSample sample;
@@ -178,7 +210,18 @@ void xbeeSPIReceiveAllSnips(SnipsRemote** remotes, unsigned count) {
             auto r = remotes[i];
             if (rx.addrLsb != r->addr) continue;
             matched = true;
-            r->onUplinkReceived(pkt);
+            r->onUplinkReceived(pkt, rx.addr16);
+            // Reply after every processed uplink, not just when a value
+            // changes -- the controller treats 5s without a downlink as
+            // "disconnected" regardless of uplink flow (see
+            // SnipsController.ino's kConnectionTimeoutMs), so this also
+            // serves as the connection-alive heartbeat it depends on.
+            Snips::DownlinkPacket downlink = r->buildDownlinkPacket();
+            uint8_t downlinkBuf[Snips::kDownlinkEncodedSize];
+            size_t downlinkLength = Snips::encodeDownlink(downlink, downlinkBuf, sizeof(downlinkBuf));
+            if (downlinkLength > 0) {
+                xbeeSPISendPacket(r->addr16, downlinkBuf, (uint16_t)downlinkLength);
+            }
             break;
         }
         if (!matched) {

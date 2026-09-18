@@ -25,6 +25,8 @@ void test_action_type_constants() {
     TEST_ASSERT_EQUAL(7, ButtonAction::kHCREmote);
     TEST_ASSERT_EQUAL(8, ButtonAction::kHCRMuse);
     TEST_ASSERT_EQUAL(9, ButtonAction::kDomeCmd);
+    TEST_ASSERT_EQUAL(10, ButtonAction::kVolumeStep);
+    TEST_ASSERT_EQUAL(11, ButtonAction::kThrottleStep);
 }
 
 // ---- DomeCmdType sub-command constants --------------------------------------
@@ -377,6 +379,62 @@ void test_print_dome_abstick() {
     TEST_ASSERT_NOT_NULL(strstr(out.buf, "Absolute-Stick Toggle"));
 }
 
+void test_print_volume_step_up() {
+    ButtonAction b;
+    memset(&b, 0, sizeof(b));
+    b.action        = ButtonAction::kVolumeStep;
+    b.volstep.dir   = 1;
+    b.volstep.target = 0;
+    StringPrint out;
+    b.printDescription(&out);
+    TEST_ASSERT_NOT_NULL(strstr(out.buf, "Volume "));
+    TEST_ASSERT_NOT_NULL(strstr(out.buf, "Up"));
+}
+
+void test_print_volume_step_down() {
+    ButtonAction b;
+    memset(&b, 0, sizeof(b));
+    b.action        = ButtonAction::kVolumeStep;
+    b.volstep.dir   = 0;
+    StringPrint out;
+    b.printDescription(&out);
+    TEST_ASSERT_NOT_NULL(strstr(out.buf, "Volume "));
+    TEST_ASSERT_NOT_NULL(strstr(out.buf, "Down"));
+}
+
+void test_print_alt_volume_step() {
+    ButtonAction b;
+    memset(&b, 0, sizeof(b));
+    b.action         = ButtonAction::kVolumeStep;
+    b.volstep.dir    = 1;
+    b.volstep.target = 1;
+    StringPrint out;
+    b.printDescription(&out);
+    TEST_ASSERT_NOT_NULL(strstr(out.buf, "Alt Volume "));
+}
+
+void test_print_throttle_step_up() {
+    ButtonAction b;
+    memset(&b, 0, sizeof(b));
+    b.action              = ButtonAction::kThrottleStep;
+    b.throttlestep.dir    = 1;
+    StringPrint out;
+    b.printDescription(&out);
+    TEST_ASSERT_NOT_NULL(strstr(out.buf, "Drive Throttle "));
+    TEST_ASSERT_NOT_NULL(strstr(out.buf, "Up"));
+}
+
+void test_print_throttle_step_down() {
+    ButtonAction b;
+    memset(&b, 0, sizeof(b));
+    b.action              = ButtonAction::kThrottleStep;
+    b.throttlestep.dir    = 0;
+    StringPrint out;
+    b.printDescription(&out);
+    TEST_ASSERT_NOT_NULL(strstr(out.buf, "Drive Throttle "));
+    TEST_ASSERT_NOT_NULL(strstr(out.buf, "Down"));
+}
+
 void test_print_does_not_append_serial_for_serial_action() {
     // kSerialStr itself must not double-print ", Serial #".
     ButtonAction b;
@@ -474,6 +532,11 @@ int main(int argc, char **argv) {
     RUN_TEST(test_print_dome_rel_pos);
     RUN_TEST(test_print_dome_rel_neg);
     RUN_TEST(test_print_dome_abstick);
+    RUN_TEST(test_print_volume_step_up);
+    RUN_TEST(test_print_volume_step_down);
+    RUN_TEST(test_print_alt_volume_step);
+    RUN_TEST(test_print_throttle_step_up);
+    RUN_TEST(test_print_throttle_step_down);
     RUN_TEST(test_print_appends_serial_string_for_non_serial_actions);
     RUN_TEST(test_print_does_not_append_serial_for_serial_action);
 

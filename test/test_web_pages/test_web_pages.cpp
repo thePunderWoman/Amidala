@@ -940,6 +940,25 @@ void test_buttonActionJson_kDomeCmd_front_subcmd() {
     TEST_ASSERT_TRUE(contains(j.c_str(), "\"x\":2"));
 }
 
+void test_buttonActionJson_kVolumeStep_emits_dir_and_target() {
+    ButtonAction b = makeAction(ButtonAction::kVolumeStep);
+    b.volstep.dir = 1;
+    b.volstep.target = 1;
+    String j = buttonActionJson(b);
+    TEST_ASSERT_TRUE(contains(j.c_str(), "\"t\":10"));
+    TEST_ASSERT_TRUE(contains(j.c_str(), "\"x\":1"));
+    TEST_ASSERT_TRUE(contains(j.c_str(), "\"y\":1"));
+}
+
+void test_buttonActionJson_kThrottleStep_emits_dir_only() {
+    ButtonAction b = makeAction(ButtonAction::kThrottleStep);
+    b.throttlestep.dir = 0;
+    String j = buttonActionJson(b);
+    TEST_ASSERT_TRUE(contains(j.c_str(), "\"t\":11"));
+    TEST_ASSERT_TRUE(contains(j.c_str(), "\"x\":0"));
+    TEST_ASSERT_FALSE(contains(j.c_str(), "\"y\""));
+}
+
 void test_buttonActionJson_wraps_in_braces() {
     ButtonAction b = makeAction(ButtonAction::kNone);
     String j = buttonActionJson(b);
@@ -1084,6 +1103,8 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_buttonActionJson_kHCREmote_happy_moderate);
     RUN_TEST(test_buttonActionJson_kDomeCmd_emits_subcmd);
     RUN_TEST(test_buttonActionJson_kDomeCmd_front_subcmd);
+    RUN_TEST(test_buttonActionJson_kVolumeStep_emits_dir_and_target);
+    RUN_TEST(test_buttonActionJson_kThrottleStep_emits_dir_only);
     RUN_TEST(test_buttonActionJson_wraps_in_braces);
 
     return UNITY_END();
