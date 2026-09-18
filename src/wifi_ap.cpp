@@ -1426,7 +1426,7 @@ static void handleApiPins() {
 }
 
 // ---------------------------------------------------------------------------
-// Troubleshooting: debug-mode SD log files + config.txt viewer (issue #199)
+// Debugging: debug-mode SD log files + config.txt viewer (issue #199)
 // ---------------------------------------------------------------------------
 
 // GET /api/logs            -> {"active":bool,"current":"NAME","files":[{"name":..,"size":..},...]}
@@ -1655,7 +1655,7 @@ static void handleConfigGadgets()       { sServer.send_P(200, "text/html", WEB_P
 static void handleSafety()             { sServer.send_P(200, "text/html", WEB_PAGE_SAFETY);           }
 static void handleComingSoon()          { sServer.send_P(200, "text/html", WEB_PAGE_COMING_SOON);     }
 static void handleDiagnostics()         { sServer.send_P(200, "text/html", WEB_PAGE_DIAGNOSTICS);      }
-static void handleTroubleshooting()     { sServer.send_P(200, "text/html", WEB_PAGE_TROUBLESHOOTING);  }
+static void handleDebugging()           { sServer.send_P(200, "text/html", WEB_PAGE_DEBUGGING);        }
 static void handleConfigConnectivity()  { sServer.send_P(200, "text/html", WEB_PAGE_CONFIG_CONNECTIVITY); }
 
 // ---------------------------------------------------------------------------
@@ -1959,7 +1959,7 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/api/gesture/capture/status", HTTP_GET,  handleApiGestureCaptureStatus);
     sServer.on("/api/gesture/capture/stop",   HTTP_POST, handleApiGestureCaptureStop);
     sServer.on("/api/wcb/status",        HTTP_GET,  handleApiWcbStatus);
-    sServer.on("/troubleshooting",       HTTP_GET,  handleTroubleshooting);
+    sServer.on("/debugging",             HTTP_GET,  handleDebugging);
     sServer.on("/api/logs",              HTTP_GET,  handleApiLogsGet);
     sServer.on("/api/configfile",        HTTP_GET,  handleApiConfigFileGet);
 

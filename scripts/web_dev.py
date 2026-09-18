@@ -361,7 +361,7 @@ _info = {
     "serial2_role": "unused",
 }
 
-# Mock for the Troubleshooting page's log viewer (issue #199) -- there's no
+# Mock for the Debugging page's log viewer (issue #199) -- there's no
 # real SD card here, so a couple of canned "completed session" files stand in
 # for whatever real debug_NNNNN.log files would look like.
 _LOG_FILES = {

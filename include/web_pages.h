@@ -239,9 +239,9 @@ footer a:hover{opacity:1;}
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 H8 L10 7 L14 17 L16 12 H21"/></svg>
       <div><div class="name">Droid Status</div><div class="sub">I/O · sensors</div></div>
     </a>
-    <a class="card" href="/troubleshooting">
+    <a class="card" href="/debugging">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="16" rx="1.5"/><line x1="6.5" y1="8" x2="13.5" y2="8"/><line x1="6.5" y1="11.5" x2="13.5" y2="11.5"/><circle cx="17" cy="17" r="3.2"/><line x1="19.3" y1="19.3" x2="21.5" y2="21.5"/></svg>
-      <div><div class="name">Troubleshooting</div><div class="sub">Debug logs · config.txt</div></div>
+      <div><div class="name">Debugging</div><div class="sub">Logs · config</div></div>
     </a>
   </nav>
 
@@ -17590,7 +17590,7 @@ fetch('/api/config')
 </html>
 )html";
 
-static const char WEB_PAGE_TROUBLESHOOTING[] = R"html(<!DOCTYPE html>
+static const char WEB_PAGE_DEBUGGING[] = R"html(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'">
@@ -17617,7 +17617,7 @@ static const char WEB_PAGE_TROUBLESHOOTING[] = R"html(<!DOCTYPE html>
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Troubleshooting — AMIDALA</title>
+<title>Debugging — AMIDALA</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
@@ -17929,7 +17929,7 @@ footer a:hover { opacity: 1; }
 <body>
 <div class="page-header">
   <a class="back" href="/">&#9664; BACK</a>
-  <div class="page-title"><span class="dot"></span><span class="label">Troubleshooting</span><span class="dot"></span></div>
+  <div class="page-title"><span class="dot"></span><span class="label">Debugging</span><span class="dot"></span></div>
 </div>
 <main>
   <div id="cfg-area"><div id="status">LOADING&#8230;</div></div>
