@@ -36,7 +36,7 @@ PAGES = [
     ("update.html",                 "WEB_PAGE_UPDATE"),
     ("config/coming-soon.html",     "WEB_PAGE_COMING_SOON"),
     ("diagnostics.html",            "WEB_PAGE_DIAGNOSTICS"),
-    ("troubleshooting.html",        "WEB_PAGE_TROUBLESHOOTING"),
+    ("debugging.html",              "WEB_PAGE_DEBUGGING"),
 ]
 
 _LINK_RE   = re.compile(r'[ \t]*<link rel="stylesheet" href="/assets/common\.css">\n?')

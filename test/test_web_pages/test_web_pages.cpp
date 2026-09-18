@@ -50,7 +50,7 @@ void test_home_page_has_tools_nav_links() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/monitor"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/update"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/safety"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/troubleshooting"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_HOME, "/debugging"));
 }
 
 void test_home_page_has_viewport_meta() {
@@ -832,21 +832,21 @@ void test_info_json_debugmode_true() {
 }
 
 // ---------------------------------------------------------------------------
-// Troubleshooting page (issue #199) — debug-mode log capture + config.txt viewer
+// Debugging page (issue #199) — debug-mode log capture + config.txt viewer
 // ---------------------------------------------------------------------------
 
-void test_troubleshooting_page_uses_config_endpoint() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_TROUBLESHOOTING, "/api/config"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_TROUBLESHOOTING, "href=\"/\""));
+void test_debugging_page_uses_config_endpoint() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DEBUGGING, "/api/config"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DEBUGGING, "href=\"/\""));
 }
 
-void test_troubleshooting_page_has_debugmode_toggle() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_TROUBLESHOOTING, "'debugmode'"));
+void test_debugging_page_has_debugmode_toggle() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DEBUGGING, "'debugmode'"));
 }
 
-void test_troubleshooting_page_has_log_and_configfile_endpoints() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_TROUBLESHOOTING, "/api/logs"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_TROUBLESHOOTING, "/api/configfile"));
+void test_debugging_page_has_log_and_configfile_endpoints() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DEBUGGING, "/api/logs"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DEBUGGING, "/api/configfile"));
 }
 
 void test_diagnostics_page_has_connectivity_rows() {
@@ -1089,10 +1089,10 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_diagnostics_page_has_connectivity_rows);
     RUN_TEST(test_diagnostics_page_polls_api_info);
 
-    // Troubleshooting page
-    RUN_TEST(test_troubleshooting_page_uses_config_endpoint);
-    RUN_TEST(test_troubleshooting_page_has_debugmode_toggle);
-    RUN_TEST(test_troubleshooting_page_has_log_and_configfile_endpoints);
+    // Debugging page
+    RUN_TEST(test_debugging_page_uses_config_endpoint);
+    RUN_TEST(test_debugging_page_has_debugmode_toggle);
+    RUN_TEST(test_debugging_page_has_log_and_configfile_endpoints);
 
     // buttonActionJson
     RUN_TEST(test_buttonActionJson_kNone_emits_type_only);
