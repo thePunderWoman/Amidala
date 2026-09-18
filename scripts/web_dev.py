@@ -83,6 +83,9 @@ def parse_example_config(path):
         "volumeChB":     50,
         "volumewheel":   0,
         "altvolumewheel":0,
+        "snipsvolumestep":   5,
+        "snipsthrottlestep": 10,
+        "drivespeedpct":     100,
         "startupem":     0,
         "startuplvl":    0,
         "ackem":         0,
@@ -155,11 +158,12 @@ def parse_example_config(path):
         "wcbid":         0,
         "outboundserial":0,
         "debugmode":     "n",
-        # MAX_BUTTONS (issue #204): storage is always sized for Snips's 16
-        # buttons regardless of controllertype, matching params.h/
+        # MAX_BUTTONS (issue #204): storage is always sized for Snips's 24
+        # buttons (12 per controller, including the 4 stateful step
+        # buttons) regardless of controllertype, matching params.h/
         # getButtonCount() -- switching controllertype only changes which
         # slots the web UI surfaces, never how many exist.
-        "buttons":  [_make_button() for _ in range(16)],
+        "buttons":  [_make_button() for _ in range(24)],
         "gestures": [],
         "gadgets_cfg": [{"type": 0, "sstr": []} for _ in range(7)],
         "sstr_user_cnt": 0,
@@ -177,6 +181,7 @@ def parse_example_config(path):
                   "altbtn", "mutebutton", "altdomestick",
                   "startupem", "startuplvl", "ackem", "acklvl",
                   "volumeChA", "volumeChB", "volumewheel", "altvolumewheel",
+                  "snipsvolumestep", "snipsthrottlestep", "drivespeedpct",
                   "wcbquantity", "wcbid", "outboundserial", "wifichannel"}
     _str_keys  = {"startup", "rndon", "ackon", "goslow", "mix12", "auto",
                   "wifion", "wifissid", "wifipassword", "xbr", "xbl",
@@ -289,7 +294,7 @@ def parse_example_config(path):
             p = val.split(",")
             if len(p) >= 2:
                 btn_idx = int(p[0]) - 1
-                if 0 <= btn_idx < 9:
+                if 0 <= btn_idx < len(cfg["buttons"]):
                     act = _parse_action(p, offset=1)
                     layer = {"b": "p", "lb": "l", "ab": "a"}[key]
                     cfg["buttons"][btn_idx][layer] = act
@@ -762,6 +767,8 @@ class _Handler(SimpleHTTPRequestHandler):
                         if t == 5 and len(nums) > 1:    act["x"] = nums[1]
                         if t == 7 and len(nums) > 2:    act["x"] = nums[1]; act["y"] = nums[2]
                         if t == 9 and len(nums) > 1:    act["x"] = nums[1]
+                        if t == 10 and len(nums) > 2:   act["x"] = nums[1]; act["y"] = nums[2]  # kVolumeStep
+                        if t == 11 and len(nums) > 1:   act["x"] = nums[1]  # kThrottleStep
                         _config["buttons"][n][lyr] = act
             self._text("OK")
             return

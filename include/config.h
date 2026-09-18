@@ -117,6 +117,9 @@ private:
   bool cfg_volumeChB(const char *cmd);
   bool cfg_volumewheel(const char *cmd);
   bool cfg_altvolumewheel(const char *cmd);
+  bool cfg_snipsvolumestep(const char *cmd);
+  bool cfg_snipsthrottlestep(const char *cmd);
+  bool cfg_drivespeedpct(const char *cmd);
   bool cfg_startupem(const char *cmd);
   bool cfg_startuplvl(const char *cmd);
   bool cfg_ackem(const char *cmd);

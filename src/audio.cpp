@@ -119,6 +119,25 @@ void AmidalaAudio::applyHCRVolume(uint8_t wheel, uint8_t volume) {
   }
 }
 
+uint8_t AmidalaAudio::getEffectiveVolume(uint8_t wheel) const {
+#ifdef VMUSIC_SERIAL
+  // VMusic has a single global volume (no per-channel routing), and its
+  // own live getter -- fSavedVolV/A/B below are only ever populated on the
+  // AUDIO_HW_HCR path (see applyHCRVolume()), so they'd read back a stale
+  // default here instead of the real current value.
+  if (fController && fController->params.audiohw == AUDIO_HW_VMUSIC) {
+    return fController->fVMusic.getVolume();
+  }
+#endif
+  switch (wheel) {
+    case 1: return fSavedVolV;
+    case 2: return fSavedVolA;
+    case 3: return fSavedVolB;
+    case 4: return fSavedVolA;  // A and B are always kept equal for wheel==4
+    default: return fSavedVolV;  // wheel==0 (global): V/A/B are always kept equal
+  }
+}
+
 void AmidalaAudio::restoreVolumes() {
   fMuted = false;
   fLastVolumeUpdate = (uint32_t)(0u - VOLUME_THROTTLE_MS);

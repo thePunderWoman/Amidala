@@ -198,6 +198,56 @@ void test_volumewheel_unknown_value_falls_back_to_global() {
     TEST_ASSERT_EQUAL_INT(50, h.chB);
 }
 
+// ---- getEffectiveVolume read-side routing (issue #204 phase 2) --------------
+// Mirrors the logic in AmidalaAudio::getEffectiveVolume -- the read-side
+// counterpart of applyHCRVolume's switch above, used by SnipsRemote's
+// downlink echo-back to read back "the current volume" for a given wheel
+// selector. AmidalaAudio's real fSavedVolV/A/B can only be reached via
+// applyHCRVolume(), which dereferences fController unconditionally (no
+// hardware-free path to exercise the real getter against known state), so
+// this mirrors it the same way VolumeRouteHarness mirrors the write side.
+
+struct EffectiveVolumeHarness {
+    uint8_t savedV = 40, savedA = 41, savedB = 42;  // distinct, to catch cross-wiring
+
+    uint8_t get(uint8_t wheel) const {
+        switch (wheel) {
+            case 1: return savedV;
+            case 2: return savedA;
+            case 3: return savedB;
+            case 4: return savedA;
+            default: return savedV;
+        }
+    }
+};
+
+void test_effective_volume_global_reads_savedV() {
+    EffectiveVolumeHarness h;
+    TEST_ASSERT_EQUAL_UINT8(40, h.get(0));
+}
+
+void test_effective_volume_voice_reads_savedV() {
+    EffectiveVolumeHarness h;
+    TEST_ASSERT_EQUAL_UINT8(40, h.get(1));
+}
+
+void test_effective_volume_chA_reads_savedA() {
+    EffectiveVolumeHarness h;
+    TEST_ASSERT_EQUAL_UINT8(41, h.get(2));
+}
+
+void test_effective_volume_chB_reads_savedB() {
+    EffectiveVolumeHarness h;
+    TEST_ASSERT_EQUAL_UINT8(42, h.get(3));
+}
+
+void test_effective_volume_chAB_reads_savedA() {
+    // applyHCRVolume keeps A and B equal for wheel==4, so either read is
+    // representative -- matches the real getter's choice to read A.
+    EffectiveVolumeHarness h;
+    TEST_ASSERT_EQUAL_UINT8(41, h.get(4));
+}
+
 // ---- altvolumewheel fall-through logic --------------------------------------
 // Mirrors the decision in AmidalaAudio::setAltVolumeNoResponse:
 //   altvolumewheel == 0  →  call setVolumeNoResponse (use volumewheel routing)
@@ -474,6 +524,12 @@ int main(int argc, char **argv) {
     RUN_TEST(test_volumewheel_chB_sets_only_chB);
     RUN_TEST(test_volumewheel_chAB_sets_chA_and_chB_only);
     RUN_TEST(test_volumewheel_unknown_value_falls_back_to_global);
+
+    RUN_TEST(test_effective_volume_global_reads_savedV);
+    RUN_TEST(test_effective_volume_voice_reads_savedV);
+    RUN_TEST(test_effective_volume_chA_reads_savedA);
+    RUN_TEST(test_effective_volume_chB_reads_savedB);
+    RUN_TEST(test_effective_volume_chAB_reads_savedA);
 
     RUN_TEST(test_altvolumewheel_zero_falls_through);
     RUN_TEST(test_altvolumewheel_one_does_not_fall_through);

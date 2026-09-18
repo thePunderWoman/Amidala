@@ -525,6 +525,14 @@ static String buttonActionStr(const ButtonAction& b) {
         if (b.dome.arg || b.serialid) s += "," + String(b.dome.arg);
         if (b.serialid) s += "," + String(b.serialid);
         break;
+    case ButtonAction::kVolumeStep:
+        s += "," + String(b.volstep.dir) + "," + String(b.volstep.target);
+        if (b.serialid) s += "," + String(b.serialid);
+        break;
+    case ButtonAction::kThrottleStep:
+        s += "," + String(b.throttlestep.dir);
+        if (b.serialid) s += "," + String(b.serialid);
+        break;
     default:
         if (b.serialid) s += "," + String(b.serialid);
         break;
@@ -570,6 +578,22 @@ static void parseButtonAction(ButtonAction& b, const String& value) {
         if (c1 > 0) b.dome.subcmd = (uint8_t)value.substring(c1 + 1, c2 > 0 ? c2 : (int)value.length()).toInt();
         if (c2 > 0) b.dome.arg    = (uint8_t)value.substring(c2 + 1, c3 > 0 ? c3 : (int)value.length()).toInt();
         if (c3 > 0) b.serialid = (uint16_t)value.substring(c3 + 1).toInt();
+        break;
+    }
+    case ButtonAction::kVolumeStep: {
+        b.action = type;
+        int c2 = c1 > 0 ? value.indexOf(',', c1 + 1) : -1;
+        int c3 = c2 > 0 ? value.indexOf(',', c2 + 1) : -1;
+        if (c1 > 0) b.volstep.dir    = (uint8_t)value.substring(c1 + 1, c2 > 0 ? c2 : (int)value.length()).toInt();
+        if (c2 > 0) b.volstep.target = (uint8_t)value.substring(c2 + 1, c3 > 0 ? c3 : (int)value.length()).toInt();
+        if (c3 > 0) b.serialid = (uint16_t)value.substring(c3 + 1).toInt();
+        break;
+    }
+    case ButtonAction::kThrottleStep: {
+        b.action = type;
+        int c2 = c1 > 0 ? value.indexOf(',', c1 + 1) : -1;
+        if (c1 > 0) b.throttlestep.dir = (uint8_t)value.substring(c1 + 1, c2 > 0 ? c2 : (int)value.length()).toInt();
+        if (c2 > 0) b.serialid = (uint16_t)value.substring(c2 + 1).toInt();
         break;
     }
     default: break;

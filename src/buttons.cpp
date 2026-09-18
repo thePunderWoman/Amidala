@@ -59,6 +59,12 @@ void AmidalaConsole::process(ButtonAction &button) {
   case button.kDomeCmd:
     fController->processDomeCmd(button.dome.subcmd, button.dome.arg);
     break;
+  case button.kVolumeStep:
+    fController->stepVolume(button.volstep.dir, button.volstep.target);
+    break;
+  case button.kThrottleStep:
+    fController->stepDriveSpeed(button.throttlestep.dir);
+    break;
   }
   // Play ack emote for non-audio actions when ackon is enabled
   if (button.action != ButtonAction::kNone &&

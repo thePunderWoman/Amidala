@@ -17,6 +17,7 @@
 #include "pin_assignment.h"
 #include <unity.h>
 #include <string.h>
+#include <stdio.h>
 
 void setUp(void) {
     memset(EEPROM.data, 0, sizeof(EEPROM.data));
@@ -259,8 +260,10 @@ void test_altbtn_accepts_zero_disabled() {
 void test_altbtn_accepts_max_buttons_max() {
     AmidalaParameters p;
     memset(&p, 0, sizeof(p));
-    // MAX_BUTTONS (issue #204): real bound is 16 (Snips), not just 9 (XBee/BT).
-    bool matched = intparam("altbtn=16", "altbtn=", p.altbtn, 0, MAX_BUTTONS);
+    // MAX_BUTTONS (issue #204): real bound is 24 (Snips), not just 9 (XBee/BT).
+    char cmd[32];
+    snprintf(cmd, sizeof(cmd), "altbtn=%d", MAX_BUTTONS);
+    bool matched = intparam(cmd, "altbtn=", p.altbtn, 0, MAX_BUTTONS);
     TEST_ASSERT_TRUE(matched);
     TEST_ASSERT_EQUAL(MAX_BUTTONS, p.altbtn);
 }
@@ -268,8 +271,10 @@ void test_altbtn_accepts_max_buttons_max() {
 void test_altbtn_clamps_above_max_buttons() {
     AmidalaParameters p;
     memset(&p, 0, sizeof(p));
-    // 17 > MAX_BUTTONS → clamped to MAX_BUTTONS
-    bool matched = intparam("altbtn=17", "altbtn=", p.altbtn, 0, MAX_BUTTONS);
+    // MAX_BUTTONS+1 > MAX_BUTTONS → clamped to MAX_BUTTONS
+    char cmd[32];
+    snprintf(cmd, sizeof(cmd), "altbtn=%d", MAX_BUTTONS + 1);
+    bool matched = intparam(cmd, "altbtn=", p.altbtn, 0, MAX_BUTTONS);
     TEST_ASSERT_TRUE(matched);
     TEST_ASSERT_EQUAL(MAX_BUTTONS, p.altbtn);
 }
@@ -426,6 +431,91 @@ void test_altvolumewheel_clamps_above_three() {
     TEST_ASSERT_EQUAL(3, p.altvolumewheel);
 }
 
+// ---- snipsvolumestep / snipsthrottlestep config keys (issue #204 phase 2) ---
+
+void test_snipsvolumestep_intparam_routes_to_correct_field() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool matched = intparam("snipsvolumestep=5", "snipsvolumestep=", p.snipsVolumeStep, 1, 100);
+    TEST_ASSERT_TRUE(matched);
+    TEST_ASSERT_EQUAL(5, p.snipsVolumeStep);
+}
+
+void test_snipsvolumestep_clamps_below_minimum() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    // 0 < 1 -> clamped to 1 (0 would mean the button does nothing)
+    bool matched = intparam("snipsvolumestep=0", "snipsvolumestep=", p.snipsVolumeStep, 1, 100);
+    TEST_ASSERT_TRUE(matched);
+    TEST_ASSERT_EQUAL(1, p.snipsVolumeStep);
+}
+
+void test_snipsvolumestep_clamps_above_maximum() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool matched = intparam("snipsvolumestep=150", "snipsvolumestep=", p.snipsVolumeStep, 1, 100);
+    TEST_ASSERT_TRUE(matched);
+    TEST_ASSERT_EQUAL(100, p.snipsVolumeStep);
+}
+
+void test_snipsthrottlestep_intparam_routes_to_correct_field() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool matched = intparam("snipsthrottlestep=10", "snipsthrottlestep=", p.snipsThrottleStep, 1, 100);
+    TEST_ASSERT_TRUE(matched);
+    TEST_ASSERT_EQUAL(10, p.snipsThrottleStep);
+}
+
+void test_snipsthrottlestep_clamps_below_minimum() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool matched = intparam("snipsthrottlestep=0", "snipsthrottlestep=", p.snipsThrottleStep, 1, 100);
+    TEST_ASSERT_TRUE(matched);
+    TEST_ASSERT_EQUAL(1, p.snipsThrottleStep);
+}
+
+void test_snipsthrottlestep_clamps_above_maximum() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool matched = intparam("snipsthrottlestep=200", "snipsthrottlestep=", p.snipsThrottleStep, 1, 100);
+    TEST_ASSERT_TRUE(matched);
+    TEST_ASSERT_EQUAL(100, p.snipsThrottleStep);
+}
+
+void test_snipsvolumestep_and_snipsthrottlestep_are_distinct_fields() {
+    AmidalaParameters p;
+    TEST_ASSERT_NOT_EQUAL((void*)&p.snipsVolumeStep, (void*)&p.snipsThrottleStep);
+}
+
+// ---- drivespeedpct config key (issue #204 phase 2) --------------------------
+// cfg_drivespeedpct() itself also calls AmidalaController::applyDriveSpeedPct(),
+// which needs a real controller -- not tested here, same scope limitation as
+// cfg_domespeed() (see this file's header comment).
+
+void test_drivespeedpct_intparam_routes_to_correct_field() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool matched = intparam("drivespeedpct=75", "drivespeedpct=", p.driveSpeedPct, 0, 100);
+    TEST_ASSERT_TRUE(matched);
+    TEST_ASSERT_EQUAL(75, p.driveSpeedPct);
+}
+
+void test_drivespeedpct_accepts_zero() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool matched = intparam("drivespeedpct=0", "drivespeedpct=", p.driveSpeedPct, 0, 100);
+    TEST_ASSERT_TRUE(matched);
+    TEST_ASSERT_EQUAL(0, p.driveSpeedPct);
+}
+
+void test_drivespeedpct_clamps_above_maximum() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool matched = intparam("drivespeedpct=150", "drivespeedpct=", p.driveSpeedPct, 0, 100);
+    TEST_ASSERT_TRUE(matched);
+    TEST_ASSERT_EQUAL(100, p.driveSpeedPct);
+}
+
 // ---- mutebutton config key --------------------------------------------------
 
 void test_mutebutton_intparam_routes_to_correct_field() {
@@ -447,8 +537,10 @@ void test_mutebutton_accepts_zero_disabled() {
 void test_mutebutton_accepts_max_buttons_max() {
     AmidalaParameters p;
     memset(&p, 0, sizeof(p));
-    // MAX_BUTTONS (issue #204): real bound is 16 (Snips), not just 9 (XBee/BT).
-    bool matched = intparam("mutebutton=16", "mutebutton=", p.mutebutton, 0, MAX_BUTTONS);
+    // MAX_BUTTONS (issue #204): real bound is 24 (Snips), not just 9 (XBee/BT).
+    char cmd[32];
+    snprintf(cmd, sizeof(cmd), "mutebutton=%d", MAX_BUTTONS);
+    bool matched = intparam(cmd, "mutebutton=", p.mutebutton, 0, MAX_BUTTONS);
     TEST_ASSERT_TRUE(matched);
     TEST_ASSERT_EQUAL(MAX_BUTTONS, p.mutebutton);
 }
@@ -456,7 +548,9 @@ void test_mutebutton_accepts_max_buttons_max() {
 void test_mutebutton_clamps_above_max_buttons() {
     AmidalaParameters p;
     memset(&p, 0, sizeof(p));
-    bool matched = intparam("mutebutton=17", "mutebutton=", p.mutebutton, 0, MAX_BUTTONS);
+    char cmd[32];
+    snprintf(cmd, sizeof(cmd), "mutebutton=%d", MAX_BUTTONS + 1);
+    bool matched = intparam(cmd, "mutebutton=", p.mutebutton, 0, MAX_BUTTONS);
     TEST_ASSERT_TRUE(matched);
     TEST_ASSERT_EQUAL(MAX_BUTTONS, p.mutebutton);
 }
@@ -1113,6 +1207,18 @@ int main(int argc, char **argv) {
     RUN_TEST(test_altvolumewheel_accepts_nonzero);
     RUN_TEST(test_altvolumewheel_clamps_above_three);
     RUN_TEST(test_channel_volumes_are_independent_of_volume);
+
+    RUN_TEST(test_snipsvolumestep_intparam_routes_to_correct_field);
+    RUN_TEST(test_snipsvolumestep_clamps_below_minimum);
+    RUN_TEST(test_snipsvolumestep_clamps_above_maximum);
+    RUN_TEST(test_snipsthrottlestep_intparam_routes_to_correct_field);
+    RUN_TEST(test_snipsthrottlestep_clamps_below_minimum);
+    RUN_TEST(test_snipsthrottlestep_clamps_above_maximum);
+    RUN_TEST(test_snipsvolumestep_and_snipsthrottlestep_are_distinct_fields);
+
+    RUN_TEST(test_drivespeedpct_intparam_routes_to_correct_field);
+    RUN_TEST(test_drivespeedpct_accepts_zero);
+    RUN_TEST(test_drivespeedpct_clamps_above_maximum);
 
     RUN_TEST(test_mutebutton_intparam_routes_to_correct_field);
     RUN_TEST(test_mutebutton_accepts_zero_disabled);
