@@ -1,5 +1,6 @@
 #include "debug.h"
 #include "controller.h"
+#include "button_dispatch.h"
 
 #ifdef USE_VOLUME_WHEEL_DEBUG
 #define VOLUME_WHEEL_DEBUG_PRINT(raw, vol) \
@@ -30,14 +31,11 @@
 //   struct by button number, avoiding repetitive switch blocks.
 // ---------------------------------------------------------------------------
 
-#define DISPATCH_BUTTON(btnfield, num, altbtn, altHeld)                         \
-  if (event.button_up.btnfield && (altbtn) != (num)) {                         \
-    (altHeld) ? fDriver->processAltButton(num) : fDriver->noteButtonUp(num);   \
-  }
+#define DISPATCH_BUTTON(btnfield, num, altbtn, altHeld)                        \
+  dispatchButtonPress(*fDriver, num, event.button_up.btnfield, false, altbtn, altHeld)
 
-#define DISPATCH_LONG(btnfield, num, altbtn, altHeld)                          \
-  if (event.long_button_up.btnfield && (altbtn) != (num) && !(altHeld))       \
-    fDriver->processLongButton(num);
+#define DISPATCH_LONG(btnfield, num, altbtn, altHeld)                         \
+  dispatchButtonPress(*fDriver, num, false, event.long_button_up.btnfield, altbtn, altHeld)
 
 // Map drive-stick button number (1–5) to a field in a Ps3ButtonData struct.
 #define DRIVE_BTNFIELD(num, btns) \
@@ -83,17 +81,17 @@ void DriveController::notify() {
     bool altHeld = fDriver->isAltHeld();
 
     // ---- Button dispatch -----------------------------------------------------
-    DISPATCH_BUTTON(triangle, 1, altbtn, altHeld)
-    DISPATCH_BUTTON(circle,   2, altbtn, altHeld)
-    DISPATCH_BUTTON(cross,    3, altbtn, altHeld)
-    DISPATCH_BUTTON(square,   4, altbtn, altHeld)
-    DISPATCH_BUTTON(l3,       5, altbtn, altHeld)
+    DISPATCH_BUTTON(triangle, 1, altbtn, altHeld);
+    DISPATCH_BUTTON(circle,   2, altbtn, altHeld);
+    DISPATCH_BUTTON(cross,    3, altbtn, altHeld);
+    DISPATCH_BUTTON(square,   4, altbtn, altHeld);
+    DISPATCH_BUTTON(l3,       5, altbtn, altHeld);
 
-    DISPATCH_LONG(triangle, 1, altbtn, altHeld)
-    DISPATCH_LONG(circle,   2, altbtn, altHeld)
-    DISPATCH_LONG(cross,    3, altbtn, altHeld)
-    DISPATCH_LONG(square,   4, altbtn, altHeld)
-    DISPATCH_LONG(l3,       5, altbtn, altHeld)
+    DISPATCH_LONG(triangle, 1, altbtn, altHeld);
+    DISPATCH_LONG(circle,   2, altbtn, altHeld);
+    DISPATCH_LONG(cross,    3, altbtn, altHeld);
+    DISPATCH_LONG(square,   4, altbtn, altHeld);
+    DISPATCH_LONG(l3,       5, altbtn, altHeld);
 
     // ---- Double-press mute detection (buttons 1–5) ---------------------------
     int muteBtn = fDriver->params.mutebutton;
@@ -239,15 +237,15 @@ void DomeController::process() {
     } else {
       bool altHeld = fDriver->isAltHeld();
 
-      DISPATCH_BUTTON(triangle, 6, altbtn, altHeld)
-      DISPATCH_BUTTON(circle,   7, altbtn, altHeld)
-      DISPATCH_BUTTON(cross,    8, altbtn, altHeld)
-      DISPATCH_BUTTON(square,   9, altbtn, altHeld)
+      DISPATCH_BUTTON(triangle, 6, altbtn, altHeld);
+      DISPATCH_BUTTON(circle,   7, altbtn, altHeld);
+      DISPATCH_BUTTON(cross,    8, altbtn, altHeld);
+      DISPATCH_BUTTON(square,   9, altbtn, altHeld);
 
-      DISPATCH_LONG(triangle, 6, altbtn, altHeld)
-      DISPATCH_LONG(circle,   7, altbtn, altHeld)
-      DISPATCH_LONG(cross,    8, altbtn, altHeld)
-      DISPATCH_LONG(square,   9, altbtn, altHeld)
+      DISPATCH_LONG(triangle, 6, altbtn, altHeld);
+      DISPATCH_LONG(circle,   7, altbtn, altHeld);
+      DISPATCH_LONG(cross,    8, altbtn, altHeld);
+      DISPATCH_LONG(square,   9, altbtn, altHeld);
 
       // ---- Double-press mute detection (buttons 6–9) -------------------------
       int muteBtn = fDriver->params.mutebutton;

@@ -370,34 +370,6 @@ void BTGamepad::_parseReport(const uint8_t* d, size_t len)
     }
 }
 
-// Mirrors XBeePocketRemote's CHECK_BUTTON_LONGPRESS macro (xbee_remote.h):
-// starts the press timer on button-down, clears it (and suppresses the
-// trailing button-up, via the `up` out-param) once a long-press already
-// fired, and fires exactly once after LONG_PRESS_TIME while still held.
-bool BTGamepad::_checkLongPress(LongPress& lp, bool down, bool& up, bool held)
-{
-    // Matches xbee_remote.h's LONG_PRESS_TIME default -- kept as a separate
-    // constant here rather than shared, since XBee's is overrideable via
-    // #define before including that header and this isn't.
-    static const uint32_t kLongPressTime = 3000;
-    bool longUp = false;
-    if (down) {
-        lp.pressTime = millis();
-        lp.longPress = false;
-    } else if (up) {
-        lp.pressTime = 0;
-        if (lp.longPress) up = false;
-        lp.longPress = false;
-    } else if (lp.pressTime != 0 && held) {
-        if (lp.pressTime + kLongPressTime < millis()) {
-            lp.pressTime = 0;
-            lp.longPress = true;
-            longUp = true;
-        }
-    }
-    return longUp;
-}
-
 // Dispatch face buttons + L3 (triangle/circle/cross/square/l3) through
 // AmidalaController's drive-side button slots 1-5, mirroring
 // XBeePocketRemote::update()'s CHECK_BUTTON_UP/CHECK_BUTTON_LONGPRESS diffing
@@ -424,11 +396,21 @@ void BTGamepad::_dispatchButtons(const State& prev)
     bool up_square   = prev.button.square   && !state.button.square;
     bool up_l3       = prev.button.l3       && !state.button.l3;
 
-    bool long_triangle = _checkLongPress(fLongPress.triangle, down_triangle, up_triangle, state.button.triangle);
-    bool long_circle   = _checkLongPress(fLongPress.circle,   down_circle,   up_circle,   state.button.circle);
-    bool long_cross    = _checkLongPress(fLongPress.cross,    down_cross,    up_cross,    state.button.cross);
-    bool long_square   = _checkLongPress(fLongPress.square,   down_square,   up_square,   state.button.square);
-    bool long_l3       = _checkLongPress(fLongPress.l3,       down_l3,       up_l3,       state.button.l3);
+    // update() returns the (possibly long-press-suppressed) `up` by value
+    // rather than mutating a bool& -- see button_dispatch.h -- so overwrite
+    // the up_* locals from the result the same way the old in-place mutation
+    // did, since the mute-button check below relies on suppression too.
+    uint32_t now = millis();
+    auto rTriangle = fLongPress.triangle.update(down_triangle, up_triangle, state.button.triangle, now, DEFAULT_LONG_PRESS_MS);
+    auto rCircle   = fLongPress.circle.update(down_circle,   up_circle,   state.button.circle,   now, DEFAULT_LONG_PRESS_MS);
+    auto rCross    = fLongPress.cross.update(down_cross,    up_cross,    state.button.cross,    now, DEFAULT_LONG_PRESS_MS);
+    auto rSquare   = fLongPress.square.update(down_square,   up_square,   state.button.square,   now, DEFAULT_LONG_PRESS_MS);
+    auto rL3       = fLongPress.l3.update(down_l3,       up_l3,       state.button.l3,       now, DEFAULT_LONG_PRESS_MS);
+    up_triangle = rTriangle.up; bool long_triangle = rTriangle.longUp;
+    up_circle   = rCircle.up;   bool long_circle   = rCircle.longUp;
+    up_cross    = rCross.up;    bool long_cross    = rCross.longUp;
+    up_square   = rSquare.up;   bool long_square   = rSquare.longUp;
+    up_l3       = rL3.up;       bool long_l3       = rL3.longUp;
 
     int altbtn = fDriver->params.altbtn;
     if (altbtn >= 1 && altbtn <= 5) {
@@ -441,10 +423,7 @@ void BTGamepad::_dispatchButtons(const State& prev)
     bool altHeld = fDriver->isAltHeld();
 
 #define BT_DISPATCH(name, num) \
-    if (up_##name && altbtn != (num)) { \
-        altHeld ? fDriver->processAltButton(num) : fDriver->noteButtonUp(num); \
-    } \
-    if (long_##name && altbtn != (num) && !altHeld) fDriver->processLongButton(num);
+    dispatchButtonPress(*fDriver, num, up_##name, long_##name, altbtn, altHeld);
 
     BT_DISPATCH(triangle, 1)
     BT_DISPATCH(circle,   2)

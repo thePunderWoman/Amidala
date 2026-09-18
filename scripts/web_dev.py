@@ -155,7 +155,11 @@ def parse_example_config(path):
         "wcbid":         0,
         "outboundserial":0,
         "debugmode":     "n",
-        "buttons":  [_make_button() for _ in range(9)],
+        # MAX_BUTTONS (issue #204): storage is always sized for Snips's 16
+        # buttons regardless of controllertype, matching params.h/
+        # getButtonCount() -- switching controllertype only changes which
+        # slots the web UI surfaces, never how many exist.
+        "buttons":  [_make_button() for _ in range(16)],
         "gestures": [],
         "gadgets_cfg": [{"type": 0, "sstr": []} for _ in range(7)],
         "sstr_user_cnt": 0,
@@ -744,7 +748,7 @@ class _Handler(SimpleHTTPRequestHandler):
             if len(parts) == 3:
                 n   = int(parts[1]) - 1
                 lyr = {"press": "p", "long": "l", "alt": "a"}.get(parts[2])
-                if 0 <= n < 9 and lyr:
+                if 0 <= n < len(_config["buttons"]) and lyr:
                     if value == "altbtn":
                         _config["altbtn"] = n + 1
                         _config["buttons"][n]["p"] = {"t": 0}

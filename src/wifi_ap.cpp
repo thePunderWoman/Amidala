@@ -594,7 +594,7 @@ static bool rewriteButtons() {
         out = "#START\n#END\n";
     }
     String lines;
-    for (int i = 0; i < 9; i++) {
+    for (int i = 0; i < (int)sCtrl->params.getButtonCount(); i++) {
         if (sCtrl->params.B[i].action  != ButtonAction::kNone)
             lines += "b="  + String(i + 1) + "," + buttonActionStr(sCtrl->params.B[i])  + "\n";
         if (sCtrl->params.LB[i].action != ButtonAction::kNone)
@@ -1060,7 +1060,11 @@ static void handleApiConfigPost() {
         if (us < 0) { sServer.send(400, "text/plain", "bad key format"); return; }
         int    btnNum = key.substring(4, us).toInt();
         String layer  = key.substring(us + 1);  // "press", "long", or "alt"
-        if (btnNum < 1 || btnNum > 9) { sServer.send(400, "text/plain", "button 1–9 only"); return; }
+        int    maxBtn = (int)sCtrl->params.getButtonCount();
+        if (btnNum < 1 || btnNum > maxBtn) {
+            sServer.send(400, "text/plain", "button 1–" + String(maxBtn) + " only");
+            return;
+        }
         int idx = btnNum - 1;
 
         if (value == "altbtn") {

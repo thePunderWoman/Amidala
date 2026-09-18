@@ -1036,13 +1036,13 @@ bool AmidalaConfig::cfg_controllertype(const char *cmd) {
 // ---- Alt/mute buttons, double-press, BT, WCB, WiFi --------------------------
 
 bool AmidalaConfig::cfg_altbtn(const char *cmd) {
-  return intparam(cmd, "altbtn=", fController->params.altbtn, 0, 9);
+  return intparam(cmd, "altbtn=", fController->params.altbtn, 0, MAX_BUTTONS);
 }
 bool AmidalaConfig::cfg_altdomestick(const char *cmd) {
   return intparam(cmd, "altdomestick=", fController->params.altdomestick, 0, 1);
 }
 bool AmidalaConfig::cfg_mutebutton(const char *cmd) {
-  return intparam(cmd, "mutebutton=", fController->params.mutebutton, 0, 9);
+  return intparam(cmd, "mutebutton=", fController->params.mutebutton, 0, MAX_BUTTONS);
 }
 bool AmidalaConfig::cfg_dbtimeout(const char *cmd) {
   return intparam(cmd, "dbtimeout=", fController->params.dbtimeout, 0, 5000);

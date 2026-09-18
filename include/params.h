@@ -35,10 +35,27 @@
 // NOT gate dispatch. XBee, RC, and Bluetooth input all remain capability-driven
 // exactly as before (whichever hardware is actually talking gets to fire
 // buttons), matching the existing graceful multi-source design.
+//
+// Exception (issue #204): Snips Controllers share the XBee pocket remote's
+// SPI link but speak a different payload format, so controller.cpp's
+// animate() DOES gate on controllertype==CONTROLLER_TYPE_SNIPS to pick which
+// parser to run over that one link -- there's no other way to know which
+// format is arriving. See src/xbee_spi.cpp's xbeeSPIReceiveAll() (XBee
+// pocket remote) vs. xbeeSPIReceiveAllSnips() (Snips).
 #define CONTROLLER_TYPE_XBEE      0  // XBee Pocket Remote (default)
-#define CONTROLLER_TYPE_SNIPS     1  // Snips Controllers (hardware/protocol TBD)
+#define CONTROLLER_TYPE_SNIPS     1  // Snips Controllers
 #define CONTROLLER_TYPE_BLUETOOTH 2  // Bluetooth gamepad
 #define CONTROLLER_TYPE_RC        3  // RC (PPM) radio
+
+// ---- Button action storage (issue #204) -------------------------------------
+// Sized for Snips Controllers' 16 buttons (8 fire-and-forget buttons x 2
+// physical controllers) -- more than the XBee pocket remote/Bluetooth
+// gamepad's 9 (5 drive + 4 dome). Safe to share one set of arrays across
+// controller types because only one type is ever active at runtime: a saved
+// "button 7" means dome-stick "cross" under CONTROLLER_TYPE_XBEE/BLUETOOTH,
+// but Snips right-controller "Bumper" under CONTROLLER_TYPE_SNIPS. See the
+// altbtn/mutebutton comment below for both numbering schemes.
+#define MAX_BUTTONS 16
 
 // ---- Auxiliary string count -------------------------------------------------
 
@@ -206,10 +223,10 @@ struct AmidalaParameters {
 
   SoundBank SB[20];
   Channel S[kMaxServoChannels];  // storage capacity, not live count -- see getServoCount()
-  ButtonAction B[9];
-  ButtonAction LB[9];
-  ButtonAction AB[9];   // Alt-button layer (dispatched when altbtn is held)
-  ButtonAction DB[9];   // Double-press layer
+  ButtonAction B[MAX_BUTTONS];
+  ButtonAction LB[MAX_BUTTONS];
+  ButtonAction AB[MAX_BUTTONS];   // Alt-button layer (dispatched when altbtn is held)
+  ButtonAction DB[MAX_BUTTONS];   // Double-press layer
   GestureAction G[MAX_GESTURES];
   DigitalOut D[11];  // matches the assignable pool size -- no hardware ceiling on DOUT
                      // count below that, unlike Servo's LEDC-channel limit
@@ -291,15 +308,21 @@ struct AmidalaParameters {
   bool domeerrlog;  // log RoboClaw-reported errors/warnings to the monitor (off by default; debug aid)
 
   // ---- Alt-button modifier ---------------------------------------------------
-  // altbtn: which button (1–9) acts as the modifier held to activate alt layer.
-  //   0 = disabled (default).  Button numbering: drive stick triangle=1,
-  //   circle=2, cross=3, square=4, l3=5; dome stick triangle=6, circle=7,
-  //   cross=8, square=9.  (Dome l3 is reserved for gesture input.)
+  // altbtn: which button acts as the modifier held to activate alt layer.
+  //   0 = disabled (default).  Button numbering depends on controllertype:
+  //     CONTROLLER_TYPE_XBEE/_BLUETOOTH (1-9): drive stick triangle=1,
+  //       circle=2, cross=3, square=4, l3=5; dome stick triangle=6, circle=7,
+  //       cross=8, square=9.  (Dome l3 is reserved for gesture input.)
+  //     CONTROLLER_TYPE_SNIPS (1-16): right controller Macro1-6=1-6,
+  //       Bumper=7, StickClick=8; left controller Macro1-6=9-14, Bumper=15,
+  //       StickClick=16.
+  //   Safe to share B[]/LB[]/AB[]/DB[] storage across both schemes only
+  //   because XBee/Bluetooth and Snips are never active at the same time.
   // altdomestick: what happens to the dome stick while alt is held.
   //   0 = no change (default), 1 = abs-stick mode (RoboClaw only).
   uint8_t altbtn;
   uint8_t altdomestick;
-  // mutebutton: which button (1–9, same numbering as altbtn) toggles HCR mute
+  // mutebutton: which button (same numbering as altbtn) toggles HCR mute
   // when double-pressed.  0 = disabled (default).  May be the same button as
   // altbtn — a quick double-tap fires mute while a held press is the alt modifier.
   uint8_t mutebutton;

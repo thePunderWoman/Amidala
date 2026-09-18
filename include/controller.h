@@ -59,6 +59,7 @@ class AmidalaController;
 #include "jevois_console.h"
 #include "rdh_serial.h"
 #include "xbee_remote.h"
+#include "snips_remote.h"
 #include "params.h"
 #include "wifi_ap.h"
 
@@ -165,6 +166,10 @@ public:
   DriveController fDriveStick;
   DomeController fDomeStick;
   XBeePocketRemote *remote[2] = {&fDriveStick, &fDomeStick};
+  // Snips Controllers (issue #204) -- standalone siblings, not part of
+  // remote[] above. See include/snips_remote.h for why.
+  SnipsRemote fSnipsRight;
+  SnipsRemote fSnipsLeft;
   // Heap-allocated from PSRAM, not a plain member -- Str[MAX_SERIAL_STRINGS]
   // alone is ~67KB, and as static internal-SRAM storage that was ~35% of
   // this firmware's total RAM budget (issue #172). See allocParamsInPSRAM()
@@ -414,8 +419,8 @@ private:
   bool fMinimal = true;
   bool fAltHeld = false;
   uint32_t fLastMuteBtnUpTime = 0;
-  bool fDblPressActive[9] = {};
-  uint32_t fDblPressTime[9] = {};
+  bool fDblPressActive[MAX_BUTTONS] = {};
+  uint32_t fDblPressTime[MAX_BUTTONS] = {};
   uint32_t fDriveStateMillis = 0;
   uint32_t fDomeStateMillis = 0;
   // Internal drive/dome "recently active" indicators used by animate()'s

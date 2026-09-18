@@ -22,6 +22,7 @@
 #include "JoystickController.h"
 #include "core.h"
 #include "safety_stop_latch.h"
+#include "button_dispatch.h"
 
 // ---- Timing constants (overrideable before including this header) -----------
 //
@@ -30,7 +31,7 @@
 // a per-user feel tunable, not a hardware/protocol constant.
 
 #ifndef LONG_PRESS_TIME
-#define LONG_PRESS_TIME 3000
+#define LONG_PRESS_TIME DEFAULT_LONG_PRESS_MS
 #endif
 
 // How close to true center (per axis, 0-127 scale) counts as "recentered"
@@ -80,16 +81,12 @@ public:
   uint16_t w2;
   bool button[5];
   enum Type { kFailsafe, kXBee, kRC };
-  struct LongPress {
-    uint32_t pressTime;
-    bool longPress;
-  };
   struct {
-    LongPress l3;
-    LongPress triangle;
-    LongPress circle;
-    LongPress cross;
-    LongPress square;
+    ButtonLongPress l3;
+    ButtonLongPress triangle;
+    ButtonLongPress circle;
+    ButtonLongPress cross;
+    ButtonLongPress square;
   } longpress;
   Type type;
   bool failsafeNotice;
@@ -130,22 +127,10 @@ public:
     CHECK_BUTTON_UP(square);
 #define CHECK_BUTTON_LONGPRESS(b)                                              \
   {                                                                            \
-    evt.long_button_up.b = false;                                              \
-    if (evt.button_down.b) {                                                   \
-      longpress.b.pressTime = millis();                                        \
-      longpress.b.longPress = false;                                           \
-    } else if (evt.button_up.b) {                                              \
-      longpress.b.pressTime = 0;                                               \
-      if (longpress.b.longPress)                                               \
-        evt.button_up.b = false;                                               \
-      longpress.b.longPress = false;                                           \
-    } else if (longpress.b.pressTime != 0 && state.button.b) {                 \
-      if (longpress.b.pressTime + LONG_PRESS_TIME < millis()) {                \
-        longpress.b.pressTime = 0;                                             \
-        longpress.b.longPress = true;                                          \
-        evt.long_button_up.b = true;                                           \
-      }                                                                        \
-    }                                                                          \
+    auto lp = longpress.b.update(evt.button_down.b, evt.button_up.b,          \
+                                  state.button.b, millis(), LONG_PRESS_TIME);  \
+    evt.button_up.b = lp.up;                                                  \
+    evt.long_button_up.b = lp.longUp;                                         \
   }
     CHECK_BUTTON_LONGPRESS(l3);
     CHECK_BUTTON_LONGPRESS(triangle);
