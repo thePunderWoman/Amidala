@@ -1639,7 +1639,6 @@ static void handleHome() {
 
 static void handleConfigGeneral()       { sServer.send_P(200, "text/html", WEB_PAGE_GENERAL);        }
 static void handleConfigWifi()          { sServer.send_P(200, "text/html", WEB_PAGE_WIFI);            }
-static void handleConfigXbee()          { sServer.send_P(200, "text/html", WEB_PAGE_XBEE);            }
 static void handleConfigAudio()         { sServer.send_P(200, "text/html", WEB_PAGE_AUDIO);           }
 static void handleConfigRcRadio()       { sServer.send_P(200, "text/html", WEB_PAGE_RC_RADIO);        }
 static void handleConfigDome()          { sServer.send_P(200, "text/html", WEB_PAGE_DOME);            }
@@ -1916,7 +1915,6 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/index.html",            HTTP_GET, handleHome);
     sServer.on("/config/general",        HTTP_GET, handleConfigGeneral);
     sServer.on("/config/wifi",           HTTP_GET, handleConfigWifi);
-    sServer.on("/config/xbee",           HTTP_GET, handleConfigXbee);
     sServer.on("/config/audio",          HTTP_GET, handleConfigAudio);
     sServer.on("/config/rc-radio",       HTTP_GET, handleConfigRcRadio);
     sServer.on("/config/dome",           HTTP_GET, handleConfigDome);
