@@ -82,16 +82,15 @@ void test_wifi_page_uses_config_endpoint() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "href=\"/\""));
 }
 
-void test_xbee_page_uses_config_endpoint() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_XBEE, "/api/config"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_XBEE, "href=\"/\""));
-}
-
 void test_connectivity_page_has_all_sections() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/config"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "href=\"/\""));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'xbr'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'xbl'"));
+    // xbr/xbl also address Snips Controllers (issue #204), not just the
+    // legacy XBee pocket remotes -- this is the only reachable page for that
+    // config, so the labels must say so.
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "Snips Controller"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wifion'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wifissid'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "'wifichannel'"));
@@ -172,11 +171,6 @@ void test_wifi_page_schema_keys() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifissid'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifipassword'"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_WIFI, "'wifichannel'"));
-}
-
-void test_xbee_page_schema_keys() {
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_XBEE, "'xbr'"));
-    TEST_ASSERT_TRUE(contains(WEB_PAGE_XBEE, "'xbl'"));
 }
 
 void test_audio_page_schema_keys() {
@@ -985,7 +979,6 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_general_page_uses_config_endpoint);
     RUN_TEST(test_general_page_has_viewport_meta);
     RUN_TEST(test_wifi_page_uses_config_endpoint);
-    RUN_TEST(test_xbee_page_uses_config_endpoint);
     RUN_TEST(test_connectivity_page_has_all_sections);
     RUN_TEST(test_audio_page_uses_config_endpoint);
     RUN_TEST(test_rc_radio_page_uses_config_endpoint);
@@ -997,7 +990,6 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_general_page_delimiter_uses_ascii_char_type);
     RUN_TEST(test_estop_present_on_config_pages);
     RUN_TEST(test_wifi_page_schema_keys);
-    RUN_TEST(test_xbee_page_schema_keys);
     RUN_TEST(test_audio_page_schema_keys);
     RUN_TEST(test_rc_radio_page_schema_keys);
     RUN_TEST(test_dome_page_schema_keys);

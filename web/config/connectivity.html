@@ -25,8 +25,8 @@ function wcbOn(d)  { return d.wcbenable === 'y'; }
 
 var SCHEMA = [
   {section:'XBee Remotes'},
-  {key:'xbr', label:'Drive Remote', type:'hex', note:'lower 32 bits of XBee address', restart:true},
-  {key:'xbl', label:'Dome Remote',  type:'hex', note:'lower 32 bits of XBee address', restart:true},
+  {key:'xbr', label:'Right (Drive Remote / Right Snips Controller)', type:'hex', note:'lower 32 bits of XBee address', restart:true},
+  {key:'xbl', label:'Left (Dome Remote / Left Snips Controller)',    type:'hex', note:'lower 32 bits of XBee address', restart:true},
   {section:'WiFi Access Point'},
   {key:'wifion',       label:'Enable WiFi AP', type:'bool', restart:true},
   {key:'wifissid',     label:'SSID',           type:'text',     maxlength:32, note:'max 32 chars', when:wifiOn, restart:true},
