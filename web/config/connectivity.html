@@ -154,14 +154,21 @@ function xbeeATResultMessage(result) {
 function renderXbeeATPanel() {
   var panel = document.getElementById('xbee-at-panel');
   if (!panel) return;
-  var html = '<div class="sec-hdr" style="margin-top:0">XBee Module</div>';
+  var html = '<div class="section-label">XBee Module</div>';
 
-  html += '<div class="row"><div class="row-label">PAN ID</div>';
-  html += '<input id="xbee-panid-input" class="row-sel" type="text" style="flex:1" value="'
-        + escHtml(_xbeeAT.panid !== null ? _xbeeAT.panid : '') + '"'
-        + (_xbeeAT.panid === null ? ' placeholder="unavailable"' : '') + '>';
-  html += '<div class="ri"><button class="be-action" onclick="saveXbeePanId()">Save</button></div></div>';
-  html += '<div id="xbee-panid-status" style="font-size:.72rem;color:var(--muted);padding:0 0 .5rem"></div>';
+  // Same edit-in-place row as every other setting on this page (display
+  // value, pencil -> input + SAVE/cancel), built with the shared buildRow()
+  // so it can't drift visually. Only the SAVE handler differs: this value
+  // lives on the XBee module itself (set via its own AT command), not in
+  // /api/config, so it can't go through the generic doSave().
+  if (_xbeeAT.panid !== null) {
+    html += buildRow({key: 'xbee-panid', label: 'PAN ID', type: 'hex', maxlength: 16,
+                      note: 'hex, up to 16 digits'}, _xbeeAT.panid)
+      .replace('onclick="doSave(this)"', 'onclick="saveXbeePanId(this)"');
+  } else {
+    html += '<div class="row"><div class="row-label">PAN ID</div>'
+          + '<div class="rv" style="color:var(--muted)">Unavailable — check XBee wiring/power</div></div>';
+  }
 
   html += '<div class="row"><div class="row-label">Role</div>';
   if (_xbeeAT.isCoordinator === true) {
@@ -178,17 +185,35 @@ function renderXbeeATPanel() {
   panel.innerHTML = html;
 }
 
-function saveXbeePanId() {
-  var input = document.getElementById('xbee-panid-input');
-  var statusEl = document.getElementById('xbee-panid-status');
-  var value = input.value.trim();
-  if (!value) { statusEl.textContent = 'Enter a PAN ID first.'; return; }
-  statusEl.textContent = 'Saving…';
+// Mirrors doSave()'s in-place feedback (button shows an ellipsis while in
+// flight, toast on result, row drops back to its display state on success)
+// -- see edit.js.
+function saveXbeePanId(btn) {
+  var row = btn.closest('.row');
+  var inp = row.querySelector('input');
+  var value = inp.value.trim().toUpperCase();
+  // Anything that isn't plain hex would be silently read as zeros by the
+  // firmware's hex parser -- and ID=0 means "pick a random PAN ID", which
+  // is a surprising thing to get from a typo.
+  if (!/^[0-9A-F]{1,16}$/.test(value)) {
+    showToast('PAN ID must be 1-16 hex digits', true);
+    return;
+  }
+  var prev = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
   xbeeATStart('/api/xbee/set', 'cmd=ID&value=' + encodeURIComponent(value), function(result) {
-    statusEl.textContent = xbeeATResultMessage(result);
+    btn.textContent = prev;
+    btn.disabled = false;
     if (result && result.state === 'done') {
       _xbeeAT.panid = value;
-      showToast('PAN ID saved');
+      row.querySelector('.rv').textContent = value;
+      inp.value = value;
+      inp.dataset.orig = value;
+      _closeEditUI(row);
+      showToast('Saved');
+    } else {
+      showToast(xbeeATResultMessage(result), true);
     }
   });
 }
