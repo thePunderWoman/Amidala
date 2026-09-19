@@ -245,7 +245,6 @@ void AmidalaController::setup() {
 #ifdef STATUS_J1_PIN
   pinMode(STATUS_J1_PIN, OUTPUT);
   pinMode(STATUS_J2_PIN, OUTPUT);
-  pinMode(STATUS_RC_PIN, OUTPUT);
   pinMode(STATUS_S1_PIN, OUTPUT);
   pinMode(STATUS_S2_PIN, OUTPUT);
   pinMode(STATUS_S3_PIN, OUTPUT);
@@ -423,76 +422,101 @@ void AmidalaController::animate() {
   // Sample frames (0x92/0x82) over the same shared SPI link -- an
   // intentional, narrow exception to the "controllertype doesn't gate
   // dispatch" principle noted in params.h, needed because this is the only
-  // way to know which parser to run over that one link. RC/failsafe
-  // fallback and XBee pocket remote input are otherwise untouched below.
+  // way to know which parser to run over that one link. RC and XBee pocket
+  // remote input are otherwise mutually exclusive branches below, same as
+  // Snips.
+  //
+  // Logs on every transition INTO RC mode, not just once at boot --
+  // controllertype applies live, so a web UI switch into RC without a
+  // reboot should be just as visible in the field as selecting it at boot.
+  // -1 sentinel (never a real controllertype) guarantees the very first
+  // tick counts as a transition too, whether RC was the boot-time default
+  // or the current value from an earlier config load.
+  static int sLastControllerType = -1;
+  if (params.controllertype == CONTROLLER_TYPE_RC && sLastControllerType != CONTROLLER_TYPE_RC) {
+    fConsole.println("RC Enabled (" + String(params.getRadioChannelCount()) + " Channels)");
+    // Reset decode warm-up/averaging state on every fresh entry, not just at
+    // construction -- otherwise switching away from RC and back again live
+    // (no reboot) resumes decode() against stale channel history from the
+    // earlier session instead of a clean start.
+    fPPMDecoder.init();
+  }
+  sLastControllerType = params.controllertype;
+
   if (params.controllertype == CONTROLLER_TYPE_SNIPS) {
     SnipsRemote* snipsRemotes[2] = {&fSnipsRight, &fSnipsLeft};
     xbeeSPIReceiveAllSnips(snipsRemotes, 2);
     fSnipsRight.checkFailsafe(params.fst);
     fSnipsLeft.checkFailsafe(params.fst);
-  } else {
-    if (checkRCMode() && remote[0]->failsafe() && remote[0]->failsafeNotice &&
-        remote[1]->failsafe() && remote[1]->failsafeNotice) {
-      // Both Pocket Remotes are disabled enable RC controller
-      fPPMDecoder.init();
-      remote[0]->type = remote[0]->kRC;
-      remote[1]->type = remote[1]->kRC;
+  } else if (params.controllertype == CONTROLLER_TYPE_RC) {
+    // No XBee SPI traffic in this mode -- this board only has a PPM input
+    // pin, not a physical RC-select pin, so params.controllertype alone
+    // decides whether PPM channels drive the drive/dome remotes.
+    //
+    // update() must run every tick regardless of decode() success -- it's
+    // what drives DriveController/DomeController::notify()'s lastPacket-lag
+    // safety-stop (mirrors the XBee branch below, which likewise calls
+    // update() every tick and only conditionally marks a remote failsafe).
+    // lastPacket itself is only refreshed on an actual fresh decode, so a
+    // lost PPM signal grows stale exactly like a lost XBee link would and
+    // trips the same existing failsafe logic, instead of freezing update()
+    // entirely and never detecting the loss at all.
+    remote[0]->type = remote[0]->kRC;
+    remote[1]->type = remote[1]->kRC;
+    if (fPPMDecoder.decode()) {
+      remote[0]->lastPacket = millis();
+      remote[0]->x = fPPMDecoder.channel(0, 0, 1024, 512);
+      remote[0]->y = fPPMDecoder.channel(1, 0, 1024, 512);
+      remote[0]->w1 = fPPMDecoder.channel(4, 0, 1024, 0);
+
+      remote[1]->lastPacket = millis();
+      remote[1]->x = fPPMDecoder.channel(2, 0, 1024, 512);
+      remote[1]->y = fPPMDecoder.channel(3, 0, 1024, 512);
+      remote[1]->w1 = fPPMDecoder.channel(5, 0, 1024, 0);
     }
+    remote[0]->update();
+    remote[1]->update();
+  } else {
     xbeeSPIReceiveAll(remote, sizeof(remote) / sizeof(remote[0]));
 
-    if (checkRCMode() && remote[0]->type == remote[0]->kRC &&
-        digitalRead(XBEE_ATTN_PIN) == HIGH) {
-      if (fPPMDecoder.decode()) {
-        remote[0]->x = fPPMDecoder.channel(0, 0, 1024, 512);
-        remote[0]->y = fPPMDecoder.channel(1, 0, 1024, 512);
-        remote[0]->w1 = fPPMDecoder.channel(4, 0, 1024, 0);
-        remote[0]->update();
-
-        remote[1]->x = fPPMDecoder.channel(2, 0, 1024, 512);
-        remote[1]->y = fPPMDecoder.channel(3, 0, 1024, 512);
-        remote[1]->w1 = fPPMDecoder.channel(5, 0, 1024, 0);
-        remote[1]->update();
-      }
-    } else {
-      bool stickActive = false;
-      for (unsigned i = 0; i < sizeof(remote) / sizeof(remote[0]); i++) {
-        auto r = remote[i];
-        if (r->type == r->kXBee) {
-          stickActive = true;
+    bool stickActive = false;
+    for (unsigned i = 0; i < sizeof(remote) / sizeof(remote[0]); i++) {
+      auto r = remote[i];
+      if (r->type == r->kXBee) {
+        stickActive = true;
 #ifdef USE_POCKET_REMOTE_DEBUG
-          if (i == 0) {
-            DEBUG_PRINT(F("J1 x="));
-            DEBUG_PRINT(r->x);
-            DEBUG_PRINT(F(" y="));
-            DEBUG_PRINTLN(r->y);
-          }
-#endif
-          if (r->lastPacket + params.fst < millis())
-            r->type = r->kFailsafe;
-          r->update();
+        if (i == 0) {
+          DEBUG_PRINT(F("J1 x="));
+          DEBUG_PRINT(r->x);
+          DEBUG_PRINT(F(" y="));
+          DEBUG_PRINTLN(r->y);
         }
+#endif
+        if (r->lastPacket + params.fst < millis())
+          r->type = r->kFailsafe;
+        r->update();
       }
-      (void)stickActive;
-      for (unsigned i = 0; i < sizeof(remote) / sizeof(remote[0]); i++) {
-        auto r = remote[i];
-        if (r->failsafe() != r->failsafeNotice) {
-          if (stickActive)
-            fConsole.println();
-          fConsole.print('J');
-          fConsole.print(i + 1);
-          fConsole.print(F(" FS "));
-          fConsole.println(r->failsafe() ? F("ON") : F("OFF"));
-          if (i == 0) {
+    }
+    (void)stickActive;
+    for (unsigned i = 0; i < sizeof(remote) / sizeof(remote[0]); i++) {
+      auto r = remote[i];
+      if (r->failsafe() != r->failsafeNotice) {
+        if (stickActive)
+          fConsole.println();
+        fConsole.print('J');
+        fConsole.print(i + 1);
+        fConsole.print(F(" FS "));
+        fConsole.println(r->failsafe() ? F("ON") : F("OFF"));
+        if (i == 0) {
 #ifdef STATUS_J1_PIN
-            digitalWrite(STATUS_J1_PIN, r->failsafe() ? LOW : HIGH);
+          digitalWrite(STATUS_J1_PIN, r->failsafe() ? LOW : HIGH);
 #endif
-          } else if (i == 1) {
+        } else if (i == 1) {
 #ifdef STATUS_J2_PIN
-            digitalWrite(STATUS_J2_PIN, r->failsafe() ? LOW : HIGH);
+          digitalWrite(STATUS_J2_PIN, r->failsafe() ? LOW : HIGH);
 #endif
-          }
-          r->failsafeNotice = r->failsafe();
         }
+        r->failsafeNotice = r->failsafe();
       }
     }
   }
