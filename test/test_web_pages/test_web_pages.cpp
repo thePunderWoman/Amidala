@@ -125,6 +125,18 @@ void test_connectivity_page_has_xbee_at_command_panel() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "set as the coordinator"));
 }
 
+void test_connectivity_page_panid_uses_shared_edit_in_place_row() {
+    // The PAN ID row must be built with the same buildRow() every other
+    // setting on this page uses (display value + pencil -> input + SAVE/
+    // cancel), not a hand-rolled always-editable input -- that's what made
+    // it look different from every neighbouring row.
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "buildRow({key: 'xbee-panid'"));
+    // ...with only its SAVE handler swapped out, since this value lives on
+    // the XBee module (its own AT command), not in /api/config.
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "saveXbeePanId(this)"));
+    TEST_ASSERT_FALSE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "xbee-panid-input"));
+}
+
 void test_connectivity_page_disables_sleep_before_setting_coordinator() {
     // Digi's CE=1 (form network) requires SM=0 (sleep disabled) -- setting CE
     // first would just get rejected on a module currently configured to
@@ -1019,6 +1031,7 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_wifi_page_uses_config_endpoint);
     RUN_TEST(test_connectivity_page_has_all_sections);
     RUN_TEST(test_connectivity_page_has_xbee_at_command_panel);
+    RUN_TEST(test_connectivity_page_panid_uses_shared_edit_in_place_row);
     RUN_TEST(test_connectivity_page_disables_sleep_before_setting_coordinator);
     RUN_TEST(test_audio_page_uses_config_endpoint);
     RUN_TEST(test_rc_radio_page_uses_config_endpoint);
