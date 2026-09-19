@@ -81,8 +81,12 @@ public:
     // HCR on a plain serial port).
     bool broadcastHcr(const char *line);
     // sendHcrToHost: unicast to the WCB advertising native HCR hosting (WDP
-    // capability bit) when one is online -- a broadcast would make every other
-    // WCB print "HCR not configured" per command -- else broadcast.
+    // capability bit) when one is online, else broadcast. Aiming it matters
+    // because a WCB never forwards a mesh-origin ;H command (its "one-hop
+    // cap") -- the receiver runs it locally, so a broadcast makes every WCB
+    // but the host print "HCR not configured" per command. (A command that
+    // arrives over a WCB's serial port IS forwarded to the host, which is why
+    // the wired path needs no WCB number or port.)
     bool sendHcrToHost(const char *line);
 
     // Live status for /api/wcb/status.
