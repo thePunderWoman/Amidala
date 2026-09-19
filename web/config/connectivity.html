@@ -193,18 +193,30 @@ function saveXbeePanId() {
   });
 }
 
+// A coordinator must never sleep: Digi's CE=1 ("form network") requires
+// SM=0 (sleep disabled), so SM=0 is sent first and CE=1 only follows if it
+// succeeded -- setting them the other way around would just get CE=1
+// rejected on a module that's currently configured to sleep. Two separate
+// set-and-persist actions (each followed by its own WR) rather than one
+// combined action, since XBeeATSession only handles one at a time.
 function setXbeeCoordinator() {
   var statusEl = document.getElementById('xbee-coordinator-status');
   statusEl.textContent = 'Setting…';
-  xbeeATStart('/api/xbee/set', 'cmd=CE&value=1', function(result) {
-    if (result && result.state === 'done') {
-      _xbeeAT.isCoordinator = true;
-      statusEl.textContent = '';
-      renderXbeeATPanel();
-      showToast('XBee set as coordinator');
-    } else {
-      statusEl.textContent = xbeeATResultMessage(result);
+  xbeeATStart('/api/xbee/set', 'cmd=SM&value=0', function(smResult) {
+    if (!smResult || smResult.state !== 'done') {
+      statusEl.textContent = xbeeATResultMessage(smResult);
+      return;
     }
+    xbeeATStart('/api/xbee/set', 'cmd=CE&value=1', function(ceResult) {
+      if (ceResult && ceResult.state === 'done') {
+        _xbeeAT.isCoordinator = true;
+        statusEl.textContent = '';
+        renderXbeeATPanel();
+        showToast('XBee set as coordinator');
+      } else {
+        statusEl.textContent = xbeeATResultMessage(ceResult);
+      }
+    });
   });
 }
 
