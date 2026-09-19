@@ -183,6 +183,7 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
 
     // Audio
     json += "\"audiohw\":\""      + String(hw)                        + "\",";
+    json += "\"hcrlink\":"        + String(p.hcrlink)                 + ",";
     json += "\"volumeChA\":"      + String(p.volumeChA)               + ",";
     json += "\"volumeChB\":"      + String(p.volumeChB)               + ",";
     json += "\"volumewheel\":"    + String(p.volumewheel)             + ",";

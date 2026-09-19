@@ -157,6 +157,7 @@ def parse_example_config(path):
         "wcbquantity":   0,
         "wcbid":         0,
         "outboundserial":0,
+        "hcrlink":       0,
         "debugmode":     "n",
         # MAX_BUTTONS (issue #204): storage is always sized for Snips's 24
         # buttons (12 per controller, including the 4 stateful step
@@ -182,7 +183,7 @@ def parse_example_config(path):
                   "startupem", "startuplvl", "ackem", "acklvl",
                   "volumeChA", "volumeChB", "volumewheel", "altvolumewheel",
                   "snipsvolumestep", "snipsthrottlestep", "drivespeedpct",
-                  "wcbquantity", "wcbid", "outboundserial", "wifichannel"}
+                  "wcbquantity", "wcbid", "outboundserial", "hcrlink", "wifichannel"}
     _str_keys  = {"startup", "rndon", "ackon", "goslow", "mix12", "auto",
                   "wifion", "wifissid", "wifipassword", "xbr", "xbl",
                   "audiohw", "domeflip", "domeimu", "domech6",

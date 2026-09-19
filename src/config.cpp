@@ -355,6 +355,8 @@ void AmidalaConfig::showCurrentConfiguration() {
     fOutput->println(params.wcbenable ? F("On") : F("Off"));
     fOutput->print(F("WCB Outbound: "));
     fOutput->println(params.outboundserial == 1 ? F("WCB Mesh") : F("UART0"));
+    fOutput->print(F("HCR Link: "));
+    fOutput->println(params.hcrlink == 1 ? F("WCB Native") : F("Serial"));
     fOutput->print(F("WiFi AP: "));
     fOutput->println(params.wifion ? F("On") : F("Off"));
     fOutput->print(F("WiFi SSID: "));
@@ -1129,6 +1131,9 @@ bool AmidalaConfig::cfg_wcbid(const char *cmd) {
 bool AmidalaConfig::cfg_outboundserial(const char *cmd) {
   return intparam(cmd, "outboundserial=", fController->params.outboundserial, 0, 1);
 }
+bool AmidalaConfig::cfg_hcrlink(const char *cmd) {
+  return intparam(cmd, "hcrlink=", fController->params.hcrlink, 0, 1);
+}
 bool AmidalaConfig::cfg_wifion(const char *cmd) {
   return boolparam(cmd, "wifion=", fController->params.wifion);
 }
@@ -1550,6 +1555,7 @@ const AmidalaConfig::ConfigHandler AmidalaConfig::kConfigHandlers[] = {
     &AmidalaConfig::cfg_wcbquantity,
     &AmidalaConfig::cfg_wcbid,
     &AmidalaConfig::cfg_outboundserial,
+    &AmidalaConfig::cfg_hcrlink,
     &AmidalaConfig::cfg_wifion,
     &AmidalaConfig::cfg_wifissid,
     &AmidalaConfig::cfg_wifipassword,

@@ -47,6 +47,10 @@ void AmidalaAudio::init(AmidalaController *controller) {
     // without needing to stop calling update() every cycle -- see process()
     // below for why that still matters.
     fController->fHCR.begin(0);
+    // Every outbound HCR command is offered to this first: it applies
+    // params.hcrlink (bare vs ";H,RAW," wrapped) and params.outboundserial
+    // (mesh vs UART0), re-read per command so both change live.
+    fController->fHCR.setExternalTransport(&fController->fHcrLink);
     DelayCall::schedule(hcrDelayedInit, 5000);
   }
 #endif

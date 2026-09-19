@@ -41,6 +41,7 @@
 #include <Wire.h>
 #ifndef VMUSIC_SERIAL
 #include <hcr.h>
+#include "hcr_link_transport.h"
 #endif
 #include "core.h"
 #include "version.h"
@@ -52,6 +53,23 @@
 
 // Forward-declare AmidalaController before the headers that use it as a pointer.
 class AmidalaController;
+
+#ifndef VMUSIC_SERIAL
+// Firmware side of hcr_link.h: HCR lines go to the mesh via WCBClientController,
+// wired bytes to UART0 (the same port HCRVocalizer itself writes to).
+class HcrLinkSinkImpl : public HcrLinkSink {
+public:
+  explicit HcrLinkSinkImpl(WCBClientController &wcb) : fWCB(wcb) {}
+  bool sendMesh(const char *line) override { return fWCB.broadcastHcr(line); }
+  bool sendMeshToHost(const char *line) override { return fWCB.sendHcrToHost(line); }
+  void writeSerial(const char *bytes) override {
+    SERIAL.write((const uint8_t *)bytes, strlen(bytes));
+  }
+
+private:
+  WCBClientController &fWCB;
+};
+#endif
 
 #include "button_actions.h"
 #include "audio.h"
@@ -228,6 +246,12 @@ public:
   // declaration order, not initializer-list order) binds it before anything
   // later in the constructor's initializer list reads from it.
   AmidalaParameters &params;
+#ifndef VMUSIC_SERIAL
+  // After params (it holds a reference to it) and fWCB (the sink's mesh leg).
+  // Installed on fHCR by AmidalaAudio::init().
+  HcrLinkSinkImpl  fHcrLinkSink{fWCB};
+  HcrLinkTransport fHcrLink{params, fHcrLinkSink};
+#endif
 #ifdef RDH_SERIAL
   RDHSerial fAutoDome;
 #endif

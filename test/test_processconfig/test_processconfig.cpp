@@ -1024,6 +1024,28 @@ void test_outboundserial_defaults_to_uart0() {
     TEST_ASSERT_EQUAL(0, p.outboundserial);
 }
 
+void test_hcrlink_intparam_parses_wcb_native() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    bool ok = intparam("hcrlink=1", "hcrlink=", p.hcrlink, 0, 1);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL(1, p.hcrlink);
+}
+
+void test_hcrlink_intparam_clamps_above_max_to_wcb_native() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    intparam("hcrlink=2", "hcrlink=", p.hcrlink, 0, 1);
+    TEST_ASSERT_EQUAL(1, p.hcrlink);
+}
+
+void test_hcrlink_defaults_to_serial() {
+    AmidalaParameters p;
+    memset(&p, 0, sizeof(p));
+    p.init(true);
+    TEST_ASSERT_EQUAL(0, p.hcrlink);
+}
+
 // wifichannel's default (1) is covered in test_params.cpp's
 // test_default_wifichannel via the long-lived gDefaultParams -- p.init(true)
 // on a fresh local struct here is unreliable for non-zero defaults, since
@@ -1266,6 +1288,9 @@ int main(int argc, char **argv) {
     RUN_TEST(test_wcbid_intparam_accepts_special_slot);
     RUN_TEST(test_outboundserial_intparam_parses);
     RUN_TEST(test_outboundserial_defaults_to_uart0);
+    RUN_TEST(test_hcrlink_intparam_parses_wcb_native);
+    RUN_TEST(test_hcrlink_intparam_clamps_above_max_to_wcb_native);
+    RUN_TEST(test_hcrlink_defaults_to_serial);
     RUN_TEST(test_wifichannel_intparam_parses);
     RUN_TEST(test_wifichannel_clamps_below_minimum);
     RUN_TEST(test_wifichannel_clamps_above_maximum);

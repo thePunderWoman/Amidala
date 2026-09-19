@@ -25,7 +25,7 @@
 - **Multiple Controller Support** — works with Snips Controllers (currently in prototype stage), classic stealth controllers, standard Bluetooth gamepads, and analog RC (PPM) input.
 - **Wi-Fi configuration UI** — browser-based interface for fully configuring your droid without needing to pull the SD card.
 - **WCB mesh networking** — join a [WCB](https://github.com/greghulette/WCBClient) ESP-NOW mesh to coordinate commands across multiple boards (e.g. a separate body controller) with no extra wiring.
-- **Native HCR support** — full Human Cyborg Relations vocalizer integration.
+- **Native HCR support** — full Human Cyborg Relations vocalizer integration, whether the HCR is wired straight to the board or owned by a WCB running its native HCR mode (Audio page → Serial Configuration).
 - **Built in Serial Monitor** — full featured onboard native serial monitor to view traffic in real time, even across your WCB Mesh.
 - **Advanced Dome Drive** — Built-in support for auto dome drive with a Pololu encoder motor and hall sensor, or any other basic PWM dome drive.
 - **Flexible drive systems** — PWM, Sabertooth serial, or RoboteQ (PWM, serial, or hybrid)

@@ -3853,6 +3853,9 @@ var VMUSIC = function(d) { return d.audiohw === 'vmusic'; };
 var SCHEMA = [
   {section:'Hardware'},
   {key:'audiohw',        label:'Audio Board',        readOnly:true},
+  {key:'hcrlink',        label:'Serial Configuration', type:'select', when:HCR,
+    options:[{v:'0', l:'Serial'}, {v:'1', l:'WCB Native'}],
+    note:'WCB Native: a WCB has the HCR set up with ?HCR,PORT'},
   {section:'Volume'},
   {key:'volume',         label:'R2 Sounds Volume',   type:'number', min:0, max:100, restart:true},
   {key:'volumeChA',      label:'Channel A Volume',   type:'number', min:0, max:100, when:HCR, restart:true},

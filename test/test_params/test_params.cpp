@@ -104,6 +104,11 @@ void test_default_outboundserial_uart0() {
     TEST_ASSERT_EQUAL(0, gDefaultParams.outboundserial);
 }
 
+void test_default_hcrlink_is_serial() {
+    gDefaultParams.init();
+    TEST_ASSERT_EQUAL(0, gDefaultParams.hcrlink);
+}
+
 void test_default_wifichannel() {
     gDefaultParams.init();
     TEST_ASSERT_EQUAL(1, gDefaultParams.wifichannel);
@@ -548,6 +553,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_default_wcbenable_false);
     RUN_TEST(test_default_wcb_identity_zeroed);
     RUN_TEST(test_default_outboundserial_uart0);
+    RUN_TEST(test_default_hcrlink_is_serial);
     RUN_TEST(test_default_wifichannel);
     RUN_TEST(test_default_mindelay);
     RUN_TEST(test_default_fst_in_valid_range);

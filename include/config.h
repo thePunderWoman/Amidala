@@ -173,6 +173,7 @@ private:
   bool cfg_wcbquantity(const char *cmd);
   bool cfg_wcbid(const char *cmd);
   bool cfg_outboundserial(const char *cmd);
+  bool cfg_hcrlink(const char *cmd);
   bool cfg_wifion(const char *cmd);
   bool cfg_wifissid(const char *cmd);
   bool cfg_wifipassword(const char *cmd);

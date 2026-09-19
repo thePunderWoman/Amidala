@@ -1,7 +1,6 @@
 #include "wcb_client_controller.h"
 
 #include <WCB_Client.h>
-#include <hcr.h>
 
 #include "monitor_buf.h"
 #include "version.h"
@@ -15,9 +14,7 @@ void WCBClientController::onCommandBridge(uint8_t senderID, const char *command)
     if (sInstance) sInstance->fRxQueue.push(senderID, command);
 }
 
-void WCBClientController::begin(const AmidalaParameters &params, HCRVocalizer &hcr, Print &out) {
-    fHcr = &hcr;
-
+void WCBClientController::begin(const AmidalaParameters &params, Print &out) {
     if (!params.wcbenable) return;
 
     WCBConfigValidation v = WCBConfigValidator::validate(params);
@@ -56,8 +53,6 @@ void WCBClientController::begin(const AmidalaParameters &params, HCRVocalizer &h
     // addressing, passed to the constructor above). Hardcoded, not a config
     // setting: every Amidala board on a given mesh identifies the same way.
     fClient->setIdentity("Amidala", FIRMWARE_VERSION);
-
-    fHcrTransport = new WCBHcrTransport(fClient);
 }
 
 void WCBClientController::poll(const AmidalaParameters &params) {
@@ -78,16 +73,6 @@ void WCBClientController::poll(const AmidalaParameters &params) {
 
     if (!fClient) return;
     fClient->update(); // required every loop iteration per the library's own contract
-
-    // outboundserial is safe to apply live (unlike the identity fields,
-    // it never touches WCB_Client's construction) -- react to a change
-    // by wiring/unwiring HCR's transport to match.
-    bool wantMesh = (params.outboundserial == 1);
-    if (wantMesh != fHcrTransportActive) {
-        if (wantMesh) fHcr->setExternalTransport(fHcrTransport);
-        else          fHcr->clearExternalTransport();
-        fHcrTransportActive = wantMesh;
-    }
 }
 
 bool WCBClientController::routeOutbound(const char *cmd, bool wantMesh, uint8_t delim) {
@@ -107,6 +92,36 @@ bool WCBClientController::routeOutbound(const char *cmd, bool wantMesh, uint8_t 
     bool ok = true;
     for (uint8_t i = 0; i < n; i++)
         ok = fClient->broadcast(segments[i]) && ok;
+    return ok;
+}
+
+static void tapHcrMesh(const char *line) {
+    char tap[WCB_RX_CMD_LEN + 16];
+    snprintf(tap, sizeof(tap), "MESH: %s", line);
+    monAppend(tap, 't');
+}
+
+bool WCBClientController::broadcastHcr(const char *line) {
+    if (!fClient) return false; // not live -- caller falls back to the wired link
+    bool ok = fClient->broadcast(line);
+    if (ok) tapHcrMesh(line);
+    return ok;
+}
+
+bool WCBClientController::sendHcrToHost(const char *line) {
+    if (!fClient) return false; // not live -- caller falls back to the wired link
+
+    bool ok = false;
+    for (uint8_t id = 1; id <= WCB_MAX_BOARDS && !ok; id++) {
+        const WCBNeighbor *nb = fClient->getNeighbor(id);
+        if (nb && !nb->isClient && (nb->capFlags & WCB_CAP_HCR) && fClient->isOnline(id))
+            ok = fClient->send(id, line);
+    }
+    // No HCR host advertised (WDP off, or not heard yet) or the unicast was
+    // refused -- broadcast; only the WCB that actually hosts the HCR acts on it.
+    if (!ok) ok = fClient->broadcast(line);
+
+    if (ok) tapHcrMesh(line);
     return ok;
 }
 
