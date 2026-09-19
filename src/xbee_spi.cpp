@@ -29,12 +29,24 @@
 #include "xbee_io_sample.h"
 #include "xbee_receive_packet.h"
 #include "xbee_transmit_frame.h"
+#include "xbee_at_command.h"
+#include "xbee_at_session.h"
 #include "snips_packet.h"
 #include "snips_remote.h"
 #include "pin_config.h"
 #include <SPI.h>
 
 static const SPISettings kXBeeSettings(3000000, MSBFIRST, SPI_MODE0);
+
+// Registered once from AmidalaController::setup() (issue #213) -- every
+// Local AT Command Response (0x88) read off the SPI link gets routed here
+// regardless of controllertype, since PAN ID/coordinator-role config isn't
+// tied to which remote type is active. See xbeeSPIPumpFrames() below.
+static XBeeATSession* sATSession = nullptr;
+
+void xbeeSPISetATSession(XBeeATSession* session) {
+    sATSession = session;
+}
 
 static inline uint8_t xbeeTransfer() { return SPI.transfer(0xFF); }
 
@@ -105,16 +117,50 @@ static void xbeeSPIPumpFrames(FrameHandler handler) {
         if (length < 0) break;
         if (length == 0) continue;
 
+        // Local AT Command Responses (0x88, issue #213) can arrive
+        // regardless of controllertype -- intercepted here, before either
+        // per-controllertype handler below, so neither one logs it as an
+        // unrecognized frame type.
+        if (buf[0] == XBeeATCommand::kResponseFrameType) {
+            if (sATSession) sATSession->handleResponse(buf, (uint16_t)length);
+            continue;
+        }
+
         handler(buf, (uint16_t)length);
     }
 }
 
+void xbeeSPIPumpATResponsesOnly() {
+    // The 0x88 interception already happens inside xbeeSPIPumpFrames()
+    // above, before the handler runs -- an empty handler here means
+    // everything else (no configured remote should even be sending data
+    // yet at boot) is silently drained and ignored, not logged as
+    // unrecognized.
+    xbeeSPIPumpFrames([](const uint8_t*, uint16_t) {});
+}
+
+// Writes one complete API frame (0x7E start delimiter, 2-byte length,
+// frame data, trailing checksum) in its own SPI transaction, independent
+// of xbeeSPIPumpFrames() above, since ATTN only signals inbound data and
+// has no bearing on write-readiness. Shared by xbeeSPISendPacket() (Snips
+// downlink) and xbeeSPISendATCommand() (issue #213) below.
+static void xbeeSPISendFrame(const uint8_t *frameData, uint16_t frameLength) {
+    uint8_t checksum = xbeeComputeChecksum(frameData, frameLength);
+
+    SPI.beginTransaction(kXBeeSettings);
+    digitalWrite(XBEE_CS_PIN, LOW);
+    SPI.transfer(0x7E);
+    SPI.transfer((uint8_t)(frameLength >> 8));
+    SPI.transfer((uint8_t)(frameLength));
+    for (uint16_t i = 0; i < frameLength; i++) SPI.transfer(frameData[i]);
+    SPI.transfer(checksum);
+    digitalWrite(XBEE_CS_PIN, HIGH);
+    SPI.endTransaction();
+}
+
 // Sends a Transmit Request (0x10) frame addressed to `dest16` (issue #204
-// phase 2 downlink) -- its own SPI transaction, independent of
-// xbeeSPIPumpFrames() above, since ATTN only signals inbound data and has
-// no bearing on write-readiness. Wraps XBeeTransmitFrame::buildTransmitRequest()
-// with the outer 0x7E start delimiter, 2-byte length, and trailing checksum
-// xbeeReadFrame() strips on the receive side.
+// phase 2 downlink). Wraps XBeeTransmitFrame::buildTransmitRequest() and
+// hands the result to xbeeSPISendFrame().
 static void xbeeSPISendPacket(uint16_t dest16, const uint8_t *payload, uint16_t payloadLength) {
     // Sized for the current Snips::DownlinkPacket (the only caller, 33
     // bytes + 14-byte Transmit Request header = 47) with headroom -- if the
@@ -127,17 +173,19 @@ static void xbeeSPISendPacket(uint16_t dest16, const uint8_t *payload, uint16_t 
     uint16_t frameLength = XBeeTransmitFrame::buildTransmitRequest(
         frameData, sizeof(frameData), payload, payloadLength, dest16);
     if (frameLength == 0) return;
-    uint8_t checksum = xbeeComputeChecksum(frameData, frameLength);
+    xbeeSPISendFrame(frameData, frameLength);
+}
 
-    SPI.beginTransaction(kXBeeSettings);
-    digitalWrite(XBEE_CS_PIN, LOW);
-    SPI.transfer(0x7E);
-    SPI.transfer((uint8_t)(frameLength >> 8));
-    SPI.transfer((uint8_t)(frameLength));
-    for (uint16_t i = 0; i < frameLength; i++) SPI.transfer(frameData[i]);
-    SPI.transfer(checksum);
-    digitalWrite(XBEE_CS_PIN, HIGH);
-    SPI.endTransaction();
+// Sends a Local AT Command Request (0x08) frame -- issue #213. Wraps
+// XBeeATCommand::buildRequest() and hands the result to
+// xbeeSPISendFrame(). `param`/`paramLength` may be null/0 for a query.
+void xbeeSPISendATCommand(uint8_t frameId, const char command[2],
+                           const uint8_t *param, uint8_t paramLength) {
+    uint8_t frameData[XBeeATCommand::kRequestHeaderLength + XBeeATSession::kMaxValueLength];
+    uint16_t frameLength = XBeeATCommand::buildRequest(
+        frameData, sizeof(frameData), frameId, command, param, paramLength);
+    if (frameLength == 0) return;
+    xbeeSPISendFrame(frameData, frameLength);
 }
 
 void xbeeSPIReceiveAll(XBeePocketRemote** remotes, unsigned count) {

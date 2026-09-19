@@ -396,6 +396,18 @@ _capture_state = {
     "revealed": 0,
 }
 
+# Mock for /api/xbee/{query,set,status} (issue #213) -- there's no real XBee
+# to round-trip an AT command with, so this simulates a short "busy" window
+# (a couple of status polls) before settling into "done", enough to preview
+# the connectivity page's live PAN ID / coordinator-role panel locally.
+_xbee_at_state = {
+    "busy_polls_remaining": 0,
+    "state":       "idle",   # idle | busy | done | failed | timeout
+    "cmd":         "",
+    "panid":       "4133",   # mock current PAN ID, hex, unpadded like real hardware
+    "coordinator": True,     # mock current CE state
+}
+
 _CSP = ("default-src 'self'; "
         "script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
@@ -465,6 +477,19 @@ class _Handler(SimpleHTTPRequestHandler):
                 "active": _capture_state["active"],
                 "done":   _capture_state["done"],
                 "seq":    _capture_state["seq"],
+            })
+            return
+        if path == "/api/xbee/status":
+            if _xbee_at_state["state"] == "busy":
+                _xbee_at_state["busy_polls_remaining"] -= 1
+                if _xbee_at_state["busy_polls_remaining"] <= 0:
+                    _xbee_at_state["state"] = "done"
+            value = (_xbee_at_state["panid"] if _xbee_at_state["cmd"] == "ID"
+                     else ("1" if _xbee_at_state["coordinator"] else "0"))
+            self._json({
+                "state":  _xbee_at_state["state"],
+                "status": 0,
+                "value":  value,
             })
             return
         if path == "/api/periscope/seqs":
@@ -592,6 +617,33 @@ class _Handler(SimpleHTTPRequestHandler):
             print(f"  GESTURE capture stop (seq={_capture_state['seq']!r})")
             _capture_state["active"] = False
             _capture_state["done"] = True
+            self._json({"ok": True})
+            return
+        if path == "/api/xbee/query":
+            if _xbee_at_state["state"] == "busy":
+                self._text("an XBee AT command is already in progress", status=409)
+                return
+            cmd = params.get("cmd", "")
+            print(f"  XBEE    query {cmd!r}")
+            _xbee_at_state["cmd"] = cmd
+            _xbee_at_state["state"] = "busy"
+            _xbee_at_state["busy_polls_remaining"] = 2
+            self._json({"ok": True})
+            return
+        if path == "/api/xbee/set":
+            if _xbee_at_state["state"] == "busy":
+                self._text("an XBee AT command is already in progress", status=409)
+                return
+            cmd = params.get("cmd", "")
+            value = params.get("value", "")
+            print(f"  XBEE    set {cmd!r}={value!r}")
+            if cmd == "ID":
+                _xbee_at_state["panid"] = value.lstrip("0") or "0"
+            elif cmd == "CE":
+                _xbee_at_state["coordinator"] = value == "1"
+            _xbee_at_state["cmd"] = cmd
+            _xbee_at_state["state"] = "busy"
+            _xbee_at_state["busy_polls_remaining"] = 3  # SET + WR takes a tick longer
             self._json({"ok": True})
             return
         if path == "/api/dome":

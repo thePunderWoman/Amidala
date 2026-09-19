@@ -11,6 +11,7 @@
 #define MONITOR_BUF_OWNER
 #include "monitor_buf.h"
 #include "monitor_drain.h"
+#include "xbee_at_command.h"
 
 #ifndef UNIT_TEST
 #include <EEPROM.h>     // must precede params.h (via web_api.h)
@@ -1785,6 +1786,70 @@ static void handleApiGestureCaptureStop() {
 }
 
 // ---------------------------------------------------------------------------
+// XBee local AT command API endpoints (issue #213) -- reading/setting the
+// module's own PAN ID (ID) and coordinator role (CE) over its SPI link.
+// Same start/poll shape as the gesture-capture endpoints above: a start
+// call kicks off an XBeeATSession action and returns immediately (409 if
+// one's already in flight); status is polled from the browser until the
+// round-trip completes, fails, or times out.
+// ---------------------------------------------------------------------------
+
+// Thin String wrappers around the natively-tested (test_xbee_at_command)
+// hex<->bytes conversion in xbee_at_command.h -- see that header for why a
+// short value like "4133" is the normal, correct display/input form here,
+// not something that needs padding to the register's full native width.
+static String xbeeATValueToHex(const uint8_t* bytes, uint8_t len) {
+    char buf[17];
+    uint8_t n = XBeeATCommand::valueToHexString(bytes, len, buf, sizeof(buf));
+    return n > 0 ? String(buf) : String("0");
+}
+
+static uint8_t xbeeATHexToBytes(const String& hex, uint8_t* out, uint8_t outCap) {
+    return XBeeATCommand::hexStringToValue(hex.c_str(), out, outCap);
+}
+
+static void handleApiXbeeQuery() {
+    if (!sCtrl) { sServer.send(500, "text/plain", "no controller"); return; }
+    String cmd = sServer.arg("cmd");
+    if (cmd.length() != 2) { sServer.send(400, "text/plain", "cmd must be 2 characters"); return; }
+    if (!sCtrl->fXBeeAT.startQuery(cmd.c_str())) {
+        sServer.send(409, "text/plain", "an XBee AT command is already in progress");
+        return;
+    }
+    sServer.send(200, "application/json", "{\"ok\":true}");
+}
+
+static void handleApiXbeeSet() {
+    if (!sCtrl) { sServer.send(500, "text/plain", "no controller"); return; }
+    String cmd = sServer.arg("cmd");
+    if (cmd.length() != 2) { sServer.send(400, "text/plain", "cmd must be 2 characters"); return; }
+    uint8_t bytes[8];
+    uint8_t len = xbeeATHexToBytes(sServer.arg("value"), bytes, sizeof(bytes));
+    if (!sCtrl->fXBeeAT.startSetAndPersist(cmd.c_str(), bytes, len)) {
+        sServer.send(409, "text/plain", "an XBee AT command is already in progress");
+        return;
+    }
+    sServer.send(200, "application/json", "{\"ok\":true}");
+}
+
+static void handleApiXbeeStatus() {
+    if (!sCtrl) { sServer.send(500, "text/plain", "no controller"); return; }
+    auto& session = sCtrl->fXBeeAT;
+    const char* state = "idle";
+    switch (session.state()) {
+        case XBeeATSession::kIdle:          state = "idle";    break;
+        case XBeeATSession::kAwaitingValue: state = "busy";    break;
+        case XBeeATSession::kAwaitingWrite: state = "busy";    break;
+        case XBeeATSession::kDone:          state = "done";    break;
+        case XBeeATSession::kFailed:        state = "failed";  break;
+        case XBeeATSession::kTimedOut:      state = "timeout"; break;
+    }
+    String json = "{\"state\":\"" + String(state) + "\",\"status\":" + String(session.status()) +
+                  ",\"value\":\"" + xbeeATValueToHex(session.value(), session.valueLength()) + "\"}";
+    sServer.send(200, "application/json", json);
+}
+
+// ---------------------------------------------------------------------------
 // AmidalaWiFiAP
 // ---------------------------------------------------------------------------
 
@@ -1956,6 +2021,9 @@ void AmidalaWiFiAP::begin(const char* ssid, const char* password, AmidalaControl
     sServer.on("/api/gesture/capture/start",  HTTP_POST, handleApiGestureCaptureStart);
     sServer.on("/api/gesture/capture/status", HTTP_GET,  handleApiGestureCaptureStatus);
     sServer.on("/api/gesture/capture/stop",   HTTP_POST, handleApiGestureCaptureStop);
+    sServer.on("/api/xbee/query",             HTTP_POST, handleApiXbeeQuery);
+    sServer.on("/api/xbee/set",               HTTP_POST, handleApiXbeeSet);
+    sServer.on("/api/xbee/status",            HTTP_GET,  handleApiXbeeStatus);
     sServer.on("/api/wcb/status",        HTTP_GET,  handleApiWcbStatus);
     sServer.on("/debugging",             HTTP_GET,  handleDebugging);
     sServer.on("/api/logs",              HTTP_GET,  handleApiLogsGet);

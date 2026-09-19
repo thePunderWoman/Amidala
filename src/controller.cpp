@@ -4,6 +4,7 @@
 #include "bt_gamepad.h"
 #include "config_file.h"
 #include "debug_file_logger.h"
+#include "monitor_buf.h"
 #include <esp_heap_caps.h>
 #include <new>
 
@@ -242,6 +243,42 @@ void AmidalaController::setup() {
   fSnipsRight.addr = params.xbr;
   fSnipsLeft.addr = params.xbl;
 
+  // XBee PAN ID / coordinator-role read+write over local AT commands
+  // (issue #213). Register the shared session before checking coordinator
+  // role below, since that check is itself the session's first user.
+  xbeeSPISetATSession(&fXBeeAT);
+
+  // One-time boot check: confirm the module is actually configured as a
+  // Zigbee coordinator. This has always been a silent, manual XCTU-time
+  // assumption -- if it's wrong, remotes simply never connect, with no
+  // indication why. A short bounded blocking wait (not the async pattern
+  // web requests use) is the right tradeoff for a single one-shot check
+  // during setup(), rather than threading this through animate() ticks.
+  {
+    fXBeeAT.startQuery("CE");
+    uint32_t waitStart = millis();
+    while (fXBeeAT.state() == XBeeATSession::kAwaitingValue &&
+           millis() - waitStart < 1000) {
+      xbeeSPIPumpATResponsesOnly();
+      fXBeeAT.checkTimeout(millis());
+      delay(5);
+    }
+    if (fXBeeAT.state() == XBeeATSession::kDone && fXBeeAT.valueLength() > 0 &&
+        fXBeeAT.value()[fXBeeAT.valueLength() - 1] == 1) {
+      fConsole.println(F("XBee coordinator role confirmed"));
+    } else if (fXBeeAT.state() == XBeeATSession::kDone) {
+      monAppend("XBee is NOT configured as a coordinator -- go to Connectivity settings to fix this", 'i');
+    } else {
+      monAppend("XBee did not respond to a coordinator-role check at boot -- verify SPI wiring/module power", 'i');
+    }
+    // This check's own ~1s budget is shorter than XBeeATSession's normal
+    // kTimeoutMs (2s) -- if the module never answered, force the session
+    // back to idle now rather than leaving it looking busy (and rejecting
+    // real web requests with a misleading 409) for however much of that
+    // window remains once normal operation starts.
+    if (fXBeeAT.isBusy()) fXBeeAT.abort();
+  }
+
 #ifdef STATUS_J1_PIN
   pinMode(STATUS_J1_PIN, OUTPUT);
   pinMode(STATUS_J2_PIN, OUTPUT);
@@ -369,6 +406,7 @@ void AmidalaController::animate() {
   fDomeDrive->animate();
 #endif
   if (params.btcontrolleron) gBTGamepad.animate();
+  fXBeeAT.checkTimeout(millis());
   fWCB.poll(params);
   if (params.wifion)
     fWiFiAP.handle();

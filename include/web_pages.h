@@ -1921,6 +1921,13 @@ buildPage(SCHEMA, '/api/config', function() {
   // after its section's toggle row rather than appending at the end of
   // <main>, so it reads as part of that section instead of trailing below
   // an unrelated one.
+  var xbeeATPanel = document.createElement('div');
+  xbeeATPanel.id = 'xbee-at-panel';
+  var xblRow = document.querySelector('[data-key="xbl"]');
+  if (xblRow) xblRow.insertAdjacentElement('afterend', xbeeATPanel);
+  else document.querySelector('main').appendChild(xbeeATPanel);
+  loadXbeeATPanel();
+
   var panel = document.createElement('div');
   panel.id = 'bt-panel';
   var btRow = document.querySelector('[data-key="btcontrolleron"]');
@@ -1941,6 +1948,126 @@ buildPage(SCHEMA, '/api/config', function() {
   else document.querySelector('main').appendChild(wcbPanel);
   refreshWCBStatus();
 });
+
+// ---- XBee module panel (issue #213) -----------------------------------------
+// PAN ID / coordinator role read+write over the module's own local AT
+// commands (see src/xbee_at_session.h) -- unlike the fields above, these
+// live on the XBee module itself, not in params/EEPROM, so this panel
+// always reflects a fresh, live read rather than a cached value.
+
+var _xbeeAT = {
+  panid: null,          // last known value (hex string), or null if unavailable
+  isCoordinator: null,  // true/false, or null if unavailable
+};
+
+// Polls /api/xbee/status until the in-flight action settles (done/failed/
+// timeout), then hands the final result to `onDone`. `onDone(null)` means
+// the request itself never got accepted (e.g. a 409 -- something else was
+// already in flight).
+function xbeeATPoll(onDone) {
+  fetch('/api/xbee/status').then(function(r) { return r.json(); }).then(function(d) {
+    if (d.state === 'busy') setTimeout(function() { xbeeATPoll(onDone); }, 400);
+    else onDone(d);
+  }).catch(function() { onDone(null); });
+}
+
+function xbeeATStart(url, body, onDone) {
+  fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: body
+  }).then(function(r) {
+    if (!r.ok) { onDone(null); return; }
+    xbeeATPoll(onDone);
+  }).catch(function() { onDone(null); });
+}
+
+// Only one XBee AT action can be in flight at a time (see
+// XBeeATSession) -- the initial load chains the PAN ID and coordinator-role
+// queries one after the other rather than firing them concurrently, which
+// would just get the second one a 409.
+function loadXbeeATPanel() {
+  var panel = document.getElementById('xbee-at-panel');
+  if (!panel) return;
+  panel.innerHTML = '<div class="row"><div class="row-label">XBee Module</div>'
+    + '<div class="rv" style="color:var(--muted)">Reading current settings&#8230;</div></div>';
+
+  xbeeATStart('/api/xbee/query', 'cmd=ID', function(idResult) {
+    _xbeeAT.panid = (idResult && idResult.state === 'done') ? idResult.value : null;
+    xbeeATStart('/api/xbee/query', 'cmd=CE', function(ceResult) {
+      _xbeeAT.isCoordinator = (ceResult && ceResult.state === 'done') ? (ceResult.value === '1') : null;
+      renderXbeeATPanel();
+    });
+  });
+}
+
+function xbeeATResultMessage(result) {
+  if (!result) return 'No response from the XBee module.';
+  if (result.state === 'done') return 'Saved.';
+  if (result.state === 'failed') {
+    var reasons = {1: 'error', 2: 'invalid command', 3: 'invalid parameter', 4: 'transmit failure'};
+    return 'Failed (' + (reasons[result.status] || ('status ' + result.status)) + ').';
+  }
+  if (result.state === 'timeout') return 'XBee did not respond in time.';
+  return 'Could not reach the XBee.';
+}
+
+function renderXbeeATPanel() {
+  var panel = document.getElementById('xbee-at-panel');
+  if (!panel) return;
+  var html = '<div class="sec-hdr" style="margin-top:0">XBee Module</div>';
+
+  html += '<div class="row"><div class="row-label">PAN ID</div>';
+  html += '<input id="xbee-panid-input" class="row-sel" type="text" style="flex:1" value="'
+        + escHtml(_xbeeAT.panid !== null ? _xbeeAT.panid : '') + '"'
+        + (_xbeeAT.panid === null ? ' placeholder="unavailable"' : '') + '>';
+  html += '<div class="ri"><button class="be-action" onclick="saveXbeePanId()">Save</button></div></div>';
+  html += '<div id="xbee-panid-status" style="font-size:.72rem;color:var(--muted);padding:0 0 .5rem"></div>';
+
+  html += '<div class="row"><div class="row-label">Role</div>';
+  if (_xbeeAT.isCoordinator === true) {
+    html += '<div class="rv">Amidala XBee is set as the coordinator</div>';
+  } else if (_xbeeAT.isCoordinator === false) {
+    html += '<div class="rv">Not configured as coordinator</div>'
+          + '<div class="ri"><button class="be-action" onclick="setXbeeCoordinator()">Set as Coordinator</button></div>';
+  } else {
+    html += '<div class="rv" style="color:var(--muted)">Unavailable — check XBee wiring/power</div>';
+  }
+  html += '</div>';
+  html += '<div id="xbee-coordinator-status" style="font-size:.72rem;color:var(--muted);padding:0 0 .5rem"></div>';
+
+  panel.innerHTML = html;
+}
+
+function saveXbeePanId() {
+  var input = document.getElementById('xbee-panid-input');
+  var statusEl = document.getElementById('xbee-panid-status');
+  var value = input.value.trim();
+  if (!value) { statusEl.textContent = 'Enter a PAN ID first.'; return; }
+  statusEl.textContent = 'Saving…';
+  xbeeATStart('/api/xbee/set', 'cmd=ID&value=' + encodeURIComponent(value), function(result) {
+    statusEl.textContent = xbeeATResultMessage(result);
+    if (result && result.state === 'done') {
+      _xbeeAT.panid = value;
+      showToast('PAN ID saved');
+    }
+  });
+}
+
+function setXbeeCoordinator() {
+  var statusEl = document.getElementById('xbee-coordinator-status');
+  statusEl.textContent = 'Setting…';
+  xbeeATStart('/api/xbee/set', 'cmd=CE&value=1', function(result) {
+    if (result && result.state === 'done') {
+      _xbeeAT.isCoordinator = true;
+      statusEl.textContent = '';
+      renderXbeeATPanel();
+      showToast('XBee set as coordinator');
+    } else {
+      statusEl.textContent = xbeeATResultMessage(result);
+    }
+  });
+}
 
 // ---- Bluetooth panel -------------------------------------------------------
 
