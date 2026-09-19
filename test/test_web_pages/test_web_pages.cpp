@@ -125,6 +125,18 @@ void test_connectivity_page_has_xbee_at_command_panel() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "set as the coordinator"));
 }
 
+void test_connectivity_page_disables_sleep_before_setting_coordinator() {
+    // Digi's CE=1 (form network) requires SM=0 (sleep disabled) -- setting CE
+    // first would just get rejected on a module currently configured to
+    // sleep. The coordinator flow nests the CE=1 call inside the SM=0 call's
+    // success callback, so SM=0 must appear earlier in the page source.
+    const char* sm = strstr(WEB_PAGE_CONFIG_CONNECTIVITY, "cmd=SM&value=0");
+    const char* ce = strstr(WEB_PAGE_CONFIG_CONNECTIVITY, "cmd=CE&value=1");
+    TEST_ASSERT_NOT_NULL(sm);
+    TEST_ASSERT_NOT_NULL(ce);
+    TEST_ASSERT_TRUE(sm < ce);
+}
+
 void test_audio_page_uses_config_endpoint() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "/api/config"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "href=\"/\""));
@@ -1007,6 +1019,7 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_wifi_page_uses_config_endpoint);
     RUN_TEST(test_connectivity_page_has_all_sections);
     RUN_TEST(test_connectivity_page_has_xbee_at_command_panel);
+    RUN_TEST(test_connectivity_page_disables_sleep_before_setting_coordinator);
     RUN_TEST(test_audio_page_uses_config_endpoint);
     RUN_TEST(test_rc_radio_page_uses_config_endpoint);
     RUN_TEST(test_dome_page_uses_config_endpoint);
