@@ -33,13 +33,29 @@ class AmidalaController;
 // Start/Menu → button.start   Select/Back → button.select
 //
 // Buttons: face buttons + L3 (triangle/circle/cross/square/l3) are dispatched
-// through AmidalaController's drive-side button slots 1-5 -- the same slots
-// XBee's DriveController uses (see src/drive_controllers.cpp), so B[]/LB[]/
+// through AmidalaController's drive-side button slots 1-5, and bumpers/
+// triggers (l1/l2/r1/r2) through slots 10-13 -- the same slots XBee's
+// DriveController uses for 1-5 (see src/drive_controllers.cpp), so B[]/LB[]/
 // AB[]/DB[]/altbtn/mutebutton configured there apply identically whether an
-// XBee drive remote or this gamepad triggers them. Dome slots 6-9 and gesture
-// input are NOT covered here -- those are tightly coupled to DomeController's
-// RoboClaw-specific gesture/abs-stick state machine and need their own design
-// pass (issue #203 follow-up).
+// XBee drive remote or this gamepad triggers them. Slots 6-9 are reserved for
+// a future dome-stick feature shared with XBee's own numbering and are
+// intentionally skipped here. Triggers have no separate digital press bit on
+// this HID report -- l2/r2 are "pressed" once their analog travel crosses
+// kTriggerPressThreshold (see _dispatchButtons()).
+//
+// R3 (right stick click) starts/ends gesture drawing exactly like a physical
+// dome remote's stick click (BT's right stick drives dome, see
+// controller.cpp's setAltDomeStick(&gBTGamepad)) -- it feeds
+// DomeController::feedGestureInput() directly rather than being a
+// configurable ButtonAction, matching how the real dome remote's own stick
+// click is reserved for gesture input and can't be assigned elsewhere. It
+// does not support folding face-button taps into the stroke the way a
+// physical dome remote can, since BT has only one shared set of face buttons
+// (already independently dispatched as drive-side macros) rather than a
+// separate dome-side set to redirect.
+//
+// D-pad, Start/Select/PS, and R3's regular macro use remain unwired (issue
+// #203 follow-up).
 class BTGamepad : public JoystickController, public SetupEvent, public AnimatedEvent
 {
 public:
@@ -121,8 +137,14 @@ private:
 
     AmidalaController* fDriver;
     struct {
-        ButtonLongPress l3, triangle, circle, cross, square;
+        ButtonLongPress l3, triangle, circle, cross, square, l1, r1, l2, r2;
     } fLongPress;
+
+    // Analog trigger travel (0-255) at or above which l2/r2 count as
+    // "pressed" for dispatch purposes -- half pull, chosen since there's no
+    // existing digital press bit or threshold convention anywhere in this
+    // codebase or the vendored Reeltwo library to reuse.
+    static constexpr uint8_t kTriggerPressThreshold = 128;
 
     void _attemptConnect();
     void _parseReport(const uint8_t* data, size_t len);

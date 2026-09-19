@@ -12,6 +12,7 @@
 #include "arduino_mock.h"
 #include "JoystickController.h"
 #include "button_dispatch.h"
+#include "core.h"
 
 void setUp(void)    { mock_millis_value = 0; }
 void tearDown(void) {}
@@ -298,9 +299,9 @@ struct FakeDriver {
     int mutebutton = 0;
     bool altHeld = false;
 
-    int buttonUpCount[6]   = {0};  // 1-based, index 0 unused
-    int altButtonCount[6]  = {0};
-    int longButtonCount[6] = {0};
+    int buttonUpCount[14]   = {0};  // 1-based, index 0 unused
+    int altButtonCount[14]  = {0};
+    int longButtonCount[14] = {0};
     int muteBtnUpCount     = 0;
 
     bool isAltHeld() const { return altHeld; }
@@ -311,25 +312,50 @@ struct FakeDriver {
     void noteMuteBtnUp()           { muteBtnUpCount++; }
 };
 
-struct FakeLongPressSet { ButtonLongPress l3, triangle, circle, cross, square; };
+struct FakeLongPressSet { ButtonLongPress l3, triangle, circle, cross, square, l1, r1, l2, r2; };
+
+// Analog trigger travel (0-255) threshold for l2/r2 -- must match
+// BTGamepad::kTriggerPressThreshold (include/bt_gamepad.h).
+static const uint8_t kTriggerPressThreshold = 128;
 
 // Mirror of BTGamepad::_dispatchButtons()'s diffing/ternary glue
 // (src/bt_gamepad.cpp) -- the long-press timing and alt/mute dispatch
-// decisions below call the real button_dispatch.h functions.
+// decisions below call the real button_dispatch.h functions. `gesture`, if
+// non-null, receives the same r3/stick feed the real function always sends
+// to fDriver->fDomeStick.feedGestureInput() -- see the gesture-specific
+// tests below for FakeGestureController itself.
+struct FakeGestureController;
+static void feedGesture(FakeGestureController* gesture, bool up, int8_t rx, int8_t ry);
+
 static void dispatchButtons(FakeDriver& driver, FakeLongPressSet& lp,
                              const JoystickController::State& prev,
-                             const JoystickController::State& state) {
+                             const JoystickController::State& state,
+                             FakeGestureController* gesture = nullptr) {
     bool down_triangle = !prev.button.triangle && state.button.triangle;
     bool down_circle   = !prev.button.circle   && state.button.circle;
     bool down_cross    = !prev.button.cross    && state.button.cross;
     bool down_square   = !prev.button.square   && state.button.square;
     bool down_l3       = !prev.button.l3       && state.button.l3;
+    bool down_l1       = !prev.button.l1       && state.button.l1;
+    bool down_r1       = !prev.button.r1       && state.button.r1;
 
     bool up_triangle = prev.button.triangle && !state.button.triangle;
     bool up_circle   = prev.button.circle   && !state.button.circle;
     bool up_cross    = prev.button.cross    && !state.button.cross;
     bool up_square   = prev.button.square   && !state.button.square;
     bool up_l3       = prev.button.l3       && !state.button.l3;
+    bool up_l1       = prev.button.l1       && !state.button.l1;
+    bool up_r1       = prev.button.r1       && !state.button.r1;
+    bool up_r3       = prev.button.r3       && !state.button.r3;
+
+    bool heldL2 = state.analog.button.l2 >= kTriggerPressThreshold;
+    bool heldR2 = state.analog.button.r2 >= kTriggerPressThreshold;
+    bool prevHeldL2 = prev.analog.button.l2 >= kTriggerPressThreshold;
+    bool prevHeldR2 = prev.analog.button.r2 >= kTriggerPressThreshold;
+    bool down_l2 = !prevHeldL2 && heldL2;
+    bool down_r2 = !prevHeldR2 && heldR2;
+    bool up_l2   = prevHeldL2 && !heldL2;
+    bool up_r2   = prevHeldR2 && !heldR2;
 
     uint32_t now = millis();
     auto rTriangle = lp.triangle.update(down_triangle, up_triangle, state.button.triangle, now, DEFAULT_LONG_PRESS_MS);
@@ -337,6 +363,10 @@ static void dispatchButtons(FakeDriver& driver, FakeLongPressSet& lp,
     auto rCross    = lp.cross.update(down_cross,    up_cross,    state.button.cross,    now, DEFAULT_LONG_PRESS_MS);
     auto rSquare   = lp.square.update(down_square,   up_square,   state.button.square,   now, DEFAULT_LONG_PRESS_MS);
     auto rL3       = lp.l3.update(down_l3,       up_l3,       state.button.l3,       now, DEFAULT_LONG_PRESS_MS);
+    auto rL1       = lp.l1.update(down_l1,       up_l1,       state.button.l1,       now, DEFAULT_LONG_PRESS_MS);
+    auto rR1       = lp.r1.update(down_r1,       up_r1,       state.button.r1,       now, DEFAULT_LONG_PRESS_MS);
+    auto rL2       = lp.l2.update(down_l2,       up_l2,       heldL2,                now, DEFAULT_LONG_PRESS_MS);
+    auto rR2       = lp.r2.update(down_r2,       up_r2,       heldR2,                now, DEFAULT_LONG_PRESS_MS);
 
     int altbtn = driver.altbtn;
     if (altbtn >= 1 && altbtn <= 5) {
@@ -344,6 +374,11 @@ static void dispatchButtons(FakeDriver& driver, FakeLongPressSet& lp,
                     (altbtn == 2) ? state.button.circle   :
                     (altbtn == 3) ? state.button.cross    :
                     (altbtn == 4) ? state.button.square   : state.button.l3;
+        driver.setAltHeld(held);
+    } else if (altbtn >= 10 && altbtn <= 13) {
+        bool held = (altbtn == 10) ? state.button.l1 :
+                    (altbtn == 11) ? heldL2           :
+                    (altbtn == 12) ? state.button.r1  : heldR2;
         driver.setAltHeld(held);
     }
     bool altHeld = driver.isAltHeld();
@@ -353,13 +388,23 @@ static void dispatchButtons(FakeDriver& driver, FakeLongPressSet& lp,
     dispatchButtonPress(driver, 3, rCross.up,    rCross.longUp,    altbtn, altHeld);
     dispatchButtonPress(driver, 4, rSquare.up,   rSquare.longUp,   altbtn, altHeld);
     dispatchButtonPress(driver, 5, rL3.up,       rL3.longUp,       altbtn, altHeld);
+    dispatchButtonPress(driver, 10, rL1.up,      rL1.longUp,       altbtn, altHeld);
+    dispatchButtonPress(driver, 11, rL2.up,      rL2.longUp,       altbtn, altHeld);
+    dispatchButtonPress(driver, 12, rR1.up,      rR1.longUp,       altbtn, altHeld);
+    dispatchButtonPress(driver, 13, rR2.up,      rR2.longUp,       altbtn, altHeld);
 
     int muteBtn = driver.mutebutton;
     if (muteBtn >= 1 && muteBtn <= 5) {
         bool muteUp = (muteBtn == 1) ? rTriangle.up : (muteBtn == 2) ? rCircle.up :
                       (muteBtn == 3) ? rCross.up    : (muteBtn == 4) ? rSquare.up : rL3.up;
         if (muteUp) driver.noteMuteBtnUp();
+    } else if (muteBtn >= 10 && muteBtn <= 13) {
+        bool muteUp = (muteBtn == 10) ? rL1.up : (muteBtn == 11) ? rL2.up :
+                      (muteBtn == 12) ? rR1.up : rR2.up;
+        if (muteUp) driver.noteMuteBtnUp();
     }
+
+    feedGesture(gesture, up_r3, state.analog.stick.rx, state.analog.stick.ry);
 }
 
 void test_dispatch_triangle_press_release_fires_slot1() {
@@ -430,6 +475,407 @@ void test_dispatch_mutebutton_slot_notifies_on_up() {
     TEST_ASSERT_EQUAL(1, driver.buttonUpCount[4]);  // mute is additive, not exclusive
 }
 
+// ---- Bumper/trigger dispatch (slots 10-13) ----------------------------------
+
+void test_dispatch_left_bumper_press_release_fires_slot10() {
+    FakeDriver driver;
+    FakeLongPressSet lp;
+    JoystickController::State prev = {}, state = {};
+
+    state.button.l1 = 1;
+    dispatchButtons(driver, lp, prev, state);
+    TEST_ASSERT_EQUAL(0, driver.buttonUpCount[10]);
+
+    prev = state;
+    state.button.l1 = 0;
+    dispatchButtons(driver, lp, prev, state);
+    TEST_ASSERT_EQUAL(1, driver.buttonUpCount[10]);
+}
+
+void test_dispatch_right_bumper_press_release_fires_slot12() {
+    FakeDriver driver;
+    FakeLongPressSet lp;
+    JoystickController::State prev = {}, state = {};
+
+    state.button.r1 = 1;
+    dispatchButtons(driver, lp, prev, state);
+    prev = state;
+    state.button.r1 = 0;
+    dispatchButtons(driver, lp, prev, state);
+
+    TEST_ASSERT_EQUAL(1, driver.buttonUpCount[12]);
+}
+
+void test_dispatch_left_trigger_half_pull_fires_slot11() {
+    FakeDriver driver;
+    FakeLongPressSet lp;
+    JoystickController::State prev = {}, state = {};
+
+    state.analog.button.l2 = kTriggerPressThreshold;
+    dispatchButtons(driver, lp, prev, state);
+    prev = state;
+    state.analog.button.l2 = 0;
+    dispatchButtons(driver, lp, prev, state);
+
+    TEST_ASSERT_EQUAL(1, driver.buttonUpCount[11]);
+}
+
+void test_dispatch_right_trigger_half_pull_fires_slot13() {
+    FakeDriver driver;
+    FakeLongPressSet lp;
+    JoystickController::State prev = {}, state = {};
+
+    state.analog.button.r2 = kTriggerPressThreshold;
+    dispatchButtons(driver, lp, prev, state);
+    prev = state;
+    state.analog.button.r2 = 0;
+    dispatchButtons(driver, lp, prev, state);
+
+    TEST_ASSERT_EQUAL(1, driver.buttonUpCount[13]);
+}
+
+void test_trigger_just_under_threshold_never_registers_as_pressed() {
+    FakeDriver driver;
+    FakeLongPressSet lp;
+    JoystickController::State prev = {}, state = {};
+
+    // A trigger resting one tick below the threshold, then released, must
+    // never look like a press-release -- there's no "down" edge to begin
+    // with, so slot 11 should never fire.
+    state.analog.button.l2 = kTriggerPressThreshold - 1;
+    dispatchButtons(driver, lp, prev, state);
+    prev = state;
+    state.analog.button.l2 = 0;
+    dispatchButtons(driver, lp, prev, state);
+
+    TEST_ASSERT_EQUAL(0, driver.buttonUpCount[11]);
+}
+
+void test_dispatch_altbtn_10_13_suppresses_and_sets_held() {
+    FakeDriver driver;
+    driver.altbtn = 10;  // left bumper is the alt modifier
+    FakeLongPressSet lp;
+    JoystickController::State prev = {}, state = {};
+
+    state.button.l1 = 1;  // hold alt
+    dispatchButtons(driver, lp, prev, state);
+    TEST_ASSERT_TRUE(driver.isAltHeld());
+
+    prev = state;
+    state.button.l1 = 0;  // release alt -- must NOT dispatch slot 10
+    dispatchButtons(driver, lp, prev, state);
+    TEST_ASSERT_EQUAL(0, driver.buttonUpCount[10]);
+    TEST_ASSERT_EQUAL(0, driver.altButtonCount[10]);
+}
+
+void test_dispatch_mutebutton_10_13_notifies_on_up() {
+    FakeDriver driver;
+    driver.mutebutton = 13;  // right trigger
+    FakeLongPressSet lp;
+    JoystickController::State prev = {}, state = {};
+
+    state.analog.button.r2 = kTriggerPressThreshold;
+    dispatchButtons(driver, lp, prev, state);
+    prev = state;
+    state.analog.button.r2 = 0;
+    dispatchButtons(driver, lp, prev, state);
+
+    TEST_ASSERT_EQUAL(1, driver.muteBtnUpCount);
+    TEST_ASSERT_EQUAL(1, driver.buttonUpCount[13]);  // mute is additive, not exclusive
+}
+
+// Regression: slots 6-9 are reserved for a future dome-stick feature and
+// must never be touched by BT's own dispatch, even incidentally -- there is
+// no button on this mirror that maps to them, so this just confirms nothing
+// stray lands there across a mix of every dispatchable button.
+void test_slots_6_to_9_are_never_touched_by_bt_dispatch() {
+    FakeDriver driver;
+    FakeLongPressSet lp;
+    JoystickController::State prev = {}, state = {};
+
+    state.button.triangle = state.button.circle = state.button.cross = state.button.square = 1;
+    state.button.l3 = state.button.l1 = state.button.r1 = 1;
+    state.analog.button.l2 = state.analog.button.r2 = 255;
+    dispatchButtons(driver, lp, prev, state);
+    prev = state;
+    state = JoystickController::State{};
+    dispatchButtons(driver, lp, prev, state);
+
+    for (int slot = 6; slot <= 9; slot++) {
+        TEST_ASSERT_EQUAL(0, driver.buttonUpCount[slot]);
+        TEST_ASSERT_EQUAL(0, driver.altButtonCount[slot]);
+        TEST_ASSERT_EQUAL(0, driver.longButtonCount[slot]);
+    }
+}
+
+// Regression: R3 (dome-side stick click) drives gesture input directly (see
+// the gesture tests below) and must never be treated as a configurable
+// macro button -- toggling it alone must never touch params.B[] via
+// noteButtonUp()/processAltButton()/processLongButton() for any slot.
+void test_r3_toggle_alone_never_dispatches_a_macro_button() {
+    FakeDriver driver;
+    FakeLongPressSet lp;
+    JoystickController::State prev = {}, state = {};
+
+    state.button.r3 = 1;
+    dispatchButtons(driver, lp, prev, state);
+    prev = state;
+    state.button.r3 = 0;
+    dispatchButtons(driver, lp, prev, state);
+
+    for (int slot = 1; slot <= 13; slot++) {
+        TEST_ASSERT_EQUAL(0, driver.buttonUpCount[slot]);
+    }
+}
+
+// ---- Gesture parity for R3 (issue: BT dome-stick click) ---------------------
+// DomeController::feedGestureInput() (src/drive_controllers.cpp) can't be
+// called directly -- it's a method on a class with heavy Reeltwo/Arduino
+// dependencies -- so this mirrors its algorithm verbatim (same convention as
+// the dispatch mirror above and test_snips_remote.cpp). Must stay in sync
+// with the real implementation.
+
+// Must match GESTURE_CENTER_DEADZONE in include/xbee_remote.h.
+static const int kGestureCenterDeadzone = 20;
+
+struct FakeGestureDriver {
+    uint32_t gesturetimeout = 1000;
+    int disableCount = 0;
+    int enableCount = 0;
+    int processGestureCount = 0;
+    char lastGesture[MAX_GESTURE_LENGTH + 1] = {};
+
+    void disableDomeController() { disableCount++; }
+    void enableDomeController() { enableCount++; }
+    void processGesture(const char* g) {
+        processGestureCount++;
+        strncpy(lastGesture, g, sizeof(lastGesture) - 1);
+    }
+};
+
+// Mirror of DomeController's gesture-collection members + feedGestureInput()
+// (include/xbee_remote.h + src/drive_controllers.cpp).
+struct FakeGestureController {
+    FakeGestureDriver driver;
+    bool fGestureCollect = false;
+    bool fWebCapture = false;
+    bool fCaptureDone = false;
+    char fGestureBuffer[MAX_GESTURE_LENGTH + 1] = {};
+    char* fGesturePtr = fGestureBuffer;
+    char fGestureAxis = 0;
+    uint32_t fGestureTimeOut = 0;
+    int fGestureMinAbsLx = 999;
+    int fGestureMinAbsLy = 999;
+
+    void addGesture(char ch) {
+        if (size_t(fGesturePtr - fGestureBuffer) < sizeof(fGestureBuffer) - 1) {
+            *fGesturePtr++ = ch;
+            *fGesturePtr = '\0';
+            fGestureTimeOut = millis() + driver.gesturetimeout;
+        }
+    }
+
+    void resetGestureState() {
+        fGesturePtr = fGestureBuffer;
+        fGestureBuffer[0] = '\0';
+        fGestureAxis = 0;
+        fGestureMinAbsLx = 999;
+        fGestureMinAbsLy = 999;
+    }
+
+    void trimTrailingCenter() {
+        unsigned glen = strlen(fGestureBuffer);
+        if (glen > 0 && fGestureBuffer[glen - 1] == '5')
+            fGestureBuffer[glen - 1] = '\0';
+    }
+
+    void feedGestureInput(bool stickUp, int8_t stickX, int8_t stickY,
+                           bool tapA, bool tapB, bool tapC, bool tapD) {
+        if (!fGestureCollect) {
+            if (!stickUp) return;
+            driver.disableDomeController();
+            fGestureCollect = true;
+            resetGestureState();
+            fGestureTimeOut = millis() + driver.gesturetimeout;
+            return;
+        } else if (stickUp) {
+            trimTrailingCenter();
+            driver.enableDomeController();
+            fGestureCollect = false;
+            fGestureAxis = 0;
+            if (fWebCapture) {
+                fCaptureDone = true;
+                fWebCapture = false;
+            } else {
+                driver.processGesture(fGestureBuffer);
+            }
+            return;
+        } else if (fGestureTimeOut < millis()) {
+            driver.enableDomeController();
+            resetGestureState();
+            fGestureCollect = false;
+            if (fWebCapture) {
+                fCaptureDone = true;
+                fWebCapture = false;
+            }
+        } else {
+            if (tapA) addGesture('A');
+            if (tapB) addGesture('B');
+            if (tapC) addGesture('C');
+            if (tapD) addGesture('D');
+            if (!fGestureAxis) {
+                if (abs(stickX) > 50 && abs(stickY) > 50) {
+                    if (stickX < 0) fGestureAxis = (stickY < 0) ? '1' : '7';
+                    else fGestureAxis = (stickY < 0) ? '3' : '9';
+                    addGesture(fGestureAxis);
+                    fGestureMinAbsLx = abs(stickX);
+                    fGestureMinAbsLy = abs(stickY);
+                } else if (abs(stickX) > 100) {
+                    fGestureAxis = (stickX < 0) ? '4' : '6';
+                    addGesture(fGestureAxis);
+                    fGestureMinAbsLx = abs(stickX);
+                    fGestureMinAbsLy = abs(stickY);
+                } else if (abs(stickY) > 100) {
+                    fGestureAxis = (stickY < 0) ? '2' : '8';
+                    addGesture(fGestureAxis);
+                    fGestureMinAbsLx = abs(stickX);
+                    fGestureMinAbsLy = abs(stickY);
+                }
+            }
+            if (fGestureAxis) {
+                int absLx = abs(stickX);
+                int absLy = abs(stickY);
+                if (absLx < fGestureMinAbsLx) fGestureMinAbsLx = absLx;
+                if (absLy < fGestureMinAbsLy) fGestureMinAbsLy = absLy;
+                if (absLx < kGestureCenterDeadzone && absLy < kGestureCenterDeadzone) {
+                    addGesture('5');
+                    fGestureAxis = 0;
+                }
+            }
+        }
+    }
+};
+
+static void feedGesture(FakeGestureController* gesture, bool up, int8_t rx, int8_t ry) {
+    if (gesture) gesture->feedGestureInput(up, rx, ry, false, false, false, false);
+}
+
+void test_gesture_idle_call_with_no_release_is_a_noop() {
+    FakeGestureController g;
+    g.feedGestureInput(false, 0, 0, false, false, false, false);
+    TEST_ASSERT_FALSE(g.fGestureCollect);
+    TEST_ASSERT_EQUAL(0, g.driver.disableCount);
+}
+
+void test_gesture_starts_on_release_and_disables_dome() {
+    FakeGestureController g;
+    g.feedGestureInput(true, 0, 0, false, false, false, false);
+    TEST_ASSERT_TRUE(g.fGestureCollect);
+    TEST_ASSERT_EQUAL(1, g.driver.disableCount);
+}
+
+void test_gesture_horizontal_stroke_then_end_fires_matched_buffer() {
+    FakeGestureController g;
+    g.feedGestureInput(true, 0, 0, false, false, false, false);   // start
+    g.feedGestureInput(false, 127, 0, false, false, false, false); // hard right
+    g.feedGestureInput(false, 0, 0, false, false, false, false);   // recenter -> '5' trimmed on end
+    g.feedGestureInput(true, 0, 0, false, false, false, false);    // end
+
+    TEST_ASSERT_FALSE(g.fGestureCollect);
+    TEST_ASSERT_EQUAL(1, g.driver.enableCount);
+    TEST_ASSERT_EQUAL(1, g.driver.processGestureCount);
+    TEST_ASSERT_EQUAL_STRING("6", g.driver.lastGesture);  // '6' = right, trailing '5' trimmed
+}
+
+void test_gesture_diagonal_stroke_detected() {
+    FakeGestureController g;
+    g.feedGestureInput(true, 0, 0, false, false, false, false);
+    g.feedGestureInput(false, 100, -100, false, false, false, false);  // up-right
+    g.feedGestureInput(true, 100, -100, false, false, false, false);   // end while deflected
+
+    TEST_ASSERT_EQUAL(1, g.driver.processGestureCount);
+    TEST_ASSERT_EQUAL_STRING("3", g.driver.lastGesture);
+}
+
+void test_gesture_face_button_tap_folds_into_stroke() {
+    FakeGestureController g;
+    g.feedGestureInput(true, 0, 0, false, false, false, false);           // start
+    g.feedGestureInput(false, 0, 0, true, false, false, false);           // tapA -> 'A'
+    g.feedGestureInput(true, 0, 0, false, false, false, false);           // end
+
+    TEST_ASSERT_EQUAL_STRING("A", g.driver.lastGesture);
+}
+
+void test_gesture_end_wins_over_already_past_timeout() {
+    // Regression (issue #172): an end release landing on the same tick the
+    // deadline already passed must still finalize and fire, not fall into
+    // the timeout branch.
+    FakeGestureController g;
+    g.feedGestureInput(true, 0, 0, false, false, false, false);  // start
+    mock_millis_value = g.fGestureTimeOut + 1;                   // deadline now in the past
+    g.feedGestureInput(true, 0, 0, false, false, false, false);  // end, same tick
+
+    TEST_ASSERT_EQUAL(1, g.driver.processGestureCount);
+    TEST_ASSERT_FALSE(g.fGestureCollect);
+}
+
+void test_gesture_idle_timeout_resets_without_firing() {
+    FakeGestureController g;
+    g.feedGestureInput(true, 0, 0, false, false, false, false);  // start
+    mock_millis_value = g.fGestureTimeOut + 1;                   // deadline now in the past
+    g.feedGestureInput(false, 0, 0, false, false, false, false); // idle tick, no release
+
+    TEST_ASSERT_FALSE(g.fGestureCollect);
+    TEST_ASSERT_EQUAL(0, g.driver.processGestureCount);
+    TEST_ASSERT_EQUAL(1, g.driver.enableCount);
+}
+
+void test_gesture_web_capture_parks_result_instead_of_firing() {
+    FakeGestureController g;
+    g.feedGestureInput(true, 0, 0, false, false, false, false);  // start
+    g.fWebCapture = true;                                        // simulate a web-initiated session
+    g.feedGestureInput(true, 0, 0, false, false, false, false);  // end
+
+    TEST_ASSERT_EQUAL(0, g.driver.processGestureCount);
+    TEST_ASSERT_TRUE(g.fCaptureDone);
+    TEST_ASSERT_FALSE(g.fWebCapture);
+}
+
+// BT-level integration: confirms _dispatchButtons()'s mirror computes R3's
+// up-edge and forwards the right stick's rx/ry into the (already-tested)
+// gesture mirror unconditionally every tick, exactly as the real function
+// does for fDriver->fDomeStick.
+void test_bt_dispatch_feeds_r3_and_right_stick_into_gesture_controller() {
+    FakeDriver driver;
+    FakeLongPressSet lp;
+    FakeGestureController gesture;
+    JoystickController::State prev = {}, state = {};
+
+    state.button.r3 = 1;
+    dispatchButtons(driver, lp, prev, state, &gesture);  // down: no start yet
+    TEST_ASSERT_FALSE(gesture.fGestureCollect);
+
+    prev = state;
+    state.button.r3 = 0;
+    dispatchButtons(driver, lp, prev, state, &gesture);  // up: gesture starts
+    TEST_ASSERT_TRUE(gesture.fGestureCollect);
+
+    prev = state;
+    state.analog.stick.rx = 127;
+    dispatchButtons(driver, lp, prev, state, &gesture);  // stroke drawn from the right stick
+
+    prev = state;
+    state.button.r3 = 1;
+    dispatchButtons(driver, lp, prev, state, &gesture);
+    prev = state;
+    state.button.r3 = 0;
+    dispatchButtons(driver, lp, prev, state, &gesture);  // up: gesture ends and fires
+
+    TEST_ASSERT_FALSE(gesture.fGestureCollect);
+    TEST_ASSERT_EQUAL(1, gesture.driver.processGestureCount);
+    TEST_ASSERT_EQUAL_STRING("6", gesture.driver.lastGesture);
+}
+
 // ---- main -------------------------------------------------------------------
 
 int main(int argc, char **argv) {
@@ -465,6 +911,28 @@ int main(int argc, char **argv) {
     RUN_TEST(test_dispatch_altbtn_suppresses_its_own_button_and_sets_held);
     RUN_TEST(test_dispatch_routes_to_alt_layer_while_alt_held);
     RUN_TEST(test_dispatch_mutebutton_slot_notifies_on_up);
+
+    // Bumper/trigger dispatch (slots 10-13)
+    RUN_TEST(test_dispatch_left_bumper_press_release_fires_slot10);
+    RUN_TEST(test_dispatch_right_bumper_press_release_fires_slot12);
+    RUN_TEST(test_dispatch_left_trigger_half_pull_fires_slot11);
+    RUN_TEST(test_dispatch_right_trigger_half_pull_fires_slot13);
+    RUN_TEST(test_trigger_just_under_threshold_never_registers_as_pressed);
+    RUN_TEST(test_dispatch_altbtn_10_13_suppresses_and_sets_held);
+    RUN_TEST(test_dispatch_mutebutton_10_13_notifies_on_up);
+    RUN_TEST(test_slots_6_to_9_are_never_touched_by_bt_dispatch);
+    RUN_TEST(test_r3_toggle_alone_never_dispatches_a_macro_button);
+
+    // Gesture parity for R3
+    RUN_TEST(test_gesture_idle_call_with_no_release_is_a_noop);
+    RUN_TEST(test_gesture_starts_on_release_and_disables_dome);
+    RUN_TEST(test_gesture_horizontal_stroke_then_end_fires_matched_buffer);
+    RUN_TEST(test_gesture_diagonal_stroke_detected);
+    RUN_TEST(test_gesture_face_button_tap_folds_into_stroke);
+    RUN_TEST(test_gesture_end_wins_over_already_past_timeout);
+    RUN_TEST(test_gesture_idle_timeout_resets_without_firing);
+    RUN_TEST(test_gesture_web_capture_parks_result_instead_of_firing);
+    RUN_TEST(test_bt_dispatch_feeds_r3_and_right_stick_into_gesture_controller);
 
     return UNITY_END();
 }

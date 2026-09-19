@@ -220,56 +220,66 @@ void DomeController::process() {
   }
 #endif
 
-  if (!fGestureCollect) {
-    if (event.button_up.l3) {
-      DEBUG_PRINTLN("GESTURE START COLLECTING");
-      // Also always-on (not just DEBUG_PRINTLN, which needs USE_DEBUG) --
-      // start/timeout transitions previously left no trace in the field, so
-      // there was no way to tell a real idle timeout apart from the main
-      // loop just having been busy long enough to blow through the window
-      // mid-draw, silently ending collection and shifting every start/end
-      // click pairing after it by one (reported after #163 shipped).
-      fDriver->fConsole.println("GESTURE: start");
-      fDriver->disableDomeController();
-      fGestureCollect = true;
-      resetGestureState();
-      fGestureTimeOut = millis() + fDriver->params.gesturetimeout;
-    } else {
-      bool altHeld = fDriver->isAltHeld();
+  if (!fGestureCollect && !event.button_up.l3) {
+    bool altHeld = fDriver->isAltHeld();
 
-      DISPATCH_BUTTON(triangle, 6, altbtn, altHeld);
-      DISPATCH_BUTTON(circle,   7, altbtn, altHeld);
-      DISPATCH_BUTTON(cross,    8, altbtn, altHeld);
-      DISPATCH_BUTTON(square,   9, altbtn, altHeld);
+    DISPATCH_BUTTON(triangle, 6, altbtn, altHeld);
+    DISPATCH_BUTTON(circle,   7, altbtn, altHeld);
+    DISPATCH_BUTTON(cross,    8, altbtn, altHeld);
+    DISPATCH_BUTTON(square,   9, altbtn, altHeld);
 
-      DISPATCH_LONG(triangle, 6, altbtn, altHeld);
-      DISPATCH_LONG(circle,   7, altbtn, altHeld);
-      DISPATCH_LONG(cross,    8, altbtn, altHeld);
-      DISPATCH_LONG(square,   9, altbtn, altHeld);
+    DISPATCH_LONG(triangle, 6, altbtn, altHeld);
+    DISPATCH_LONG(circle,   7, altbtn, altHeld);
+    DISPATCH_LONG(cross,    8, altbtn, altHeld);
+    DISPATCH_LONG(square,   9, altbtn, altHeld);
 
-      // ---- Double-press mute detection (buttons 6–9) -------------------------
-      int muteBtn = fDriver->params.mutebutton;
-      if (muteBtn >= 6 && muteBtn <= 9 && DOME_BTNFIELD(muteBtn, event.button_up))
-        fDriver->noteMuteBtnUp();
-    }
+    // ---- Double-press mute detection (buttons 6–9) -------------------------
+    int muteBtn = fDriver->params.mutebutton;
+    if (muteBtn >= 6 && muteBtn <= 9 && DOME_BTNFIELD(muteBtn, event.button_up))
+      fDriver->noteMuteBtnUp();
     return;
-  } else if (event.button_up.l3) {
+  }
+
+  feedGestureInput(event.button_up.l3, state.analog.stick.lx, state.analog.stick.ly,
+                    event.button_up.triangle, event.button_up.circle,
+                    event.button_up.cross, event.button_up.square);
+}
+
+void DomeController::feedGestureInput(bool stickUp, int8_t stickX, int8_t stickY,
+                                       bool tapA, bool tapB, bool tapC, bool tapD) {
+  if (!fGestureCollect) {
+    if (!stickUp) return;
+    DEBUG_PRINTLN("GESTURE START COLLECTING");
+    // Also always-on (not just DEBUG_PRINTLN, which needs USE_DEBUG) --
+    // start/timeout transitions previously left no trace in the field, so
+    // there was no way to tell a real idle timeout apart from the main
+    // loop just having been busy long enough to blow through the window
+    // mid-draw, silently ending collection and shifting every start/end
+    // click pairing after it by one (reported after #163 shipped).
+    fDriver->fConsole.println("GESTURE: start");
+    fDriver->disableDomeController();
+    fGestureCollect = true;
+    resetGestureState();
+    fGestureTimeOut = millis() + fDriver->params.gesturetimeout;
+    return;
+  } else if (stickUp) {
     // Checked ahead of the idle-timeout below on purpose (issue #172 field
     // report): fGestureTimeOut is a deadline relative to the *last stroke*,
     // not a cap on total draw time, but the two checks used to run in the
     // other order -- so an end press landing on the same animate() cycle the
     // deadline happened to already be past (a careful multi-stroke gesture,
     // or just a pause before the final click) fell into the timeout branch
-    // instead, which never looks at event.button_up.l3. The gesture was
-    // silently discarded and the click that was meant to end it did nothing,
-    // reading in the field as "gestures need a long wait before the next one
-    // registers." Ending must win whenever L3 was actually just released,
-    // regardless of how close to (or past) the deadline that happened.
+    // instead, which never looks at stickUp. The gesture was silently
+    // discarded and the click that was meant to end it did nothing, reading
+    // in the field as "gestures need a long wait before the next one
+    // registers." Ending must win whenever the stick was actually just
+    // released, regardless of how close to (or past) the deadline that
+    // happened.
     trimTrailingCenter();
     fDriver->enableDomeController();
     fGestureCollect = false;
     // A gesture is allowed to end while the stick is still deflected (it's
-    // whatever happened between the two L3 presses, not required to end
+    // whatever happened between the two clicks, not required to end
     // centered) -- so fGestureAxis can't rely on the stick recentering to
     // get cleared. Clear it unconditionally right here, the instant
     // collection ends, rather than deferring to the next resetGestureState()
@@ -288,12 +298,12 @@ void DomeController::process() {
                                 " min|ly|=" + String(fGestureMinAbsLy) + ")");
     }
     fGestureAxis = 0;
-    // A physical L3 press can complete a capture that was started from the
-    // web UI (issue #138: "click done or press L3") -- in that case the
-    // result is parked for the browser's status poll instead of being
-    // dispatched as a live gesture trigger.
+    // A physical click can complete a capture that was started from the web
+    // UI (issue #138: "click done or press L3") -- in that case the result
+    // is parked for the browser's status poll instead of being dispatched as
+    // a live gesture trigger.
     if (fWebCapture) {
-      fDriver->fConsole.println("GESTURE: web capture end via L3 (\"" + String(fGestureBuffer) + "\")");
+      fDriver->fConsole.println("GESTURE: web capture end via stick click (\"" + String(fGestureBuffer) + "\")");
       fCaptureDone = true;
       fWebCapture = false;
     } else {
@@ -319,45 +329,45 @@ void DomeController::process() {
       fWebCapture = false;
     }
   } else {
-    if (event.button_up.triangle)
+    if (tapA)
       addGesture('A');
-    if (event.button_up.circle)
+    if (tapB)
       addGesture('B');
-    if (event.button_up.cross)
+    if (tapC)
       addGesture('C');
-    if (event.button_up.square)
+    if (tapD)
       addGesture('D');
     if (!fGestureAxis) {
-      if (abs(state.analog.stick.lx) > 50 &&
-          abs(state.analog.stick.ly) > 50) {
+      if (abs(stickX) > 50 &&
+          abs(stickY) > 50) {
         // Diagonal
-        if (state.analog.stick.lx < 0)
-          fGestureAxis = (state.analog.stick.ly < 0) ? '1' : '7';
+        if (stickX < 0)
+          fGestureAxis = (stickY < 0) ? '1' : '7';
         else
-          fGestureAxis = (state.analog.stick.ly < 0) ? '3' : '9';
+          fGestureAxis = (stickY < 0) ? '3' : '9';
         addGesture(fGestureAxis);
-        fGestureMinAbsLx = abs(state.analog.stick.lx);
-        fGestureMinAbsLy = abs(state.analog.stick.ly);
-      } else if (abs(state.analog.stick.lx) > 100) {
+        fGestureMinAbsLx = abs(stickX);
+        fGestureMinAbsLy = abs(stickY);
+      } else if (abs(stickX) > 100) {
         // Horizontal
-        fGestureAxis = (state.analog.stick.lx < 0) ? '4' : '6';
+        fGestureAxis = (stickX < 0) ? '4' : '6';
         addGesture(fGestureAxis);
-        fGestureMinAbsLx = abs(state.analog.stick.lx);
-        fGestureMinAbsLy = abs(state.analog.stick.ly);
-      } else if (abs(state.analog.stick.ly) > 100) {
+        fGestureMinAbsLx = abs(stickX);
+        fGestureMinAbsLy = abs(stickY);
+      } else if (abs(stickY) > 100) {
         // Vertical
-        fGestureAxis = (state.analog.stick.ly < 0) ? '2' : '8';
+        fGestureAxis = (stickY < 0) ? '2' : '8';
         addGesture(fGestureAxis);
-        fGestureMinAbsLx = abs(state.analog.stick.lx);
-        fGestureMinAbsLy = abs(state.analog.stick.ly);
+        fGestureMinAbsLx = abs(stickX);
+        fGestureMinAbsLy = abs(stickY);
       }
     }
     if (fGestureAxis) {
       // Track the closest approach to center seen while waiting to close out
       // this stroke -- diagnostic only, read by the "ended mid-stroke" log
       // line above if a recenter is never actually observed.
-      int absLx = abs(state.analog.stick.lx);
-      int absLy = abs(state.analog.stick.ly);
+      int absLx = abs(stickX);
+      int absLy = abs(stickY);
       if (absLx < fGestureMinAbsLx) fGestureMinAbsLx = absLx;
       if (absLy < fGestureMinAbsLy) fGestureMinAbsLy = absLy;
       if (absLx < GESTURE_CENTER_DEADZONE && absLy < GESTURE_CENTER_DEADZONE) {
