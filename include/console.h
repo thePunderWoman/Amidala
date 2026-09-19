@@ -10,6 +10,7 @@
 #pragma once
 
 #include "button_actions.h"
+#include "console_prompt.h"
 
 // ---- Console input buffer size ----------------------------------------------
 
@@ -83,6 +84,6 @@ private:
                           ButtonAction *actions);
   char fBuffer[CONSOLE_BUFFER_SIZE];
   bool fMonitor = false;
-  bool fPrompt = false;
+  ConsolePrompt fPrompt;
   bool fMinimal = true;
 };
