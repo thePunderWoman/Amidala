@@ -59,15 +59,22 @@ class AmidalaController;
 // wired bytes to UART0 (the same port HCRVocalizer itself writes to).
 class HcrLinkSinkImpl : public HcrLinkSink {
 public:
-  explicit HcrLinkSinkImpl(WCBClientController &wcb) : fWCB(wcb) {}
+  // txLog: the controller's fSerialTxLog slot (set later by the web UI), taken
+  // by reference so HCR TX lands in the monitor exactly like serial strings do.
+  HcrLinkSinkImpl(WCBClientController &wcb, void (*&txLog)(const char *, bool))
+      : fWCB(wcb), fTxLog(txLog) {}
   bool sendMesh(const char *line) override { return fWCB.broadcastHcr(line); }
   bool sendMeshToHost(const char *line) override { return fWCB.sendHcrToHost(line); }
   void writeSerial(const char *bytes) override {
     SERIAL.write((const uint8_t *)bytes, strlen(bytes));
   }
+  void logTx(const char *text, bool viaMesh) override {
+    if (fTxLog) fTxLog(text, viaMesh);
+  }
 
 private:
   WCBClientController &fWCB;
+  void (*&fTxLog)(const char *, bool);
 };
 #endif
 
@@ -249,7 +256,7 @@ public:
 #ifndef VMUSIC_SERIAL
   // After params (it holds a reference to it) and fWCB (the sink's mesh leg).
   // Installed on fHCR by AmidalaAudio::init().
-  HcrLinkSinkImpl  fHcrLinkSink{fWCB};
+  HcrLinkSinkImpl  fHcrLinkSink{fWCB, fSerialTxLog};
   HcrLinkTransport fHcrLink{params, fHcrLinkSink};
 #endif
 #ifdef RDH_SERIAL

@@ -95,17 +95,9 @@ bool WCBClientController::routeOutbound(const char *cmd, bool wantMesh, uint8_t 
     return ok;
 }
 
-static void tapHcrMesh(const char *line) {
-    char tap[WCB_RX_CMD_LEN + 16];
-    snprintf(tap, sizeof(tap), "MESH: %s", line);
-    monAppend(tap, 't');
-}
-
 bool WCBClientController::broadcastHcr(const char *line) {
     if (!fClient) return false; // not live -- caller falls back to the wired link
-    bool ok = fClient->broadcast(line);
-    if (ok) tapHcrMesh(line);
-    return ok;
+    return fClient->broadcast(line);
 }
 
 bool WCBClientController::sendHcrToHost(const char *line) {
@@ -120,8 +112,6 @@ bool WCBClientController::sendHcrToHost(const char *line) {
     // No HCR host advertised (WDP off, or not heard yet) or the unicast was
     // refused -- broadcast; only the WCB that actually hosts the HCR acts on it.
     if (!ok) ok = fClient->broadcast(line);
-
-    if (ok) tapHcrMesh(line);
     return ok;
 }
 

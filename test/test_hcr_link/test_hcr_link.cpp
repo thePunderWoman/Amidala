@@ -8,6 +8,7 @@
 
 #include "hcr_link.h"
 #include <string>
+#include <utility>
 #include <vector>
 #include <unity.h>
 
@@ -20,6 +21,7 @@ struct FakeSink : HcrLinkSink {
   std::vector<std::string> mesh;    // lines handed to sendMesh (incl. refused ones)
   std::vector<std::string> host;    // lines handed to sendMeshToHost (incl. refused ones)
   std::vector<std::string> serial;  // byte strings handed to writeSerial
+  std::vector<std::pair<std::string, bool>> logs;  // (text, viaMesh) handed to logTx
 
   bool sendMesh(const char *line) override {
     mesh.push_back(line);
@@ -30,6 +32,7 @@ struct FakeSink : HcrLinkSink {
     return meshOk;
   }
   void writeSerial(const char *bytes) override { serial.push_back(bytes); }
+  void logTx(const char *text, bool viaMesh) override { logs.push_back({text, viaMesh}); }
 };
 
 }  // namespace
@@ -165,6 +168,85 @@ void test_native_unsendable_frame_is_swallowed_not_leaked_bare() {
   TEST_ASSERT_EQUAL(0, (int)s.serial.size());
 }
 
+// ---- TX logging -------------------------------------------------------------
+// HCRVocalizer writes UART0 directly and the monitor's S0 tap only drains what
+// Serial0 RECEIVES, so hcrLinkRoute is the only place an outbound HCR frame can
+// be logged. Each sent frame must be logged once, as what hit the wire, on the
+// link it actually took.
+
+void test_serial_uart0_logs_bare_frame_on_uart0() {
+  FakeSink s;
+  TEST_ASSERT_FALSE(hcrLinkRoute(HCR_LINK_SERIAL, false, kFrame, s));
+  TEST_ASSERT_EQUAL(1, (int)s.logs.size());
+  TEST_ASSERT_EQUAL_STRING(kFrame, s.logs[0].first.c_str());
+  TEST_ASSERT_FALSE(s.logs[0].second);
+}
+
+void test_serial_mesh_logs_bare_frame_on_mesh() {
+  FakeSink s;
+  TEST_ASSERT_TRUE(hcrLinkRoute(HCR_LINK_SERIAL, true, kFrame, s));
+  TEST_ASSERT_EQUAL(1, (int)s.logs.size());
+  TEST_ASSERT_EQUAL_STRING(kFrame, s.logs[0].first.c_str());
+  TEST_ASSERT_TRUE(s.logs[0].second);
+}
+
+void test_serial_mesh_failure_logs_once_on_uart0() {
+  FakeSink s;
+  s.meshOk = false;
+  TEST_ASSERT_FALSE(hcrLinkRoute(HCR_LINK_SERIAL, true, kFrame, s));
+  TEST_ASSERT_EQUAL(1, (int)s.logs.size());  // not also a mesh entry for the refused send
+  TEST_ASSERT_FALSE(s.logs[0].second);
+}
+
+void test_native_mesh_logs_wrapped_line_on_mesh() {
+  FakeSink s;
+  TEST_ASSERT_TRUE(hcrLinkRoute(HCR_LINK_WCB_NATIVE, true, kFrame, s));
+  TEST_ASSERT_EQUAL(1, (int)s.logs.size());
+  TEST_ASSERT_EQUAL_STRING(";H,RAW,<SH50,QEH,QT>", s.logs[0].first.c_str());
+  TEST_ASSERT_TRUE(s.logs[0].second);
+}
+
+void test_native_uart0_logs_wrapped_line_without_framing_newlines() {
+  FakeSink s;
+  TEST_ASSERT_TRUE(hcrLinkRoute(HCR_LINK_WCB_NATIVE, false, kFrame, s));
+  TEST_ASSERT_EQUAL(1, (int)s.logs.size());
+  // The monitor line is the command, not the "\n...\n" bytes written to the port.
+  TEST_ASSERT_EQUAL_STRING(";H,RAW,<SH50,QEH,QT>", s.logs[0].first.c_str());
+  TEST_ASSERT_FALSE(s.logs[0].second);
+}
+
+void test_native_mesh_failure_logs_once_on_uart0() {
+  FakeSink s;
+  s.meshOk = false;
+  TEST_ASSERT_TRUE(hcrLinkRoute(HCR_LINK_WCB_NATIVE, true, kFrame, s));
+  TEST_ASSERT_EQUAL(1, (int)s.logs.size());
+  TEST_ASSERT_FALSE(s.logs[0].second);
+}
+
+void test_native_unsendable_frame_logs_nothing() {
+  FakeSink s;
+  std::string big(HCR_LINK_MAX_LINE, 'x');
+  hcrLinkRoute(HCR_LINK_WCB_NATIVE, true, big.c_str(), s);
+  TEST_ASSERT_EQUAL(0, (int)s.logs.size());
+}
+
+// Every mode/destination/failure combination: exactly one log per frame, on the
+// link that carried it.
+void test_every_sent_frame_is_logged_exactly_once_on_its_link() {
+  for (uint8_t link = HCR_LINK_SERIAL; link <= HCR_LINK_WCB_NATIVE; link++) {
+    for (int wantMesh = 0; wantMesh <= 1; wantMesh++) {
+      for (int meshOk = 0; meshOk <= 1; meshOk++) {
+        FakeSink s;
+        s.meshOk = meshOk;
+        hcrLinkRoute(link, wantMesh, kFrame, s);
+        TEST_ASSERT_EQUAL(1, (int)s.logs.size());
+        bool wentMesh = wantMesh && meshOk;
+        TEST_ASSERT_EQUAL(wentMesh, s.logs[0].second);
+      }
+    }
+  }
+}
+
 int main(int, char **) {
   UNITY_BEGIN();
   RUN_TEST(test_wrap_prefixes_raw_verb);
@@ -182,5 +264,13 @@ int main(int, char **) {
   RUN_TEST(test_native_mesh_failure_falls_back_to_wrapped_uart0);
   RUN_TEST(test_native_never_emits_an_unwrapped_frame);
   RUN_TEST(test_native_unsendable_frame_is_swallowed_not_leaked_bare);
+  RUN_TEST(test_serial_uart0_logs_bare_frame_on_uart0);
+  RUN_TEST(test_serial_mesh_logs_bare_frame_on_mesh);
+  RUN_TEST(test_serial_mesh_failure_logs_once_on_uart0);
+  RUN_TEST(test_native_mesh_logs_wrapped_line_on_mesh);
+  RUN_TEST(test_native_uart0_logs_wrapped_line_without_framing_newlines);
+  RUN_TEST(test_native_mesh_failure_logs_once_on_uart0);
+  RUN_TEST(test_native_unsendable_frame_logs_nothing);
+  RUN_TEST(test_every_sent_frame_is_logged_exactly_once_on_its_link);
   return UNITY_END();
 }
