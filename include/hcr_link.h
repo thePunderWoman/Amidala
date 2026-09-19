@@ -63,6 +63,12 @@ public:
   virtual bool sendMeshToHost(const char *line) = 0;
   // Exact bytes for the wired link (UART0), written in a single call.
   virtual void writeSerial(const char *bytes) = 0;
+  // Record one outbound HCR line in the monitor's TX log: `text` is what went
+  // on the wire (no priming/trailing newlines), viaMesh says which link. Called
+  // exactly once per frame that is actually sent. Needed because nothing else
+  // sees HCR traffic leave: HCRVocalizer writes UART0 directly, and the
+  // monitor's S0 tap only drains what Serial0 RECEIVES.
+  virtual void logTx(const char *text, bool viaMesh) = 0;
 };
 
 // Route one HCR frame (as built by HCRVocalizer, "<...>" included).
@@ -73,21 +79,35 @@ public:
 //
 // Invariant: in WCB-native mode an unwrapped frame is never sent anywhere --
 // a WCB would treat it as a broadcast string and drop it at the HCR port.
+// Invariant: every frame that is sent is logged once via sink.logTx(), on the
+// link it actually took (mesh, or UART0 -- including the case where this
+// returns false and HCRVocalizer does the UART0 write itself).
 inline bool hcrLinkRoute(uint8_t link, bool wantMesh, const char *frame, HcrLinkSink &sink) {
   if (link != HCR_LINK_WCB_NATIVE) {
-    return wantMesh && sink.sendMesh(frame);
+    if (wantMesh && sink.sendMesh(frame)) {
+      sink.logTx(frame, true);
+      return true;
+    }
+    // Not handled: HCRVocalizer writes this frame to UART0 itself, which
+    // bypasses us, so log it here.
+    sink.logTx(frame, false);
+    return false;
   }
 
   char line[HCR_LINK_LINE_BUF];
   if (!hcrWrapNative(frame, line, sizeof(line)))
     return true;  // unsendable (empty/oversize): swallow rather than leak it bare
 
-  if (wantMesh && sink.sendMeshToHost(line)) return true;
+  if (wantMesh && sink.sendMeshToHost(line)) {
+    sink.logTx(line, true);
+    return true;
+  }
 
   // Wired to a WCB (or the mesh isn't live). Same idle-line priming newline
   // HCRVocalizer prepends on its own serial path; the WCB ignores empty lines.
   char bytes[HCR_LINK_BYTES_BUF];
   snprintf(bytes, sizeof(bytes), "\n%s\n", line);
   sink.writeSerial(bytes);
+  sink.logTx(line, false);
   return true;
 }
