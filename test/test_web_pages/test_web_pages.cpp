@@ -112,6 +112,19 @@ void test_connectivity_page_has_all_sections() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/wcb/status"));
 }
 
+void test_connectivity_page_has_xbee_at_command_panel() {
+    // PAN ID / coordinator role read+write over the module's own local AT
+    // commands (issue #213) -- lives on the module itself, not params/EEPROM,
+    // so this panel talks to its own dedicated endpoints rather than the
+    // generic /api/config SCHEMA fields above it.
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/xbee/query"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/xbee/set"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "/api/xbee/status"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "PAN ID"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "Set as Coordinator"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONFIG_CONNECTIVITY, "set as the coordinator"));
+}
+
 void test_audio_page_uses_config_endpoint() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "/api/config"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "href=\"/\""));
@@ -993,6 +1006,7 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_general_page_has_viewport_meta);
     RUN_TEST(test_wifi_page_uses_config_endpoint);
     RUN_TEST(test_connectivity_page_has_all_sections);
+    RUN_TEST(test_connectivity_page_has_xbee_at_command_panel);
     RUN_TEST(test_audio_page_uses_config_endpoint);
     RUN_TEST(test_rc_radio_page_uses_config_endpoint);
     RUN_TEST(test_dome_page_uses_config_endpoint);

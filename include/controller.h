@@ -61,6 +61,7 @@ class AmidalaController;
 #include "rdh_serial.h"
 #include "xbee_remote.h"
 #include "snips_remote.h"
+#include "xbee_at_session.h"
 #include "params.h"
 #include "wifi_ap.h"
 
@@ -212,6 +213,13 @@ public:
   // remote[] above. See include/snips_remote.h for why.
   SnipsRemote fSnipsRight;
   SnipsRemote fSnipsLeft;
+  // XBee PAN ID / coordinator-role read+write over local AT commands
+  // (issue #213) -- one shared session regardless of controllertype, same
+  // as fDomeStick's web-capture flags above are one shared session for
+  // gestures. Registered with xbee_spi.cpp via xbeeSPISetATSession() in
+  // setup() so the 0x88 response frame pump can reach it; ticked once per
+  // animate() cycle for its own timeout check.
+  XBeeATSession fXBeeAT;
   // Heap-allocated from PSRAM, not a plain member -- Str[MAX_SERIAL_STRINGS]
   // alone is ~67KB, and as static internal-SRAM storage that was ~35% of
   // this firmware's total RAM budget (issue #172). See allocParamsInPSRAM()
