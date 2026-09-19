@@ -255,32 +255,6 @@ public:
   DomeDriveRoboClaw* fDomeDrive = nullptr;
 #endif
 
-  bool checkRCMode() {
-#ifdef RCSEL_PIN
-    static bool sRCMode;
-    if (digitalRead(RCSEL_PIN) == LOW) {
-      if (!sRCMode) {
-        fConsole.println("RC Enabled (" +
-                         String(params.getRadioChannelCount()) + " Channels)");
-#ifdef STATUS_RC_PIN
-        digitalWrite(STATUS_RC_PIN, HIGH);
-#endif
-        sRCMode = true;
-      }
-      return true;
-    }
-    if (sRCMode) {
-#ifdef STATUS_RC_PIN
-      digitalWrite(STATUS_RC_PIN, LOW);
-#endif
-      sRCMode = false;
-    }
-    return false;
-#else
-    return false;
-#endif
-  }
-
   bool checkSel2Mode() {
 #ifdef SEL2_PIN
     static bool sSel2Mode;
