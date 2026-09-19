@@ -45,10 +45,7 @@ size_t AmidalaConsole::write(uint8_t ch) {
 }
 
 size_t AmidalaConsole::write(const uint8_t *buffer, size_t size) {
-  if (fPrompt) {
-    CONSOLE_SERIAL.println();
-    fPrompt = false;
-  }
+  fPrompt.beforeOutput(CONSOLE_SERIAL);
   if (!fMonitor) teeConsoleToMonitor(buffer, size);
   return CONSOLE_SERIAL.write(buffer, size);
 }
@@ -386,11 +383,9 @@ bool AmidalaConsole::process(char ch, bool config) {
 
 void AmidalaConsole::process() {
   monitorOutput();
-  if (!fPrompt) {
-    if (!fMonitor)
-      print("> ");
-    fPrompt = true;
-  }
+  // Terminal-only: not through write(), which would tee the prompt into the
+  // web Monitor as a stray "LOG: > " line (see console_prompt.h).
+  fPrompt.idle(CONSOLE_SERIAL, fMonitor);
   if (CONSOLE_SERIAL.available()) {
     static bool reentry;
     if (reentry)
