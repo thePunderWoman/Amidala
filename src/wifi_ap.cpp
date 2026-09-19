@@ -1290,7 +1290,7 @@ static void handleApiConfigPost() {
     if (key == "wcbenable") {
 #ifndef VMUSIC_SERIAL
         if (sCtrl->params.wcbenable && !sCtrl->fWCB.isRunning()) {
-            sCtrl->fWCB.begin(sCtrl->params, sCtrl->fHCR, sCtrl->fConsole);
+            sCtrl->fWCB.begin(sCtrl->params, sCtrl->fConsole);
         }
 #endif
     } else if ((key == "wcboct2" || key == "wcboct3" || key == "wcbpassword" ||

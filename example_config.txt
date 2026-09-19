@@ -178,6 +178,12 @@ wcbid=0
 # 1 = WCB mesh only (the UART0 write is skipped). Falls back to UART0
 # automatically if the mesh isn't actually joined, regardless of this value.
 outboundserial=0
+# How HCR commands are framed (only used when the audio board is an HCR):
+# 0 = Serial (default) -- bare frames, for an HCR wired to Serial0 or on a
+# plain WCB serial port. 1 = WCB Native -- frames wrapped as ";H,RAW,<frame>"
+# for a WCB (firmware 6.1.0+) that owns the HCR via ?HCR,PORT,Sx:baud. Goes
+# out over whichever destination outboundserial selects.
+hcrlink=0
 
 # --- Gestures for Special Toggles ---
 # These set which stick gesture string toggles which mode (default values)

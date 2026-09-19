@@ -127,6 +127,7 @@ inline bool ensureConfigDefaults(const AmidalaParameters& params) {
         {"wcbquantity=",    String(params.wcbquantity)},
         {"wcbid=",          String(params.wcbid)},
         {"outboundserial=", String(params.outboundserial)},
+        {"hcrlink=",        String(params.hcrlink)},
         {"mutebutton=",     String(params.mutebutton)},
         {"b9=",             String(params.b9)},
         {"dbtimeout=",      String(params.dbtimeout)},

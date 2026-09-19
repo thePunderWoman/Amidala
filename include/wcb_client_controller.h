@@ -1,8 +1,9 @@
 // wcb_client_controller.h
 // Owns the (possibly nonexistent) live WCB_Client mesh connection and everything
 // that depends on it: boot-time validation, outbound routing (UART0 vs mesh),
-// the HCR transport wiring, inbound-message monitor visibility, and the
-// /api/wcb/status JSON.
+// inbound-message monitor visibility, and the /api/wcb/status JSON. (How HCR
+// frames are framed for the link is hcr_link.h; sendHcr() below is just its
+// mesh leg.)
 //
 // WCB_Client's constructor needs runtime config (octets/password/quantity/id)
 // that's only known after loadConfig() runs inside setup() -- but
@@ -31,11 +32,9 @@
 #include "params.h"
 #include "serial_output.h"
 #include "wcb_config_validator.h"
-#include "wcb_hcr_transport.h"
 #include "wcb_rx_queue.h"
 #include "wcb_status_json.h"
 
-class HCRVocalizer;
 class WCB_Client;
 
 class WCBClientController {
@@ -47,17 +46,13 @@ public:
     // identity fields don't validate, logs a warning to `out` and skips
     // attempting to join -- never attempts a connection with an incomplete
     // identity (item 4's exact requirement).
-    void begin(const AmidalaParameters &params, HCRVocalizer &hcr, Print &out);
+    void begin(const AmidalaParameters &params, Print &out);
 
     // Called every animate() tick. No-op (cheap) if begin() never
     // constructed a live client. Drains the RX queue into the monitor
     // (tagged "MESH: ", gated on params.wcbenable so mesh chatter doesn't
-    // scroll the ring buffer when nobody asked to see it), pumps
-    // WCB_Client::update() (required every loop iteration per the library),
-    // and reacts to a live params.outboundserial change by wiring/unwiring
-    // the HCR transport -- unlike the identity fields, outboundserial is
-    // safe to apply without a reboot since it doesn't touch WCB_Client's
-    // construction at all, only which path outbound commands take.
+    // scroll the ring buffer when nobody asked to see it), and pumps
+    // WCB_Client::update() (required every loop iteration per the library).
     void poll(const AmidalaParameters &params);
 
     // Called from sendSerialString() instead of writing to UART0 directly.
@@ -78,6 +73,18 @@ public:
     // receivers -- see the regression this fixed).
     bool routeOutbound(const char *cmd, bool wantMesh, uint8_t delim);
 
+    // One HCR line (already framed for the link, see hcr_link.h) to the mesh.
+    // Both return false if the mesh isn't live or the send was refused, so the
+    // caller can fall back to the wired link.
+    //
+    // broadcastHcr: every WCB gets it (bare frames -- any WCB might have the
+    // HCR on a plain serial port).
+    bool broadcastHcr(const char *line);
+    // sendHcrToHost: unicast to the WCB advertising native HCR hosting (WDP
+    // capability bit) when one is online -- a broadcast would make every other
+    // WCB print "HCR not configured" per command -- else broadcast.
+    bool sendHcrToHost(const char *line);
+
     // Live status for /api/wcb/status.
     String statusJson(const AmidalaParameters &params) const;
 
@@ -92,10 +99,7 @@ public:
 
 private:
     WCB_Client       *fClient        = nullptr;
-    WCBHcrTransport  *fHcrTransport  = nullptr;
-    HCRVocalizer     *fHcr           = nullptr;
     WCBRxQueue        fRxQueue;
-    bool              fHcrTransportActive = false; // mirrors the last-applied outboundserial state
     bool              fRebootRequired     = false;
 
     // WCB_Client's onCommand callback is a plain C function pointer (no

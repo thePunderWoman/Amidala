@@ -189,7 +189,7 @@ void AmidalaController::setup() {
     fWiFiAP.begin(params.wifiSSID, params.wifiPassword, this);
 
 #ifndef VMUSIC_SERIAL
-  fWCB.begin(params, fHCR, fConsole);
+  fWCB.begin(params, fConsole);
 #endif
 
   // Buttons: face buttons + L3 dispatch through drive-side slots 1-5

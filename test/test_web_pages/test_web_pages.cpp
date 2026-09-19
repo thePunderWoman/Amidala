@@ -501,6 +501,21 @@ void test_full_config_json_wcb_identity_stored_correctly() {
     TEST_ASSERT_TRUE(contains(s, "\"outboundserial\":1"));
 }
 
+void test_full_config_json_hcrlink() {
+    AmidalaParameters p = makeParams();
+    TEST_ASSERT_TRUE(contains(buildFullConfigJson(p).c_str(), "\"hcrlink\":0"));
+    p.hcrlink = 1;
+    TEST_ASSERT_TRUE(contains(buildFullConfigJson(p).c_str(), "\"hcrlink\":1"));
+}
+
+void test_audio_page_has_hcr_serial_configuration_toggle() {
+    // Only relevant to an HCR audio board -- the row must be gated on it.
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "'hcrlink'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "Serial Configuration"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "WCB Native"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_AUDIO, "key:'hcrlink'"));
+}
+
 void test_full_config_json_audio_keys() {
     AmidalaParameters p = makeParams();
     p.audiohw = 1; // AUDIO_HW_HCR
@@ -1098,6 +1113,8 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_full_config_json_btcontrolleron_true);
     RUN_TEST(test_full_config_json_wcbenable_false_by_default);
     RUN_TEST(test_full_config_json_wcb_identity_stored_correctly);
+    RUN_TEST(test_full_config_json_hcrlink);
+    RUN_TEST(test_audio_page_has_hcr_serial_configuration_toggle);
     RUN_TEST(test_full_config_json_audio_keys);
     RUN_TEST(test_full_config_json_rc_radio_keys);
     RUN_TEST(test_full_config_json_dome_keys);

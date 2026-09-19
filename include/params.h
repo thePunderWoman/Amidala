@@ -277,6 +277,12 @@ struct AmidalaParameters {
   uint8_t j1adjv;
   uint8_t j1adjh;
   uint8_t audiohw;     // AUDIO_HW_HCR (default) or AUDIO_HW_VMUSIC
+  // hcrlink: how HCR commands are framed when audiohw is HCR (hcr_link.h).
+  // 0 = serial (default): bare "<...>" frames, for an HCR wired to Serial0 or
+  // sitting on a plain WCB serial port. 1 = wcb native: frames wrapped as
+  // ";H,RAW,<frame>" for a WCB (firmware 6.1.0+) that owns the HCR via
+  // ?HCR,PORT. Applies live; still goes out per outboundserial (mesh or UART0).
+  uint8_t hcrlink;
   uint8_t startupem;   // Startup emote emotion (HAPPY=0..OVERLOAD=4)
   uint8_t startuplvl;  // Startup emote level (EMOTE_MODERATE=0, EMOTE_STRONG=1)
   uint8_t ackem;       // Ack emote emotion
@@ -543,6 +549,7 @@ struct AmidalaParameters {
 #else
       audiohw = AUDIO_HW_HCR;
 #endif
+      hcrlink = 0;
       startupem = HAPPY;
       startuplvl = EMOTE_MODERATE;
       ackem = HAPPY;
