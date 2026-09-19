@@ -67,7 +67,8 @@
 var _cfg = null;
 var _tab = 'btn';
 
-var CONTROLLER_TYPE_SNIPS = 1;
+var CONTROLLER_TYPE_SNIPS     = 1;
+var CONTROLLER_TYPE_BLUETOOTH = 2;
 
 var BTN_NAMES = [
   '', // index 0 unused (buttons are 1-based)
@@ -99,8 +100,25 @@ var SNIPS_BTN_NAMES = [
 var SNIPS_RIGHT_BUTTONS = [1, 2, 3, 4, 5, 6, 7, 8, 21, 22, 23, 24];
 var SNIPS_LEFT_BUTTONS  = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
+// Single Bluetooth gamepad -- one physical controller, so no Right/Left
+// split. Numbering matches BTGamepad::_dispatchButtons() (src/bt_gamepad.cpp):
+// face buttons + stick click stay at 1-5 (same slots XBee's drive remote
+// uses), bumpers/triggers are pushed to 10-13 to avoid the 6-9 block
+// reserved for a future dome-stick feature. Face buttons are dual-labeled
+// (Xbox / PlayStation) since either kind of gamepad can pair over BLE HID.
+// R3 (right stick click) isn't listed here at all -- it drives gesture
+// drawing directly and isn't a configurable button, exactly like the dome
+// remote's own reserved stick click (see CTRL_TYPE_NOTES below).
+var BT_BTN_NAMES = {
+  1: 'A / Cross', 2: 'B / Circle', 3: 'X / Square', 4: 'Y / Triangle',
+  5: 'Left Stick Click (L3)',
+  10: 'Left Bumper', 11: 'Left Trigger', 12: 'Right Bumper', 13: 'Right Trigger'
+};
+var BT_BUTTONS = [10, 11, 12, 13, 1, 2, 3, 4, 5];
+
 var CTRL_TYPE_NOTES = {
-  '1': 'Button mapping (press/long-press/alt/double-press) is live for Snips Controllers, including the stateful Left/Right Up/Down buttons (Volume/Drive Throttle step, or anything else). Stick/trigger input is not wired up yet.'
+  '1': 'Button mapping (press/long-press/alt/double-press) is live for Snips Controllers, including the stateful Left/Right Up/Down buttons (Volume/Drive Throttle step, or anything else). Stick/trigger input is not wired up yet.',
+  '2': 'Right stick click starts/ends gesture drawing exactly like the dome remote’s own stick click (see the Gestures tab) and isn’t configurable here. D-pad, Start/Select/PS, and a few reserved slots aren’t configurable yet.'
 };
 
 function renderControlTypeNote() {
@@ -253,9 +271,10 @@ function saveBtn(n, lyr, sel) {
 
 function renderButtons() {
   var isSnips   = Number(_cfg.controllertype) === CONTROLLER_TYPE_SNIPS;
-  var names     = isSnips ? SNIPS_BTN_NAMES : BTN_NAMES;
-  var rightBtns = isSnips ? SNIPS_RIGHT_BUTTONS : [1, 2, 3, 4, 5];
-  var leftBtns  = isSnips ? SNIPS_LEFT_BUTTONS  : [6, 7, 8, 9];
+  var isBT      = Number(_cfg.controllertype) === CONTROLLER_TYPE_BLUETOOTH;
+  var names     = isSnips ? SNIPS_BTN_NAMES : isBT ? BT_BTN_NAMES : BTN_NAMES;
+  var rightBtns = isSnips ? SNIPS_RIGHT_BUTTONS : isBT ? BT_BUTTONS : [1, 2, 3, 4, 5];
+  var leftBtns  = isSnips ? SNIPS_LEFT_BUTTONS  : isBT ? []         : [6, 7, 8, 9];
   var allBtns   = rightBtns.concat(leftBtns);
   var rightHdr  = isSnips ? 'Right Snips Controller' : 'Right Controller';
   var leftHdr   = isSnips ? 'Left Snips Controller'  : 'Left Controller';
@@ -275,8 +294,8 @@ function renderButtons() {
   h += '<select name="altbtn" class="row-sel" onchange="saveGlobal(\'altbtn\',this.value)">';
   h += opt('0', 'None', altbtn === 0 ? '0' : String(altbtn));
   allBtns.forEach(function(i) {
-    var ctrl = rightBtns.indexOf(i) >= 0 ? 'Right' : 'Left';
-    h += opt(String(i), ctrl + ' — ' + names[i], String(altbtn));
+    var label = isBT ? names[i] : (rightBtns.indexOf(i) >= 0 ? 'Right' : 'Left') + ' — ' + names[i];
+    h += opt(String(i), label, String(altbtn));
   });
   h += '</select></div>';
 
@@ -284,8 +303,8 @@ function renderButtons() {
   h += '<select name="mutebutton" class="row-sel" onchange="saveGlobal(\'mutebutton\',this.value)">';
   h += opt('0', 'None', mutebutton === 0 ? '0' : String(mutebutton));
   allBtns.forEach(function(i) {
-    var ctrl = rightBtns.indexOf(i) >= 0 ? 'Right' : 'Left';
-    h += opt(String(i), ctrl + ' — ' + names[i], String(mutebutton));
+    var label = isBT ? names[i] : (rightBtns.indexOf(i) >= 0 ? 'Right' : 'Left') + ' — ' + names[i];
+    h += opt(String(i), label, String(mutebutton));
   });
   h += '</select></div>';
 
@@ -324,12 +343,17 @@ function renderButtons() {
   h += '<div class="sec-hdr">Button Assignments</div>';
   if (showAlt) h += '<div class="gest-note" style="font-size:.65rem;margin:0">Alt Press column active (Alt Button = ' + names[altbtn] + ').</div>';
 
-  h += '<div class="sub-hdr">' + rightHdr + '</div>';
-  rightBtns.forEach(function(i) { h += renderBtnCard(i, showAlt, altbtn, mutebutton, names); });
-  h += '<div class="sub-hdr">' + leftHdr + '</div>';
-  leftBtns.forEach(function(i) { h += renderBtnCard(i, showAlt, altbtn, mutebutton, names); });
+  if (isBT) {
+    // Single physical gamepad -- no Right/Left split, no sub-headers.
+    rightBtns.forEach(function(i) { h += renderBtnCard(i, showAlt, altbtn, mutebutton, names); });
+  } else {
+    h += '<div class="sub-hdr">' + rightHdr + '</div>';
+    rightBtns.forEach(function(i) { h += renderBtnCard(i, showAlt, altbtn, mutebutton, names); });
+    h += '<div class="sub-hdr">' + leftHdr + '</div>';
+    leftBtns.forEach(function(i) { h += renderBtnCard(i, showAlt, altbtn, mutebutton, names); });
+  }
 
-  if (!isSnips) h += '<div class="gest-note" style="font-size:.65rem;margin:0">Left Stick Press (button 10) initiates gesture sequences and is not configurable here.</div>';
+  if (!isSnips && !isBT) h += '<div class="gest-note" style="font-size:.65rem;margin:0">Left Stick Press (button 10) initiates gesture sequences and is not configurable here.</div>';
 
   h += '</div>';
   document.getElementById('main').innerHTML = h;

@@ -212,6 +212,25 @@ public:
   bool isCaptureDone() const { return fCaptureDone; }
   const char *captureResult() const { return fGestureBuffer; }
 
+  // Drives the gesture-collection state machine from plain inputs instead of
+  // this object's own physical x/y/button[]/event fields, so an unrelated
+  // input source (BTGamepad's own right stick + R3, see src/bt_gamepad.cpp)
+  // can feed it directly without going through update()/type/lastPacket at
+  // all. process()'s gesture branch forwards its own event/state fields into
+  // this unchanged -- net-zero behavior change for the physical dome remote
+  // path. Body defined in src/drive_controllers.cpp (needs the complete
+  // AmidalaController type via fDriver, same as notify()/process()).
+  //   stickUp:       this tick's stick-click release edge (start/end toggle).
+  //   stickX/stickY: -128..127, same scale as state.analog.stick.lx/ly.
+  //   tapA/B/C/D:    face-button-up taps to fold into the stroke this tick
+  //                  (dome-side remotes only -- BTGamepad always passes false
+  //                  for all four; it has no separate dome-side face-button
+  //                  set to redirect).
+  // Safe to call unconditionally every tick -- internally a no-op when not
+  // collecting and stickUp is false.
+  void feedGestureInput(bool stickUp, int8_t stickX, int8_t stickY,
+                         bool tapA, bool tapB, bool tapC, bool tapD);
+
   AmidalaController *fDriver;
 
 protected:

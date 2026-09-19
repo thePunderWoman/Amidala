@@ -688,6 +688,19 @@ void test_controllers_page_groups_serial_cmds_by_category() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "Serial Commands"));
 }
 
+void test_controllers_page_has_bluetooth_gamepad_labels() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "CONTROLLER_TYPE_BLUETOOTH"));
+    // Dual-labeled face buttons so users aren't guessing Xbox vs. PlayStation.
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "A / Cross"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "B / Circle"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "X / Square"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "Y / Triangle"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "Left Bumper"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "Left Trigger"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "Right Bumper"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "Right Trigger"));
+}
+
 // ---------------------------------------------------------------------------
 // Droid control page
 // ---------------------------------------------------------------------------
@@ -1024,6 +1037,7 @@ int main(int /*argc*/, char** /*argv*/) {
     // Controllers page
     RUN_TEST(test_controllers_page_uses_config_endpoint);
     RUN_TEST(test_controllers_page_groups_serial_cmds_by_category);
+    RUN_TEST(test_controllers_page_has_bluetooth_gamepad_labels);
 
     // Droid control page
     RUN_TEST(test_droid_control_page_uses_config_endpoint);

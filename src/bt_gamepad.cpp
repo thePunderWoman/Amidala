@@ -371,15 +371,22 @@ void BTGamepad::_parseReport(const uint8_t* d, size_t len)
 }
 
 // Dispatch face buttons + L3 (triangle/circle/cross/square/l3) through
-// AmidalaController's drive-side button slots 1-5, mirroring
+// AmidalaController's drive-side button slots 1-5, and bumpers/triggers
+// (l1/l2/r1/r2) through slots 10-13, mirroring
 // XBeePocketRemote::update()'s CHECK_BUTTON_UP/CHECK_BUTTON_LONGPRESS diffing
 // (include/xbee_remote.h) and DriveController::notify()'s DISPATCH_BUTTON/
 // DISPATCH_LONG dispatch (src/drive_controllers.cpp) -- same slot numbers,
 // same alt/mute button config, so B[]/LB[]/AB[]/DB[]/altbtn/mutebutton apply
 // identically regardless of which physical controller triggers them.
+// Triggers have no digital press bit on this HID report -- l2/r2 are
+// "pressed" once their analog travel crosses kTriggerPressThreshold.
 //
-// Dome slots 6-9 and gesture input are intentionally not handled here (see
-// the class comment in bt_gamepad.h).
+// R3 (right stick click, the dome-side stick) is not a configurable button
+// at all -- it feeds DomeController::feedGestureInput() directly, exactly
+// like a physical dome remote's own reserved gesture-trigger stick click.
+//
+// Reserved dome-stick slots 6-9, D-pad, and Start/Select/PS are
+// intentionally not handled here (see the class comment in bt_gamepad.h).
 void BTGamepad::_dispatchButtons(const State& prev)
 {
     if (!fDriver) return;
@@ -389,12 +396,26 @@ void BTGamepad::_dispatchButtons(const State& prev)
     bool down_cross    = !prev.button.cross    && state.button.cross;
     bool down_square   = !prev.button.square   && state.button.square;
     bool down_l3       = !prev.button.l3       && state.button.l3;
+    bool down_l1       = !prev.button.l1       && state.button.l1;
+    bool down_r1       = !prev.button.r1       && state.button.r1;
 
     bool up_triangle = prev.button.triangle && !state.button.triangle;
     bool up_circle   = prev.button.circle   && !state.button.circle;
     bool up_cross    = prev.button.cross    && !state.button.cross;
     bool up_square   = prev.button.square   && !state.button.square;
     bool up_l3       = prev.button.l3       && !state.button.l3;
+    bool up_l1       = prev.button.l1       && !state.button.l1;
+    bool up_r1       = prev.button.r1       && !state.button.r1;
+    bool up_r3       = prev.button.r3       && !state.button.r3;
+
+    bool heldL2 = state.analog.button.l2 >= kTriggerPressThreshold;
+    bool heldR2 = state.analog.button.r2 >= kTriggerPressThreshold;
+    bool prevHeldL2 = prev.analog.button.l2 >= kTriggerPressThreshold;
+    bool prevHeldR2 = prev.analog.button.r2 >= kTriggerPressThreshold;
+    bool down_l2 = !prevHeldL2 && heldL2;
+    bool down_r2 = !prevHeldR2 && heldR2;
+    bool up_l2   = prevHeldL2 && !heldL2;
+    bool up_r2   = prevHeldR2 && !heldR2;
 
     // update() returns the (possibly long-press-suppressed) `up` by value
     // rather than mutating a bool& -- see button_dispatch.h -- so overwrite
@@ -406,11 +427,19 @@ void BTGamepad::_dispatchButtons(const State& prev)
     auto rCross    = fLongPress.cross.update(down_cross,    up_cross,    state.button.cross,    now, DEFAULT_LONG_PRESS_MS);
     auto rSquare   = fLongPress.square.update(down_square,   up_square,   state.button.square,   now, DEFAULT_LONG_PRESS_MS);
     auto rL3       = fLongPress.l3.update(down_l3,       up_l3,       state.button.l3,       now, DEFAULT_LONG_PRESS_MS);
+    auto rL1       = fLongPress.l1.update(down_l1,       up_l1,       state.button.l1,       now, DEFAULT_LONG_PRESS_MS);
+    auto rR1       = fLongPress.r1.update(down_r1,       up_r1,       state.button.r1,       now, DEFAULT_LONG_PRESS_MS);
+    auto rL2       = fLongPress.l2.update(down_l2,       up_l2,       heldL2,                now, DEFAULT_LONG_PRESS_MS);
+    auto rR2       = fLongPress.r2.update(down_r2,       up_r2,       heldR2,                now, DEFAULT_LONG_PRESS_MS);
     up_triangle = rTriangle.up; bool long_triangle = rTriangle.longUp;
     up_circle   = rCircle.up;   bool long_circle   = rCircle.longUp;
     up_cross    = rCross.up;    bool long_cross    = rCross.longUp;
     up_square   = rSquare.up;   bool long_square   = rSquare.longUp;
     up_l3       = rL3.up;       bool long_l3       = rL3.longUp;
+    up_l1       = rL1.up;       bool long_l1       = rL1.longUp;
+    up_r1       = rR1.up;       bool long_r1       = rR1.longUp;
+    up_l2       = rL2.up;       bool long_l2       = rL2.longUp;
+    up_r2       = rR2.up;       bool long_r2       = rR2.longUp;
 
     int altbtn = fDriver->params.altbtn;
     if (altbtn >= 1 && altbtn <= 5) {
@@ -418,6 +447,11 @@ void BTGamepad::_dispatchButtons(const State& prev)
                     (altbtn == 2) ? state.button.circle   :
                     (altbtn == 3) ? state.button.cross    :
                     (altbtn == 4) ? state.button.square   : state.button.l3;
+        fDriver->setAltHeld(held);
+    } else if (altbtn >= 10 && altbtn <= 13) {
+        bool held = (altbtn == 10) ? state.button.l1 :
+                    (altbtn == 11) ? heldL2           :
+                    (altbtn == 12) ? state.button.r1  : heldR2;
         fDriver->setAltHeld(held);
     }
     bool altHeld = fDriver->isAltHeld();
@@ -430,6 +464,10 @@ void BTGamepad::_dispatchButtons(const State& prev)
     BT_DISPATCH(cross,    3)
     BT_DISPATCH(square,   4)
     BT_DISPATCH(l3,       5)
+    BT_DISPATCH(l1,       10)
+    BT_DISPATCH(l2,       11)
+    BT_DISPATCH(r1,       12)
+    BT_DISPATCH(r2,       13)
 #undef BT_DISPATCH
 
     int muteBtn = fDriver->params.mutebutton;
@@ -437,7 +475,19 @@ void BTGamepad::_dispatchButtons(const State& prev)
         bool muteUp = (muteBtn == 1) ? up_triangle : (muteBtn == 2) ? up_circle :
                       (muteBtn == 3) ? up_cross    : (muteBtn == 4) ? up_square : up_l3;
         if (muteUp) fDriver->noteMuteBtnUp();
+    } else if (muteBtn >= 10 && muteBtn <= 13) {
+        bool muteUp = (muteBtn == 10) ? up_l1 : (muteBtn == 11) ? up_l2 :
+                      (muteBtn == 12) ? up_r1 : up_r2;
+        if (muteUp) fDriver->noteMuteBtnUp();
     }
+
+    // R3 (dome-side stick click) is not a configurable button -- it drives
+    // gesture drawing directly, exactly like a physical dome remote's own
+    // reserved stick click. Safe to call unconditionally every tick (see
+    // feedGestureInput()'s own doc comment); no face-button taps folded in
+    // since BT has no separate dome-side face-button set to redirect.
+    fDriver->fDomeStick.feedGestureInput(up_r3, state.analog.stick.rx, state.analog.stick.ry,
+                                          false, false, false, false);
 }
 
 void BTGamepad::_onReport(const uint8_t* data, size_t len)

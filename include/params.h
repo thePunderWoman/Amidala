@@ -322,9 +322,13 @@ struct AmidalaParameters {
   // ---- Alt-button modifier ---------------------------------------------------
   // altbtn: which button acts as the modifier held to activate alt layer.
   //   0 = disabled (default).  Button numbering depends on controllertype:
-  //     CONTROLLER_TYPE_XBEE/_BLUETOOTH (1-9): drive stick triangle=1,
-  //       circle=2, cross=3, square=4, l3=5; dome stick triangle=6, circle=7,
-  //       cross=8, square=9.  (Dome l3 is reserved for gesture input.)
+  //     CONTROLLER_TYPE_XBEE (1-9): drive stick triangle=1, circle=2,
+  //       cross=3, square=4, l3=5; dome stick triangle=6, circle=7, cross=8,
+  //       square=9.  (Dome l3 is reserved for gesture input.)
+  //     CONTROLLER_TYPE_BLUETOOTH (1-5, 10-13 -- 6-9 reserved/unused, see
+  //       BTGamepad's own class comment): face buttons + l3 stay at the same
+  //       1-5 as XBee's drive stick; bumpers/triggers are l1=10, l2=11,
+  //       r1=12, r2=13.  (Dome-side r3 is reserved for gesture input.)
   //     CONTROLLER_TYPE_SNIPS (1-24, NOT a simple contiguous per-side split
   //       -- see SnipsRemote::buttonNumberFor()'s comment for why): right
   //       controller Macro1-6=1-6, Bumper=7, StickClick=8; left controller
