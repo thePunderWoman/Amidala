@@ -101,3 +101,51 @@ jobs:
 
       - name: Build firmware
         run: pio run -e ${{ matrix.board }}
+
+  # ── Non-default drive/dome header paths ───────────────────────────────────
+  # controller.h (and what it pulls in) is conditionally included per
+  # DRIVE_SYSTEM/DOME_DRIVE, so a header can compile fine for the default
+  # combination above (ROBOTEQ_PWM + ROBOCLAW) and break for the others -- e.g.
+  # params.h once relied on dome_drive_roboclaw.h having already included
+  # EEPROM.h, and 20 of the 30 release-matrix builds failed on v1.4.0 while
+  # this file's default builds stayed green.
+  #
+  # Not the full 30-combo matrix (still reserved for releases): these four
+  # pairs just cover every remaining value of each axis at least once, together
+  # with the default build above. One board only -- the board variant changes
+  # flash/PSRAM config, not which headers get included.
+  build-firmware-combos:
+    name: Firmware Build (drive=${{ matrix.drive.slug }} / dome=${{ matrix.dome.slug }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { drive: { slug: pwm,                value: 1 }, dome: { slug: pwm,   value: 3 } }
+          - { drive: { slug: saber,              value: 2 }, dome: { slug: saber, value: 2 } }
+          - { drive: { slug: roboteq_serial,     value: 4 }, dome: { slug: pwm,   value: 3 } }
+          - { drive: { slug: roboteq_pwm_serial, value: 5 }, dome: { slug: saber, value: 2 } }
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio-esp32s3-n16r8-${{ hashFiles('platformio.ini') }}
+          restore-keys: ${{ runner.os }}-pio-
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Build firmware
+        env:
+          PLATFORMIO_BUILD_FLAGS: "-D DRIVE_SYSTEM=${{ matrix.drive.value }} -D DOME_DRIVE=${{ matrix.dome.value }}"
+        run: pio run -e esp32s3-n16r8

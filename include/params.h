@@ -16,6 +16,19 @@
 
 #pragma once
 
+// AmidalaParameters::init() reads the global EEPROM object, so include it here
+// rather than relying on whichever header happened to pull params.h in having
+// already done so -- that only held by accident (e.g. dome_drive_roboclaw.h
+// brings it in early, the PWM/Saber dome drives don't), and broke the
+// non-roboclaw builds once an earlier include reached params.h first. Arduino.h
+// goes first for the same reason wcb_client_controller.h documents: it defines
+// the min/max macros core.h relies on. Native tests get EEPROM from
+// arduino_mock.h instead.
+#ifdef ARDUINO
+#include <Arduino.h>
+#include <EEPROM.h>
+#endif
+
 #include "core.h"
 #include "drive_config.h"
 #include "button_actions.h"
