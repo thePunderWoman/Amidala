@@ -26,8 +26,10 @@
 <script src="/assets/edit.js"></script>
 <script>
 // Reassigns the ROLE of each of the 11 physical pins already broken out on
-// this board's headers (issue #133) -- e.g. "GPIO39 does Servo instead of
-// Digital Out" -- not a general "pick any GPIO" tool. Trading a pin's role
+// this board's headers (issue #133) -- e.g. "Digital D1 does Servo instead of
+// Digital Out" -- not a general "pick any pin" tool. Rows are labeled with
+// what's printed on the board (pinLabel() in edit.js), never the firmware's
+// internal pin number. Trading a pin's role
 // changes the COUNT in each category (fewer DOUT, more Servo), unlike the
 // old fixed-count design; see include/pin_assignment.h for the
 // authoritative pool/ceiling logic this page's dropdowns and the server
@@ -38,7 +40,7 @@
 var ROLE_LABELS = {dout:'Digital Out', analog:'Analog In', ppm:'PPM In', servo:'Servo', hall:'Hall Sensor'};
 var CEILINGS = {servo:8, analog:6, ppm:1, hall:1};  // see pin_assignment.h
 
-var _pins = [];   // assignablePins, e.g. [1,2,3,4,5,6,39,40,41,42,47]
+var _pins = [];   // assignablePins (internal pin ids -- display via pinLabel())
 var _roles = [];  // pinRoles, same order/indexing as _pins
 var _domehw = '';
 
@@ -49,10 +51,23 @@ function rolesFor(pin) {
   return roles;
 }
 
+// The pin currently holding the Hall role, or null. There's a single hall
+// input, so picking Hall on another pin MOVES it (the firmware demotes the old
+// pin to Digital Out) rather than being rejected -- the option says so.
+function hallHolder() {
+  var i = _roles.indexOf('hall');
+  return i >= 0 ? _pins[i] : null;
+}
+
 function pinRow(i) {
   var pin = _pins[i];
-  var opts = rolesFor(pin).map(function(r) { return {v: r, l: ROLE_LABELS[r]}; });
-  return buildRow({key: 'pin' + pin + 'role', label: 'GPIO ' + pin, type: 'select',
+  var holder = hallHolder();
+  var opts = rolesFor(pin).map(function(r) {
+    var l = ROLE_LABELS[r];
+    if (r === 'hall' && holder !== null && holder !== pin) l += ' (moves from ' + pinLabel(holder) + ')';
+    return {v: r, l: l};
+  });
+  return buildRow({key: 'pin' + pin + 'role', label: pinLabel(pin), type: 'select',
                    options: opts, restart: true}, _roles[i]);
 }
 
@@ -74,7 +89,7 @@ function render() {
   var rows = _pins.map(function(pin, i) { return pinRow(i); }).join('');
   document.querySelector('main').innerHTML =
     '<div class="usage-wrap" id="usage"></div>'
-    + '<div class="section-label">Physical Pins</div>'
+    + '<div class="section-label">Board Headers</div>'
     + rows;
   renderUsage();
 }
@@ -88,18 +103,26 @@ window._onConfigSaved = function(key) {
   if (!m) return;
   var i = _pins.indexOf(parseInt(m[1], 10));
   if (i >= 0) _roles[i] = _configData[key];
+  // Saving Hall may have moved it off another pin server-side, which this
+  // page can't tell from the one row it just saved -- reload everything.
+  if (_configData[key] === 'hall') { load(); return; }
   renderUsage();
 };
 
-fetch('/api/config').then(function(r) { return r.json(); }).then(function(d) {
-  _configData = d;
-  _pins = d.assignablePins || [];
-  _roles = d.pinRoles || [];
-  _domehw = d.domehw || '';
-  render();
-}).catch(function() {
-  document.getElementById('status').textContent = 'Failed to load settings.';
-});
+function load() {
+  fetch('/api/config').then(function(r) { return r.json(); }).then(function(d) {
+    _configData = d;
+    _pins = d.assignablePins || [];
+    _roles = d.pinRoles || [];
+    _domehw = d.domehw || '';
+    render();
+  }).catch(function() {
+    var s = document.getElementById('status');
+    if (s) s.textContent = 'Failed to load settings.';
+    else showToast('Failed to refresh settings', true);
+  });
+}
+load();
 </script>
 </body>
 </html>

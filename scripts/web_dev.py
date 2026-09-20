@@ -757,13 +757,35 @@ class _Handler(SimpleHTTPRequestHandler):
 
         print(f"  CONFIG  {key} = {value!r}")
 
-        # pin<N>role=<type> — GPIO role reassignment (issue #133)
+        # pin<N>role=<type> — pin role reassignment (issue #133)
         m = re.match(r"^pin(\d+)role$", key)
         if m:
             pin = int(m.group(1))
             if pin in _config["assignablePins"]:
-                _config["pinRoles"][_config["assignablePins"].index(pin)] = value
+                roles = _config["pinRoles"]
+                i = _config["assignablePins"].index(pin)
+                if value == "hall":
+                    # Mirrors pin_assignment.h's applyPinRoleChange(): there's
+                    # one hall input, so assigning Hall MOVES it -- whichever
+                    # pin held it is demoted to Digital Out.
+                    for j, r in enumerate(roles):
+                        if j != i and r == "hall":
+                            roles[j] = "dout"
+                roles[i] = value
                 _derive_pin_lists(_config)
+            self._text("OK")
+            return
+
+        # domeserialport / driveserialport — mirrors serial_assignment.h's
+        # applySerialPortChange(): with both subsystems using a serial link,
+        # picking the other one's port SWAPS the two.
+        if key in ("domeserialport", "driveserialport") and value in ("serial1", "serial2"):
+            dome_active = _config.get("domehw") in ("roboclaw", "saber")
+            drive_active = _config.get("drivehw") in ("sabertooth", "roboteq-serial", "roboteq-pwm-serial")
+            other = "driveserialport" if key == "domeserialport" else "domeserialport"
+            if dome_active and drive_active and _config[other] == value and _config[key] != value:
+                _config[other] = _config[key]
+            _config[key] = value
             self._text("OK")
             return
 

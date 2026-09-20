@@ -103,6 +103,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;

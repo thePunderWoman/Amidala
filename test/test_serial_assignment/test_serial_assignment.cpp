@@ -81,6 +81,78 @@ void test_validate_rejects_both_consumers_on_serial2() {
     TEST_ASSERT_FALSE(r.ok);
 }
 
+// ---- applySerialPortChange() -----------------------------------------------
+// Live edits SWAP when both consumers are active (rejecting would make a swap
+// impossible: each half conflicts with the other's not-yet-updated port);
+// config.txt loading assigns unconditionally and leaves conflicts to
+// AmidalaConfig::validateSerialPortAssignments().
+
+void test_apply_live_swaps_when_requesting_the_other_consumers_port() {
+    SerialPortId dome = SerialPortId::kSerial1, drive = SerialPortId::kSerial2;
+    bool swapped = applySerialPortChange(dome, drive, true, true,
+                                         SerialConsumer::kDome, SerialPortId::kSerial2, false);
+    TEST_ASSERT_TRUE(swapped);
+    TEST_ASSERT_TRUE(SerialPortId::kSerial2 == dome);
+    TEST_ASSERT_TRUE(SerialPortId::kSerial1 == drive);
+}
+
+void test_apply_live_swap_works_from_the_drive_side_too() {
+    SerialPortId dome = SerialPortId::kSerial1, drive = SerialPortId::kSerial2;
+    bool swapped = applySerialPortChange(dome, drive, true, true,
+                                         SerialConsumer::kDrive, SerialPortId::kSerial1, false);
+    TEST_ASSERT_TRUE(swapped);
+    TEST_ASSERT_TRUE(SerialPortId::kSerial2 == dome);
+    TEST_ASSERT_TRUE(SerialPortId::kSerial1 == drive);
+}
+
+void test_apply_live_reselecting_own_port_changes_nothing() {
+    SerialPortId dome = SerialPortId::kSerial1, drive = SerialPortId::kSerial2;
+    bool swapped = applySerialPortChange(dome, drive, true, true,
+                                         SerialConsumer::kDome, SerialPortId::kSerial1, false);
+    TEST_ASSERT_FALSE(swapped);
+    TEST_ASSERT_TRUE(SerialPortId::kSerial1 == dome);
+    TEST_ASSERT_TRUE(SerialPortId::kSerial2 == drive);
+}
+
+void test_apply_live_moves_without_swapping_when_other_consumer_is_inactive() {
+    // e.g. RoboClaw dome + PWM drive: drive's stored port is inert.
+    SerialPortId dome = SerialPortId::kSerial1, drive = SerialPortId::kSerial2;
+    bool swapped = applySerialPortChange(dome, drive, true, false,
+                                         SerialConsumer::kDome, SerialPortId::kSerial2, false);
+    TEST_ASSERT_FALSE(swapped);
+    TEST_ASSERT_TRUE(SerialPortId::kSerial2 == dome);
+    TEST_ASSERT_TRUE(SerialPortId::kSerial2 == drive);  // inert value left alone
+}
+
+void test_apply_live_inactive_requester_does_not_drag_the_active_consumer() {
+    // The (hidden) drive row on a PWM-drive build must never move the dome.
+    SerialPortId dome = SerialPortId::kSerial1, drive = SerialPortId::kSerial2;
+    bool swapped = applySerialPortChange(dome, drive, true, false,
+                                         SerialConsumer::kDrive, SerialPortId::kSerial1, false);
+    TEST_ASSERT_FALSE(swapped);
+    TEST_ASSERT_TRUE(SerialPortId::kSerial1 == dome);
+}
+
+void test_apply_loading_assigns_without_a_conflict_check() {
+    SerialPortId dome = SerialPortId::kSerial1, drive = SerialPortId::kSerial2;
+    bool swapped = applySerialPortChange(dome, drive, true, true,
+                                         SerialConsumer::kDome, SerialPortId::kSerial2, true);
+    TEST_ASSERT_FALSE(swapped);
+    TEST_ASSERT_TRUE(SerialPortId::kSerial2 == dome);
+    TEST_ASSERT_TRUE(SerialPortId::kSerial2 == drive);  // untouched; the boot sweep resolves conflicts
+}
+
+// Regression: a swapped config.txt (domeserialport=serial2 then
+// driveserialport=serial1, the order the keys are stored in) used to have
+// both lines rejected at boot, each against the other's stale value.
+void test_boot_load_of_a_swapped_pair_keeps_the_swap() {
+    SerialPortId dome = SerialPortId::kSerial1, drive = SerialPortId::kSerial2;  // defaults
+    applySerialPortChange(dome, drive, true, true, SerialConsumer::kDome,  SerialPortId::kSerial2, true);
+    applySerialPortChange(dome, drive, true, true, SerialConsumer::kDrive, SerialPortId::kSerial1, true);
+    TEST_ASSERT_TRUE(SerialPortId::kSerial2 == dome);
+    TEST_ASSERT_TRUE(SerialPortId::kSerial1 == drive);
+}
+
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
     UNITY_BEGIN();
@@ -93,6 +165,13 @@ int main(int argc, char** argv) {
     RUN_TEST(test_validate_allows_same_port_when_other_consumer_is_inactive);
     RUN_TEST(test_validate_allows_moving_to_a_port_the_other_consumer_just_vacated);
     RUN_TEST(test_validate_rejects_both_consumers_on_serial2);
+    RUN_TEST(test_apply_live_swaps_when_requesting_the_other_consumers_port);
+    RUN_TEST(test_apply_live_swap_works_from_the_drive_side_too);
+    RUN_TEST(test_apply_live_reselecting_own_port_changes_nothing);
+    RUN_TEST(test_apply_live_moves_without_swapping_when_other_consumer_is_inactive);
+    RUN_TEST(test_apply_live_inactive_requester_does_not_drag_the_active_consumer);
+    RUN_TEST(test_apply_loading_assigns_without_a_conflict_check);
+    RUN_TEST(test_boot_load_of_a_swapped_pair_keeps_the_swap);
 
     return UNITY_END();
 }

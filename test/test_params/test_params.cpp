@@ -329,6 +329,110 @@ void test_sanitize_pin_roles_does_not_force_hall_when_already_present_elsewhere(
     TEST_ASSERT_TRUE(PinRoleType::kHall == roles[8]);
 }
 
+// ---- Boot-time load of pin role lines is file-order independent -------------
+// Regression: moving the Hall sensor from GPIO40 to GPIO39 never survived a
+// reboot. The web UI saves pin40role=dout then pin39role=hall, but
+// config.txt keeps its own key order (pin39role= precedes pin40role=), so at
+// boot pin39role=hall was checked against a half-parsed array where GPIO40
+// still held its DEFAULT Hall role -- rejected as a "second" Hall. Then
+// pin40role=dout applied, nothing was Hall, and sanitizePinRoles() forced
+// GPIO40 back to Hall. Boot loading must defer ceilings to the sweep.
+
+struct PinLine { uint8_t pin; const char *role; };
+
+// Mirrors config.cpp's boot path: each pin<N>role= line goes through
+// applyPinRoleChange(loadingConfigFile=true) in file order, then
+// validatePinAssignments() runs sanitizePinRoles() over the result.
+static void loadPinLinesAtBoot(PinRoleType roles[11], const PinLine *lines, size_t n,
+                               bool requireHall) {
+    for (size_t i = 0; i < n; i++) {
+        PinRoleType role;
+        if (!pinRoleFromString(lines[i].role, &role)) continue;
+        applyPinRoleChange(roles, lines[i].pin, role, true);
+    }
+    sanitizePinRoles(roles, requireHall);
+}
+
+static void defaultRoboClawRoles(PinRoleType roles[11]) {
+    defaultPinRoles(roles);
+    roles[7] = PinRoleType::kHall;  // RoboClaw default, whatever DOME_DRIVE the test build has
+}
+
+void test_boot_load_keeps_hall_moved_from_gpio40_to_gpio39() {
+    PinRoleType roles[11];
+    defaultRoboClawRoles(roles);
+    // Exactly the order config.txt stores them in (pin39role before pin40role).
+    const PinLine lines[] = {{39, "hall"}, {40, "dout"}};
+    loadPinLinesAtBoot(roles, lines, 2, true);
+    TEST_ASSERT_TRUE(PinRoleType::kHall == roles[pinIndexOf(39)]);
+    TEST_ASSERT_TRUE(PinRoleType::kDout == roles[pinIndexOf(40)]);
+}
+
+void test_boot_load_keeps_hall_move_in_reverse_file_order() {
+    PinRoleType roles[11];
+    defaultRoboClawRoles(roles);
+    const PinLine lines[] = {{40, "dout"}, {39, "hall"}};
+    loadPinLinesAtBoot(roles, lines, 2, true);
+    TEST_ASSERT_TRUE(PinRoleType::kHall == roles[pinIndexOf(39)]);
+    TEST_ASSERT_TRUE(PinRoleType::kDout == roles[pinIndexOf(40)]);
+}
+
+void test_live_hall_move_survives_a_reboot_round_trip() {
+    // End to end: a live one-step Hall move, persisted exactly as the web
+    // POST handler does (every pin<N>role= line in config.txt key order),
+    // then re-loaded at boot -- must reproduce the in-memory roles.
+    PinRoleType live[11];
+    defaultRoboClawRoles(live);
+    uint8_t demoted = kNoPin;
+    TEST_ASSERT_TRUE(applyPinRoleChange(live, 39, PinRoleType::kHall, false, &demoted).ok);
+    TEST_ASSERT_EQUAL_UINT8(40, demoted);
+
+    PinLine lines[11];
+    for (uint8_t i = 0; i < 11; i++) lines[i] = {kAssignablePins[i], pinRoleToString(live[i])};
+    PinRoleType booted[11];
+    defaultRoboClawRoles(booted);
+    loadPinLinesAtBoot(booted, lines, 11, true);
+    TEST_ASSERT_EQUAL_MEMORY(live, booted, sizeof(live));
+}
+
+void test_boot_load_keeps_ppm_moved_to_an_earlier_pin() {
+    // Same file-order trap for the other single-instance role: PPM 47 -> 39
+    // is saved as pin39role=ppm ahead of pin47role=dout.
+    PinRoleType roles[11];
+    defaultRoboClawRoles(roles);
+    const PinLine lines[] = {{39, "ppm"}, {47, "dout"}};
+    loadPinLinesAtBoot(roles, lines, 2, true);
+    TEST_ASSERT_TRUE(PinRoleType::kPpm == roles[pinIndexOf(39)]);
+    TEST_ASSERT_TRUE(PinRoleType::kDout == roles[pinIndexOf(47)]);
+}
+
+void test_boot_load_of_two_halls_still_ends_with_exactly_one() {
+    // A hand-edited config with two Hall pins must still be repaired by the
+    // sweep -- deferring ceilings must not let an over-ceiling state escape.
+    PinRoleType roles[11];
+    defaultRoboClawRoles(roles);
+    const PinLine lines[] = {{39, "hall"}};  // GPIO40 is still Hall too
+    loadPinLinesAtBoot(roles, lines, 1, true);
+    TEST_ASSERT_EQUAL_UINT8(1, countPinsWithRole(roles, PinRoleType::kHall));
+}
+
+void test_boot_load_of_too_many_servos_is_clamped_to_ledc_ceiling() {
+    PinRoleType roles[11];
+    defaultRoboClawRoles(roles);
+    const PinLine lines[] = {{1, "servo"}, {2, "servo"}, {39, "servo"},
+                             {41, "servo"}, {42, "servo"}};  // 4 default + 5 = 9
+    loadPinLinesAtBoot(roles, lines, 5, true);
+    TEST_ASSERT_TRUE(countPinsWithRole(roles, PinRoleType::kServo) <= kMaxServoChannels);
+}
+
+void test_boot_load_still_rejects_analog_on_a_non_adc_pin() {
+    PinRoleType roles[11];
+    defaultRoboClawRoles(roles);
+    const PinLine lines[] = {{39, "analog"}};
+    loadPinLinesAtBoot(roles, lines, 1, true);
+    TEST_ASSERT_FALSE(PinRoleType::kAnalog == roles[pinIndexOf(39)]);
+}
+
 void test_roboclaw_params_are_distinct_addresses() {
     // Guard against any future copy-paste that aliases one field to another.
     AmidalaParameters p;
@@ -585,6 +689,13 @@ int main(int argc, char **argv) {
     RUN_TEST(test_sanitize_pin_roles_forces_hall_when_required_and_missing);
     RUN_TEST(test_sanitize_pin_roles_leaves_hall_missing_when_not_required);
     RUN_TEST(test_sanitize_pin_roles_does_not_force_hall_when_already_present_elsewhere);
+    RUN_TEST(test_boot_load_keeps_hall_moved_from_gpio40_to_gpio39);
+    RUN_TEST(test_boot_load_keeps_hall_move_in_reverse_file_order);
+    RUN_TEST(test_live_hall_move_survives_a_reboot_round_trip);
+    RUN_TEST(test_boot_load_keeps_ppm_moved_to_an_earlier_pin);
+    RUN_TEST(test_boot_load_of_two_halls_still_ends_with_exactly_one);
+    RUN_TEST(test_boot_load_of_too_many_servos_is_clamped_to_ledc_ceiling);
+    RUN_TEST(test_boot_load_still_rejects_analog_on_a_non_adc_pin);
     RUN_TEST(test_roboclaw_params_are_distinct_addresses);
 
     RUN_TEST(test_default_altbtn_is_zero);

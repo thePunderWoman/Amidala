@@ -139,6 +139,18 @@ struct PinRoleValidationResult {
     const char *reason;  // static string literal; nullptr when ok
 };
 
+// The per-pin half of validateRoleChange(): `pin` is in the pool and `role`
+// is electrically valid on it. Independent of what any OTHER pin is doing.
+inline PinRoleValidationResult validateRoleForPin(uint8_t pin, PinRoleType role) {
+    if (!isPinInAssignablePool(pin)) {
+        return {false, "not one of the board's reassignable pins"};
+    }
+    if (!isRoleValidForPin(pin, role)) {
+        return {false, "not ADC-capable"};  // only isRoleValidForPin() failure case today
+    }
+    return {true, nullptr};
+}
+
 // Full check for setting `pin`'s role to newRole: electrical validity for
 // that specific pin, plus (for Servo/PPM/Hall, which have hardware-forced
 // count ceilings) confirming the change wouldn't push that role's count
@@ -147,13 +159,9 @@ struct PinRoleValidationResult {
 // always valid. `allRoles` is indexed the same as kAssignablePins.
 inline PinRoleValidationResult validateRoleChange(uint8_t pin, PinRoleType newRole,
                                                   const PinRoleType allRoles[11]) {
+    PinRoleValidationResult basics = validateRoleForPin(pin, newRole);
+    if (!basics.ok) return basics;
     uint8_t pinIndex = pinIndexOf(pin);
-    if (pinIndex >= 11) {
-        return {false, "not one of the board's reassignable pins"};
-    }
-    if (!isRoleValidForPin(pin, newRole)) {
-        return {false, "not ADC-capable"};  // only isRoleValidForPin() failure case today
-    }
 
     uint8_t othersWithRole = 0;
     for (uint8_t i = 0; i < 11; i++) {
@@ -178,4 +186,51 @@ inline PinRoleValidationResult validateRoleChange(uint8_t pin, PinRoleType newRo
             break;  // kDout, kAnalog: no count ceiling beyond electrical validity
     }
     return {true, nullptr};
+}
+
+// Applies a role change to `allRoles` (indexed like kAssignablePins), writing
+// it only on success.
+//
+// `loadingConfigFile` selects how the change is treated:
+//   - false (live edits: web UI, console): full validateRoleChange(), so the
+//     caller gets an immediate, specific rejection ("servo channels full
+//     (8/8)") and the array is never left over a hardware ceiling. The one
+//     exception is Hall: there's exactly one hall-sensor input, so assigning
+//     Hall to a pin MOVES it -- whichever pin held it is demoted to Dout and
+//     reported via *demotedPin (kNoPin when nothing moved; pass nullptr if
+//     the caller doesn't care). Callers that persist per-pin lines (the web
+//     POST handler) must persist that pin's new role too.
+//   - true (parsing config.txt at boot): only the per-pin check
+//     (validateRoleForPin()). config.txt lines arrive in FILE order, not in
+//     dependency order, so a ceiling check against a half-parsed array
+//     rejects perfectly good configs -- e.g. a Hall move to GPIO39 is saved
+//     as pin39role=hall (parsed first, while GPIO40 still holds its DEFAULT
+//     Hall role) then pin40role=dout, and a strict check rejects the first
+//     line, so the sensor snaps back to GPIO40 on every reboot. Ceilings are
+//     enforced once, with the whole array in hand, by sanitizePinRoles()
+//     (params.h) after the file is fully read.
+inline PinRoleValidationResult applyPinRoleChange(PinRoleType allRoles[11], uint8_t pin,
+                                                  PinRoleType newRole,
+                                                  bool loadingConfigFile,
+                                                  uint8_t *demotedPin = nullptr) {
+    if (demotedPin) *demotedPin = kNoPin;
+
+    if (!loadingConfigFile && newRole == PinRoleType::kHall) {
+        PinRoleValidationResult basics = validateRoleForPin(pin, newRole);
+        if (!basics.ok) return basics;
+        uint8_t pinIndex = pinIndexOf(pin);
+        for (uint8_t i = 0; i < 11; i++) {
+            if (i == pinIndex || allRoles[i] != PinRoleType::kHall) continue;
+            allRoles[i] = PinRoleType::kDout;
+            if (demotedPin && *demotedPin == kNoPin) *demotedPin = kAssignablePins[i];
+        }
+        allRoles[pinIndex] = PinRoleType::kHall;
+        return {true, nullptr};
+    }
+
+    PinRoleValidationResult r = loadingConfigFile
+        ? validateRoleForPin(pin, newRole)
+        : validateRoleChange(pin, newRole, allRoles);
+    if (r.ok) allRoles[pinIndexOf(pin)] = newRole;
+    return r;
 }
