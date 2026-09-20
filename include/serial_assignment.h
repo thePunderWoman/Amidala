@@ -74,3 +74,40 @@ inline SerialPortValidationResult validateSerialPortChange(
     }
     return {true, nullptr};
 }
+
+// Applies a port change for `consumer`, given both consumers' current ports
+// (`domePort`/`drivePort`, modified in place) and whether each actually
+// consumes a serial port in this build.
+//
+// With only two ports and two consumers, "reject a port the other consumer
+// holds" (validateSerialPortChange() above) makes SWAPPING impossible -- each
+// half of a swap conflicts with the other's not-yet-updated value. So live
+// edits (`loadingConfigFile` false) instead SWAP: when both consumers are
+// active and `requested` is the other's port, the other takes this
+// consumer's old port. Returns true if that swap happened, so the caller
+// knows to persist the other consumer's new port as well. If either
+// consumer is inactive there's nothing physical to conflict with (an
+// inactive consumer's stored port is inert), so the value is just assigned.
+//
+// While parsing config.txt (`loadingConfigFile` true) lines arrive in file
+// order, and a swap is saved as domeserialport=serial2 followed by
+// driveserialport=serial1 -- the first line looks like a conflict against
+// the not-yet-updated drive value. So loading assigns unconditionally and
+// leaves the (rare, hand-edited-file) case of both consumers ending up on
+// one port to AmidalaConfig::validateSerialPortAssignments() after the
+// file is fully read.
+inline bool applySerialPortChange(SerialPortId &domePort, SerialPortId &drivePort,
+                                  bool domeActive, bool driveActive,
+                                  SerialConsumer consumer, SerialPortId requested,
+                                  bool loadingConfigFile) {
+    SerialPortId &mine  = (consumer == SerialConsumer::kDome) ? domePort : drivePort;
+    SerialPortId &other = (consumer == SerialConsumer::kDome) ? drivePort : domePort;
+    bool swapped = false;
+    if (!loadingConfigFile && domeActive && driveActive &&
+        requested == other && requested != mine) {
+        other   = mine;
+        swapped = true;
+    }
+    mine = requested;
+    return swapped;
+}

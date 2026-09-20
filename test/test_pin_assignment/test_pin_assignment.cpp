@@ -188,6 +188,94 @@ void test_validate_accepts_moving_hall_to_a_different_pin_after_freeing_original
     TEST_ASSERT_TRUE(r.ok);
 }
 
+// ---- applyPinRoleChange() ----------------------------------------------
+// Live edits stay strict; config.txt loading defers ceilings to
+// sanitizePinRoles() (params.h) because file order isn't dependency order.
+
+static void hallOnGpio40(PinRoleType roles[11]) {
+    for (uint8_t i = 0; i < 11; i++) roles[i] = PinRoleType::kDout;
+    roles[pinIndexOf(40)] = PinRoleType::kHall;
+}
+
+void test_apply_live_hall_moves_the_sensor_off_its_previous_pin() {
+    // One step: choosing Hall for GPIO39 while it's on GPIO40 moves it.
+    PinRoleType roles[11];
+    hallOnGpio40(roles);
+    uint8_t demoted = 0;
+    PinRoleValidationResult r = applyPinRoleChange(roles, 39, PinRoleType::kHall, false, &demoted);
+    TEST_ASSERT_TRUE(r.ok);
+    TEST_ASSERT_TRUE(PinRoleType::kHall == roles[pinIndexOf(39)]);
+    TEST_ASSERT_TRUE(PinRoleType::kDout == roles[pinIndexOf(40)]);
+    TEST_ASSERT_EQUAL_UINT8(40, demoted);
+    TEST_ASSERT_EQUAL_UINT8(1, countPinsWithRole(roles, PinRoleType::kHall));
+}
+
+void test_apply_live_hall_with_no_previous_holder_demotes_nothing() {
+    PinRoleType roles[11];
+    for (uint8_t i = 0; i < 11; i++) roles[i] = PinRoleType::kDout;
+    uint8_t demoted = 0;
+    TEST_ASSERT_TRUE(applyPinRoleChange(roles, 39, PinRoleType::kHall, false, &demoted).ok);
+    TEST_ASSERT_EQUAL_UINT8(kNoPin, demoted);
+    TEST_ASSERT_EQUAL_UINT8(1, countPinsWithRole(roles, PinRoleType::kHall));
+}
+
+void test_apply_live_reselecting_current_hall_pin_demotes_nothing() {
+    PinRoleType roles[11];
+    hallOnGpio40(roles);
+    uint8_t demoted = 0;
+    TEST_ASSERT_TRUE(applyPinRoleChange(roles, 40, PinRoleType::kHall, false, &demoted).ok);
+    TEST_ASSERT_EQUAL_UINT8(kNoPin, demoted);
+    TEST_ASSERT_TRUE(PinRoleType::kHall == roles[pinIndexOf(40)]);
+}
+
+void test_apply_live_hall_move_accepts_null_demoted_out_param() {
+    PinRoleType roles[11];
+    hallOnGpio40(roles);
+    TEST_ASSERT_TRUE(applyPinRoleChange(roles, 39, PinRoleType::kHall, false).ok);
+    TEST_ASSERT_TRUE(PinRoleType::kDout == roles[pinIndexOf(40)]);
+}
+
+void test_apply_live_hall_outside_pool_changes_nothing() {
+    PinRoleType roles[11];
+    hallOnGpio40(roles);
+    uint8_t demoted = 0;
+    TEST_ASSERT_FALSE(applyPinRoleChange(roles, 8, PinRoleType::kHall, false, &demoted).ok);
+    TEST_ASSERT_EQUAL_UINT8(kNoPin, demoted);
+    TEST_ASSERT_TRUE(PinRoleType::kHall == roles[pinIndexOf(40)]);  // not demoted
+}
+
+void test_apply_live_still_rejects_a_second_ppm_pin() {
+    // Only Hall moves; PPM keeps the strict ceiling with a specific reason.
+    PinRoleType roles[11];
+    for (uint8_t i = 0; i < 11; i++) roles[i] = PinRoleType::kDout;
+    roles[pinIndexOf(47)] = PinRoleType::kPpm;
+    PinRoleValidationResult r = applyPinRoleChange(roles, 39, PinRoleType::kPpm, false);
+    TEST_ASSERT_FALSE(r.ok);
+    TEST_ASSERT_TRUE(PinRoleType::kDout == roles[pinIndexOf(39)]);
+}
+
+void test_apply_loading_accepts_second_hall_pending_the_final_sweep() {
+    PinRoleType roles[11];
+    hallOnGpio40(roles);
+    PinRoleValidationResult r = applyPinRoleChange(roles, 39, PinRoleType::kHall, true);
+    TEST_ASSERT_TRUE(r.ok);
+    TEST_ASSERT_TRUE(PinRoleType::kHall == roles[pinIndexOf(39)]);
+}
+
+void test_apply_loading_still_rejects_electrically_invalid_role() {
+    PinRoleType roles[11];
+    hallOnGpio40(roles);
+    PinRoleValidationResult r = applyPinRoleChange(roles, 39, PinRoleType::kAnalog, true);
+    TEST_ASSERT_FALSE(r.ok);
+    TEST_ASSERT_TRUE(PinRoleType::kDout == roles[pinIndexOf(39)]);
+}
+
+void test_apply_loading_still_rejects_pin_outside_pool() {
+    PinRoleType roles[11];
+    hallOnGpio40(roles);
+    TEST_ASSERT_FALSE(applyPinRoleChange(roles, 8, PinRoleType::kDout, true).ok);
+}
+
 void test_validate_unlimited_dout_count() {
     // No ceiling on DOUT beyond the pool -- even a pin already counted many
     // times over among "others" (impossible in practice since each pin has
@@ -227,6 +315,15 @@ int main(int argc, char** argv) {
     RUN_TEST(test_validate_rejects_second_ppm_pin);
     RUN_TEST(test_validate_rejects_second_hall_pin);
     RUN_TEST(test_validate_accepts_moving_hall_to_a_different_pin_after_freeing_original);
+    RUN_TEST(test_apply_live_hall_moves_the_sensor_off_its_previous_pin);
+    RUN_TEST(test_apply_live_hall_with_no_previous_holder_demotes_nothing);
+    RUN_TEST(test_apply_live_reselecting_current_hall_pin_demotes_nothing);
+    RUN_TEST(test_apply_live_hall_move_accepts_null_demoted_out_param);
+    RUN_TEST(test_apply_live_hall_outside_pool_changes_nothing);
+    RUN_TEST(test_apply_live_still_rejects_a_second_ppm_pin);
+    RUN_TEST(test_apply_loading_accepts_second_hall_pending_the_final_sweep);
+    RUN_TEST(test_apply_loading_still_rejects_electrically_invalid_role);
+    RUN_TEST(test_apply_loading_still_rejects_pin_outside_pool);
     RUN_TEST(test_validate_unlimited_dout_count);
 
     return UNITY_END();

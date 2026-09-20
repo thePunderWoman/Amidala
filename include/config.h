@@ -54,25 +54,37 @@ public:
   // ensureConfigDefaults(), to guarantee params' 11 pin roles are mutually
   // consistent (hardware ceilings not exceeded, Analog only on ADC1 pins)
   // before any pinMode()/constructor call uses them. config.txt lines parse
-  // in file order, so a line's own conflict check only sees whatever's been
-  // parsed so far -- this final sweep re-checks the whole pinRole[] array
-  // with full context and resets any pin whose role is still invalid back
-  // to its compiled-in default (see params.h's defaultPinRoles()), logging
-  // a warning.
+  // in file order, so a line's own conflict check can only see whatever's
+  // been parsed so far -- which is why pin role lines skip their hardware
+  // ceiling checks while loading (see setLoadingConfigFile()) and THIS sweep
+  // is where those ceilings are actually enforced: it re-checks the whole
+  // pinRole[] array with full context and resets any pin whose role is
+  // still invalid back to its compiled-in default (see params.h's
+  // defaultPinRoles()), logging a warning.
   void validatePinAssignments();
+
+  // True only while AmidalaController::loadConfig() is feeding config.txt
+  // through processConfig(). Pin role and serial port lines skip their
+  // conflict checks in that window (file order isn't dependency order -- see
+  // applyPinRoleChange() in pin_assignment.h and applySerialPortChange() in
+  // serial_assignment.h) and rely on validatePinAssignments() /
+  // validateSerialPortAssignments() afterward.
+  void setLoadingConfigFile(bool loading) { fLoadingConfigFile = loading; }
 
   // Called once from AmidalaController::setup(), right after
   // validatePinAssignments(), to guarantee domeSerialPort/driveSerialPort
   // don't both claim the same physical port when both subsystems are active
-  // in this build (same "config.txt parses in file order" reasoning as
-  // validatePinAssignments() above -- each line's own conflict check only
-  // sees whatever's been parsed so far). Resets dome's port back to its
-  // default on conflict and logs a warning.
+  // in this build. Serial port lines assign without a conflict check while
+  // config.txt loads (same file-order reasoning as validatePinAssignments()
+  // above), so this is where a conflicting -- i.e. hand-edited -- pair gets
+  // caught. Resets dome's port back to its default on conflict and logs a
+  // warning.
   void validateSerialPortAssignments();
 
 private:
   AmidalaController *fController = nullptr;
   Print *fOutput = nullptr;
+  bool fLoadingConfigFile = false;  // see setLoadingConfigFile()
 
   // config.txt key dispatch (issue #171): processConfig() used to be one
   // large if/else-if chain matching every key, which grew large enough on

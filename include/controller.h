@@ -435,10 +435,14 @@ public:
       return false;
     }
     fConsole.println(F("Reading Config File"));
-    return readConfig(fVMusic, fConsole);
+    fConfig.setLoadingConfigFile(true);
+    bool loaded = readConfig(fVMusic, fConsole);
 #else
-    return readConfig(fConsole);
+    fConfig.setLoadingConfigFile(true);
+    bool loaded = readConfig(fConsole);
 #endif
+    fConfig.setLoadingConfigFile(false);
+    return loaded;
   }
 
   // Second arg: true if the command actually went out over the mesh, false

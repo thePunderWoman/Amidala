@@ -22,6 +22,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -30,6 +49,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -41,6 +62,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -210,20 +233,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 

@@ -284,7 +284,7 @@ void test_monitor_page_has_wcb_filter_gated_on_status() {
 // variant alone) confirms nothing has claimed it.
 void test_monitor_page_s1_filter_gated_on_dome_variant() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR,
-        "id=\"f-S1\" onclick=\"toggleFilter('S1')\" title=\"S1 — Serial 1 header (GPIO17/18)\" hidden"));
+        "id=\"f-S1\" onclick=\"toggleFilter('S1')\" title=\"S1 — Serial 1 header\" hidden"));
     TEST_ASSERT_TRUE(contains(WEB_PAGE_MONITOR, "d.serial1_role === 'unused'"));
 }
 
@@ -922,6 +922,116 @@ void test_diagnostics_page_polls_api_info() {
 }
 
 // ---------------------------------------------------------------------------
+// Board pin labels -- the UI must never show firmware pin numbers
+// ---------------------------------------------------------------------------
+// End users identify pins by what's printed on the board (A1, D2, Servo 3,
+// PPMIN), not by the ESP32's GPIO numbers, which mean nothing to them. This
+// scans every embedded page (markup, scripts and comments alike, so a
+// label, tooltip, or template string can't slip through) for the word.
+// If it trips, label the pin with pinLabel() from web/assets/edit.js or
+// drop the number; internal identifiers/comments should say "pin".
+
+void test_no_embedded_page_mentions_gpio() {
+    struct Page { const char *name; const char *html; };
+    const Page pages[] = {
+        {"HOME", WEB_PAGE_HOME}, {"GENERAL", WEB_PAGE_GENERAL},
+        {"CONFIG_CONNECTIVITY", WEB_PAGE_CONFIG_CONNECTIVITY},
+        {"WIFI", WEB_PAGE_WIFI}, {"AUDIO", WEB_PAGE_AUDIO},
+        {"RC_RADIO", WEB_PAGE_RC_RADIO}, {"DOME", WEB_PAGE_DOME},
+        {"SERIAL_STRINGS", WEB_PAGE_SERIAL_STRINGS}, {"GADGETS", WEB_PAGE_GADGETS},
+        {"SERVOS", WEB_PAGE_SERVOS}, {"PINS", WEB_PAGE_PINS},
+        {"SERIAL_PORTS", WEB_PAGE_SERIAL_PORTS}, {"CONTROLLERS", WEB_PAGE_CONTROLLERS},
+        {"DROID_CONTROL", WEB_PAGE_DROID_CONTROL}, {"SAFETY", WEB_PAGE_SAFETY},
+        {"MONITOR", WEB_PAGE_MONITOR}, {"UPDATE", WEB_PAGE_UPDATE},
+        {"COMING_SOON", WEB_PAGE_COMING_SOON}, {"DIAGNOSTICS", WEB_PAGE_DIAGNOSTICS},
+        {"DEBUGGING", WEB_PAGE_DEBUGGING},
+    };
+    for (const Page &pg : pages) {
+        TEST_ASSERT_FALSE_MESSAGE(contains(pg.html, "GPIO"), pg.name);
+        TEST_ASSERT_FALSE_MESSAGE(contains(pg.html, "gpio"), pg.name);
+    }
+}
+
+void test_pin_silkscreen_map_covers_every_assignable_pin() {
+    // A pin missing from PIN_SILKSCREEN would fall back to "Unlabeled pin".
+    char needle[16];
+    for (uint8_t pin : kAssignablePins) {
+        snprintf(needle, sizeof(needle), " %u: '", (unsigned)pin);
+        TEST_ASSERT_TRUE_MESSAGE(contains(WEB_PAGE_PINS, needle), needle);
+    }
+}
+
+void test_pin_silkscreen_labels_match_the_board() {
+    // Spot-check against the PCB silkscreen (PCB/README.md pin table).
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_PINS, "1: 'Analog A1'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_PINS, "3: 'Servo 1'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_PINS, "40: 'Digital D2'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_PINS, "47: 'PPMIN'"));
+}
+
+void test_pins_page_rows_use_board_labels() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_PINS, "label: pinLabel(pin)"));
+}
+
+// Hall is a single input, so picking it on another pin moves it in one step
+// (firmware demotes the old pin) instead of being rejected. The page must
+// say so on the option, and reload afterward because the OTHER row changed
+// server-side too.
+void test_pins_page_hall_option_says_it_moves_from_the_current_pin() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_PINS, "' (moves from ' + pinLabel(holder) + ')'"));
+}
+
+void test_pins_page_reloads_after_saving_hall() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_PINS, "_configData[key] === 'hall'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_PINS, "load(); return;"));
+}
+
+// Serial ports likewise swap in one step when both subsystems use a link --
+// there are only two ports, so "already in use" would make a swap impossible.
+void test_serial_ports_page_offers_a_swap_instead_of_in_use() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_SERIAL_PORTS, "' — swaps with '"));
+    TEST_ASSERT_FALSE(contains(WEB_PAGE_SERIAL_PORTS, "in use by"));
+}
+
+void test_serial_ports_page_reloads_config_after_a_save() {
+    // The other row's value changes server-side on a swap.
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_SERIAL_PORTS, "_configData = d;\n    render();"));
+}
+
+// Regression: a setting's helper text (SCHEMA `note:`) used to be rendered
+// INSIDE the row's input container (.ri, flex-shrink:0), so a long note made
+// that container as wide as the text and squeezed the row label into a
+// sliver (e.g. "Enable Serial 2" wrapping to three lines) while pushing the
+// input off its usual position. The note is now its own full-width line
+// below the row, so it can't affect the input's placement.
+void test_edit_notes_render_below_the_row_not_beside_the_input() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "'<div class=\"edit-note\" hidden>'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, ".row.has-note { flex-wrap: wrap;"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, ".edit-note {"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "flex: 0 0 100%"));
+    // Right-aligned so it sits under the input and buttons.
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "text-align: right;\n}"));
+}
+
+void test_edit_notes_are_not_inside_the_input_container() {
+    // The old markup appended the note right after the input, inside .ri.
+    TEST_ASSERT_FALSE(contains(WEB_PAGE_GENERAL, "buildInput(s, val) + note"));
+    TEST_ASSERT_FALSE(contains(WEB_PAGE_GENERAL, "margin-left:.3rem\">' + s.note"));
+}
+
+void test_edit_notes_toggle_with_the_edit_ui() {
+    // Shown while editing, hidden again on save/cancel -- same as the input.
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "if (note) note.hidden = false;"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_GENERAL, "if (note) note.hidden = true;"));
+}
+
+void test_diagnostics_page_rows_use_board_labels() {
+    // Rows are labeled by the physical header, so they stay correct when a
+    // pin is reassigned (e.g. D2 traded to Hall leaves D1/D3/D4, not D1-D3).
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DIAGNOSTICS, "label: pinLabel(pin)"));
+}
+
+// ---------------------------------------------------------------------------
 // buttonActionJson
 // ---------------------------------------------------------------------------
 
@@ -1169,6 +1279,20 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_buttonActionJson_kVolumeStep_emits_dir_and_target);
     RUN_TEST(test_buttonActionJson_kThrottleStep_emits_dir_only);
     RUN_TEST(test_buttonActionJson_wraps_in_braces);
+
+    // Board pin labels
+    RUN_TEST(test_no_embedded_page_mentions_gpio);
+    RUN_TEST(test_pin_silkscreen_map_covers_every_assignable_pin);
+    RUN_TEST(test_pin_silkscreen_labels_match_the_board);
+    RUN_TEST(test_pins_page_rows_use_board_labels);
+    RUN_TEST(test_pins_page_hall_option_says_it_moves_from_the_current_pin);
+    RUN_TEST(test_pins_page_reloads_after_saving_hall);
+    RUN_TEST(test_serial_ports_page_offers_a_swap_instead_of_in_use);
+    RUN_TEST(test_serial_ports_page_reloads_config_after_a_save);
+    RUN_TEST(test_edit_notes_render_below_the_row_not_beside_the_input);
+    RUN_TEST(test_edit_notes_are_not_inside_the_input_container);
+    RUN_TEST(test_edit_notes_toggle_with_the_edit_ui);
+    RUN_TEST(test_diagnostics_page_rows_use_board_labels);
 
     return UNITY_END();
 }

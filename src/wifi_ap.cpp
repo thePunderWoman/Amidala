@@ -805,14 +805,24 @@ static void handleApiConfigPost() {
             sServer.send(400, "text/plain", "unrecognized role");
             return;
         }
-        PinRoleValidationResult r =
-            validateRoleChange(kAssignablePins[i], newRole, params.pinRole);
+        // Assigning Hall MOVES the sensor: whichever pin held it is demoted
+        // to Digital Out (there's only one hall input), so that pin's line
+        // must be persisted too. The client re-fetches /api/config after a
+        // Hall save to pick the other row's new value up.
+        uint8_t demotedPin = kNoPin;
+        PinRoleValidationResult r = applyPinRoleChange(
+            params.pinRole, kAssignablePins[i], newRole, false, &demotedPin);
         if (!r.ok) {
             sServer.send(400, "text/plain", r.reason);
             return;
         }
-        params.pinRole[i] = newRole;
-        if (!updateConfigFile(pinKey.c_str(), value.c_str())) {
+        bool saved = updateConfigFile(pinKey.c_str(), value.c_str());
+        if (demotedPin != kNoPin) {
+            String demotedKey = "pin" + String(demotedPin) + "role";
+            saved = updateConfigFile(demotedKey.c_str(),
+                                     pinRoleToString(params.pinRole[pinIndexOf(demotedPin)])) && saved;
+        }
+        if (!saved) {
             sServer.send(500, "text/plain", "SD write failed — change applied in memory only");
             return;
         }
@@ -846,18 +856,20 @@ static void handleApiConfigPost() {
 #else
         constexpr bool kDriveActive = false;
 #endif
-        bool otherActive = (consumer == SerialConsumer::kDome) ? kDriveActive : kDomeActive;
-        SerialPortId otherPort = (consumer == SerialConsumer::kDome) ? params.driveSerialPort
-                                                                      : params.domeSerialPort;
-        SerialPortValidationResult r =
-            validateSerialPortChange(consumer, newPort, otherActive, otherPort);
-        if (!r.ok) {
-            sServer.send(400, "text/plain", r.reason);
-            return;
+        // Picking the port the OTHER active subsystem holds swaps the two
+        // (rejecting it would make a swap impossible -- see
+        // applySerialPortChange()), so persist the other's new port too. The
+        // client re-fetches /api/config afterward for the other row's value.
+        bool swapped = applySerialPortChange(params.domeSerialPort, params.driveSerialPort,
+                                             kDomeActive, kDriveActive, consumer, newPort, false);
+        bool saved = updateConfigFile(key.c_str(), value.c_str());
+        if (swapped) {
+            bool domeMoved = (consumer == SerialConsumer::kDrive);
+            saved = updateConfigFile(domeMoved ? "domeserialport" : "driveserialport",
+                                     serialPortToString(domeMoved ? params.domeSerialPort
+                                                                  : params.driveSerialPort)) && saved;
         }
-        if (consumer == SerialConsumer::kDome) params.domeSerialPort = newPort;
-        else params.driveSerialPort = newPort;
-        if (!updateConfigFile(key.c_str(), value.c_str())) {
+        if (!saved) {
             sServer.send(500, "text/plain", "SD write failed — change applied in memory only");
             return;
         }

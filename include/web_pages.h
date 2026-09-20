@@ -193,7 +193,7 @@ footer a:hover{opacity:1;}
     </a>
     <a class="card" href="/config/pins">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1.5"/><line x1="9" y1="3" x2="9" y2="7"/><line x1="15" y1="3" x2="15" y2="7"/><line x1="9" y1="17" x2="9" y2="21"/><line x1="15" y1="17" x2="15" y2="21"/><line x1="3" y1="9" x2="7" y2="9"/><line x1="3" y1="15" x2="7" y2="15"/><line x1="17" y1="9" x2="21" y2="9"/><line x1="17" y1="15" x2="21" y2="15"/></svg>
-      <div><div class="name">Pins</div><div class="sub">GPIO assignment</div></div>
+      <div><div class="name">Pins</div><div class="sub">Header assignment</div></div>
     </a>
     <a class="card" href="/config/serial-ports">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="8" height="6" rx="1.5"/><rect x="3" y="14" width="8" height="6" rx="1.5"/><path d="M11 7 h4 a3 3 0 0 1 3 3 v4 a3 3 0 0 0 3 3 h1"/></svg>
@@ -452,6 +452,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -675,6 +685,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -683,6 +712,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -694,6 +725,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -863,20 +896,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -1099,7 +1133,7 @@ var SCHEMA = [
     {v:'13', l:'CR (\\r)'},
     {v:'0',  l:'CRLF (\\r\\n)'}
   ]},
-  {key:'auxserial3', label:'Enable Serial 2 (GPIO21/38)', type:'bool', restart:true,
+  {key:'auxserial3', label:'Enable Serial 2', type:'bool', restart:true,
     note:'Real hardware UART2, not software serial. Force it on even if neither the dome nor drive system claims it — see Serial Ports.'},
   {section:'I²C'},
   {key:'myi2c',      label:"This Board's Address",           type:'number', min:0, max:100}
@@ -1247,6 +1281,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -1470,6 +1514,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -1478,6 +1541,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -1489,6 +1554,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -1658,20 +1725,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -2412,6 +2480,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -2635,6 +2713,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -2643,6 +2740,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -2654,6 +2753,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -2823,20 +2924,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -3197,6 +3299,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -3432,6 +3544,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -3440,6 +3571,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -3451,6 +3584,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -3620,20 +3755,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -4101,6 +4237,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -4324,6 +4470,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -4332,6 +4497,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -4343,6 +4510,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -4512,20 +4681,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -4908,6 +5078,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -5131,6 +5311,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -5139,6 +5338,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -5150,6 +5351,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -5319,20 +5522,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -5717,6 +5921,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -5982,6 +6196,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -5990,6 +6223,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -6001,6 +6236,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -6170,20 +6407,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -6837,6 +7075,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -7087,6 +7335,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -7095,6 +7362,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -7106,6 +7375,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -7275,20 +7546,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -7863,6 +8135,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -8103,6 +8385,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -8111,6 +8412,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -8122,6 +8425,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -8291,20 +8596,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -8741,6 +9047,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -8969,6 +9285,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -8977,6 +9312,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -8988,6 +9325,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -9157,20 +9496,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -9381,8 +9721,10 @@ function _refreshDynamicOptions() {
 </script>
 <script>
 // Reassigns the ROLE of each of the 11 physical pins already broken out on
-// this board's headers (issue #133) -- e.g. "GPIO39 does Servo instead of
-// Digital Out" -- not a general "pick any GPIO" tool. Trading a pin's role
+// this board's headers (issue #133) -- e.g. "Digital D1 does Servo instead of
+// Digital Out" -- not a general "pick any pin" tool. Rows are labeled with
+// what's printed on the board (pinLabel() in edit.js), never the firmware's
+// internal pin number. Trading a pin's role
 // changes the COUNT in each category (fewer DOUT, more Servo), unlike the
 // old fixed-count design; see include/pin_assignment.h for the
 // authoritative pool/ceiling logic this page's dropdowns and the server
@@ -9393,7 +9735,7 @@ function _refreshDynamicOptions() {
 var ROLE_LABELS = {dout:'Digital Out', analog:'Analog In', ppm:'PPM In', servo:'Servo', hall:'Hall Sensor'};
 var CEILINGS = {servo:8, analog:6, ppm:1, hall:1};  // see pin_assignment.h
 
-var _pins = [];   // assignablePins, e.g. [1,2,3,4,5,6,39,40,41,42,47]
+var _pins = [];   // assignablePins (internal pin ids -- display via pinLabel())
 var _roles = [];  // pinRoles, same order/indexing as _pins
 var _domehw = '';
 
@@ -9404,10 +9746,23 @@ function rolesFor(pin) {
   return roles;
 }
 
+// The pin currently holding the Hall role, or null. There's a single hall
+// input, so picking Hall on another pin MOVES it (the firmware demotes the old
+// pin to Digital Out) rather than being rejected -- the option says so.
+function hallHolder() {
+  var i = _roles.indexOf('hall');
+  return i >= 0 ? _pins[i] : null;
+}
+
 function pinRow(i) {
   var pin = _pins[i];
-  var opts = rolesFor(pin).map(function(r) { return {v: r, l: ROLE_LABELS[r]}; });
-  return buildRow({key: 'pin' + pin + 'role', label: 'GPIO ' + pin, type: 'select',
+  var holder = hallHolder();
+  var opts = rolesFor(pin).map(function(r) {
+    var l = ROLE_LABELS[r];
+    if (r === 'hall' && holder !== null && holder !== pin) l += ' (moves from ' + pinLabel(holder) + ')';
+    return {v: r, l: l};
+  });
+  return buildRow({key: 'pin' + pin + 'role', label: pinLabel(pin), type: 'select',
                    options: opts, restart: true}, _roles[i]);
 }
 
@@ -9429,7 +9784,7 @@ function render() {
   var rows = _pins.map(function(pin, i) { return pinRow(i); }).join('');
   document.querySelector('main').innerHTML =
     '<div class="usage-wrap" id="usage"></div>'
-    + '<div class="section-label">Physical Pins</div>'
+    + '<div class="section-label">Board Headers</div>'
     + rows;
   renderUsage();
 }
@@ -9443,18 +9798,26 @@ window._onConfigSaved = function(key) {
   if (!m) return;
   var i = _pins.indexOf(parseInt(m[1], 10));
   if (i >= 0) _roles[i] = _configData[key];
+  // Saving Hall may have moved it off another pin server-side, which this
+  // page can't tell from the one row it just saved -- reload everything.
+  if (_configData[key] === 'hall') { load(); return; }
   renderUsage();
 };
 
-fetch('/api/config').then(function(r) { return r.json(); }).then(function(d) {
-  _configData = d;
-  _pins = d.assignablePins || [];
-  _roles = d.pinRoles || [];
-  _domehw = d.domehw || '';
-  render();
-}).catch(function() {
-  document.getElementById('status').textContent = 'Failed to load settings.';
-});
+function load() {
+  fetch('/api/config').then(function(r) { return r.json(); }).then(function(d) {
+    _configData = d;
+    _pins = d.assignablePins || [];
+    _roles = d.pinRoles || [];
+    _domehw = d.domehw || '';
+    render();
+  }).catch(function() {
+    var s = document.getElementById('status');
+    if (s) s.textContent = 'Failed to load settings.';
+    else showToast('Failed to refresh settings', true);
+  });
+}
+load();
 </script>
 </body>
 </html>
@@ -9597,6 +9960,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -9820,6 +10193,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -9828,6 +10220,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -9839,6 +10233,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -10008,20 +10404,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -10242,7 +10639,7 @@ function _refreshDynamicOptions() {
 // than schema-driven, since each row's visibility and the OTHER row's
 // current value both depend on live server state.
 
-var PORT_LABELS = {serial1: 'Serial 1 (GPIO17/18)', serial2: 'Serial 2 (GPIO21/38)'};
+var PORT_LABELS = {serial1: 'Serial 1', serial2: 'Serial 2'};
 
 function domeNeedsSerial(d) { return d.domehw === 'roboclaw' || d.domehw === 'saber'; }
 function driveNeedsSerial(d) {
@@ -10261,11 +10658,13 @@ function domeLabel(d) {
 // this build -- its stored port value is otherwise inert (e.g. drivehw
 // 'roboteq-pwm' needs no serial link at all, so driveserialport is just a
 // leftover default with nothing real behind it) and must NOT be labeled as
-// "in use" against the row being rendered here.
+// a swap against the row being rendered here. When it IS active, choosing
+// the port it holds swaps the two (the firmware gives it this row's old
+// port), so the option says so rather than being unavailable.
 function portOptions(otherKey, otherLabel, otherActive, d) {
   return ['serial1', 'serial2'].map(function(v) {
     var l = PORT_LABELS[v];
-    if (otherActive && d[otherKey] === v) l += ' — in use by ' + otherLabel;
+    if (otherActive && d[otherKey] === v) l += ' — swaps with ' + otherLabel;
     return {v: v, l: l};
   });
 }
@@ -10298,15 +10697,19 @@ function render() {
     + '<div class="row"><div class="row-label" style="color:var(--muted);font-size:.8rem;line-height:1.5;font-weight:400">'
     + 'Serial 0 (fixed) always carries the main serial-out / WCB mesh path — see Connectivity. '
     + 'Serial 1 and Serial 2 above are the two ports available to split between the dome and drive links; '
-    + 'each can only be claimed by one of them at a time.'
+    + 'each can only be claimed by one of them at a time, so choosing the port the other is using swaps the two.'
     + '</div></div>';
 }
 
-// Re-render after a successful save so the OTHER row's "in use by ..." label
-// reflects the just-changed value immediately, without a full page reload --
-// same reasoning as pins.html's renderUsage() hook.
+// Reload after a successful save: a swap changes the OTHER row's value
+// server-side too, which this page can't tell from the one row it just saved,
+// and its "swaps with ..." labels depend on it. No full page reload needed.
 window._onConfigSaved = function(key) {
-  if (key === 'domeserialport' || key === 'driveserialport') render();
+  if (key !== 'domeserialport' && key !== 'driveserialport') return;
+  fetch('/api/config').then(function(r) { return r.json(); }).then(function(d) {
+    _configData = d;
+    render();
+  }).catch(function() { render(); });
 };
 
 fetch('/api/config').then(function(r) { return r.json(); }).then(function(d) {
@@ -10457,6 +10860,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -10724,6 +11137,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -10732,6 +11164,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -10743,6 +11177,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -10912,20 +11348,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -11752,6 +12189,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -12027,6 +12474,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -12035,6 +12501,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -12046,6 +12514,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -12215,20 +12685,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -12960,6 +13431,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -13201,6 +13682,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -13209,6 +13709,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -13220,6 +13722,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -13389,20 +13893,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -13914,6 +14419,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -14161,8 +14676,8 @@ main{flex:1;display:flex;flex-direction:column;min-height:0;max-width:none;margi
     <span class="tsep"></span>
     <button class="tbtn on" id="f-LOG" onclick="toggleFilter('LOG')" title="LOG — Amidala's own console output (boot, config dumps, command replies)">LOG</button>
     <button class="tbtn on" id="f-S0" onclick="toggleFilter('S0')" title="S0 — WCB/body controller serial. Also a Send destination.">S0</button>
-    <button class="tbtn on" id="f-S1" onclick="toggleFilter('S1')" title="S1 — Serial 1 header (GPIO17/18)" hidden>S1</button>
-    <button class="tbtn on" id="f-S2" onclick="toggleFilter('S2')" title="S2 — Serial 2 header (GPIO21/38). Also a Send destination." hidden>S2</button>
+    <button class="tbtn on" id="f-S1" onclick="toggleFilter('S1')" title="S1 — Serial 1 header" hidden>S1</button>
+    <button class="tbtn on" id="f-S2" onclick="toggleFilter('S2')" title="S2 — Serial 2 header. Also a Send destination." hidden>S2</button>
     <button class="tbtn on" id="f-WCB" onclick="toggleFilter('WCB')" title="WCB — mesh network. Also a Send destination." hidden>WCB</button>
     <span class="tsep"></span>
     <button class="tbtn" id="pbtn" onclick="togglePause()">Pause</button>
@@ -14202,6 +14717,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -14210,6 +14744,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -14221,6 +14757,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -14390,20 +14928,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -14962,6 +15501,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -15242,6 +15791,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -15250,6 +15818,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -15261,6 +15831,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -15430,20 +16002,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -15884,6 +16457,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -16226,6 +16809,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -16423,7 +17016,6 @@ footer a:hover { opacity: 1; }
 .pin-state.low{color:var(--muted)}
 .ain-val{font:500 14px/1 ui-monospace,'SF Mono',Menlo,monospace;color:var(--accent);flex-shrink:0}
 .row-note{font-size:.65rem;color:var(--muted);margin-left:.35rem}
-.gpio{font:500 10px/1 ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.12em;color:var(--muted);flex-shrink:0}
 #ts{text-align:center;padding:.6rem 0;color:var(--muted);font:500 10px/1 ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.1em;border-top:1px solid var(--border);margin-top:.5rem}
 </style>
 <script>!function(){var t=localStorage.getItem("amidala-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}()</script>
@@ -16461,6 +17053,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -16469,6 +17080,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -16480,6 +17093,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -16649,20 +17264,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
@@ -16872,7 +17488,7 @@ function _refreshDynamicOptions() {
 }
 </script>
 <script>
-// DOUT/AIN row COUNT and GPIO labels both come from /api/config's live
+// DOUT/AIN row COUNT and board-header labels both come from /api/config's live
 // doutPins/analogPins arrays (see buildUI()) rather than being hardcoded
 // here -- issue #133 lets pins be traded between roles at runtime (e.g. a
 // DOUT pin becomes a 5th servo instead), so a fixed 4/2-row layout would
@@ -16888,10 +17504,10 @@ var AIN = [];
 
 function buildUI(cfg) {
   DOUT = ((cfg && cfg.doutPins) || []).map(function(pin, i) {
-    return {id: 'dout' + i, label: 'Digital ' + (i + 1), pin: pin};
+    return {id: 'dout' + i, label: pinLabel(pin), pin: pin};
   });
   AIN = ((cfg && cfg.analogPins) || []).map(function(pin, i) {
-    return {id: 'ain' + i, label: 'Analog ' + (i + 1), pin: pin};
+    return {id: 'ain' + i, label: pinLabel(pin), pin: pin};
   });
 
   var html = '<div class="section-label">Device</div>';
@@ -16917,7 +17533,6 @@ function buildUI(cfg) {
   DOUT.forEach(function(d) {
     html += '<div class="row">'
       + '<div class="row-label">' + d.label + '</div>'
-      + '<span class="gpio">GPIO' + d.pin + '</span>'
       + '<div class="pin-led low" id="' + d.id + '_led">&#9679;</div>'
       + '<div class="pin-state low" id="' + d.id + '_st">LOW</div>'
       + '</div>';
@@ -16926,7 +17541,6 @@ function buildUI(cfg) {
   AIN.forEach(function(a) {
     html += '<div class="row">'
       + '<div class="row-label">' + a.label + '</div>'
-      + '<span class="gpio">GPIO' + a.pin + '</span>'
       + '<div class="ain-val" id="' + a.id + '">&#8212;</div>'
       + '</div>';
   });
@@ -16981,11 +17595,10 @@ function refresh() {
     .catch(function(){});
 }
 
-// GPIO labels need the current pin assignments before the page can render
+// Row labels need the current pin assignments before the page can render
 // -- fetch /api/config once up front rather than hardcoding them (see the
-// DOUT/AIN comment above). Falls back to blank labels (still functional --
-// the live HIGH/LOW/analog values from /api/pins are unaffected) if the
-// fetch fails, rather than blocking the rest of the page.
+// DOUT/AIN comment above). If the fetch fails the DOUT/AIN sections just
+// render empty, rather than blocking the rest of the page.
 fetch('/api/config')
   .then(function(r){ return r.json(); })
   .then(function(cfg){ buildUI(cfg); })
@@ -17136,6 +17749,16 @@ main {
   color: var(--accent);
 }
 .ri { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Helper text for a setting (SCHEMA `note:`), shown under the row while it's
+   being edited. It's its own full-width line rather than part of .ri: inline
+   next to the input, a long note made .ri (flex-shrink:0) as wide as the
+   text and squeezed the label down to a sliver. */
+.row.has-note { flex-wrap: wrap; row-gap: 6px; }
+.edit-note {
+  flex: 0 0 100%; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  text-align: right;
+}
 .ri input, .ri select {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--text); padding: .3rem .5rem; border-radius: 4px;
@@ -17380,6 +18003,25 @@ function showToast(msg, isErr) {
   setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
 }
 
+// ------------------------------------------------------- board pin labels ----
+
+// What's printed on the Amidala PCB next to each reassignable header (see the
+// pin table in PCB/README.md): the "Analog" block's A1/A2, the "Digital"
+// block's D1-D4, the "Servos" block's 1-4, and PPMIN. The keys are the
+// firmware's internal pin ids (the /api/config assignablePins values), which
+// mean nothing to someone holding the board -- so never show those to the
+// user; always go through pinLabel().
+var PIN_SILKSCREEN = {
+  1: 'Analog A1', 2: 'Analog A2',
+  3: 'Servo 1', 4: 'Servo 2', 5: 'Servo 3', 6: 'Servo 4',
+  39: 'Digital D1', 40: 'Digital D2', 41: 'Digital D3', 42: 'Digital D4',
+  47: 'PPMIN'
+};
+
+function pinLabel(pin) {
+  return PIN_SILKSCREEN[pin] || 'Unlabeled pin';
+}
+
 // -------------------------------------------------------- edit-in-place -----
 
 function startEdit(btn) {
@@ -17388,6 +18030,8 @@ function startEdit(btn) {
   inp.dataset.orig = inp.value;
   row.querySelector('.rv').hidden = true;
   row.querySelector('.ri').hidden = false;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = false;
   btn.hidden = true;
   row.querySelector('.bs').hidden = false;
   row.querySelector('.bc').hidden = false;
@@ -17399,6 +18043,8 @@ function startEdit(btn) {
 function _closeEditUI(row) {
   row.querySelector('.rv').hidden = false;
   row.querySelector('.ri').hidden = true;
+  var note = row.querySelector('.edit-note');
+  if (note) note.hidden = true;
   row.querySelector('.be').hidden = false;
   row.querySelector('.bs').hidden = true;
   row.querySelector('.bc').hidden = true;
@@ -17568,20 +18214,21 @@ function buildRow(s, val, hidden) {
       + '</div>';
   }
   var disp = dispValue(s, val);
-  var note = s.note ? '<span style="font-size:.65rem;color:var(--muted);margin-left:.3rem">' + s.note + '</span>' : '';
+  var note = s.note ? '<div class="edit-note" hidden>' + s.note + '</div>' : '';
   if (s.readOnly) {
     return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '">'
       + '<div class="row-label">' + s.label + '</div>'
       + '<div class="rv">' + disp + '</div>'
       + '</div>';
   }
-  return '<div class="row"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
+  return '<div class="row' + (s.note ? ' has-note' : '') + '"' + hiddenAttr + ' data-key="' + (s.key || '') + '" data-type="' + (s.type || 'text') + '" data-fmt="' + (s.fmtFn || '') + '" data-restart="' + (s.restart ? '1' : '') + '">'
     + '<div class="row-label">' + s.label + '</div>'
     + '<div class="rv">' + disp + '</div>'
-    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + note + '</div></div>'
+    + '<div class="ri" hidden><div style="display:flex;align-items:center">' + buildInput(s, val) + '</div></div>'
     + '<button class="be" onclick="startEdit(this)" title="Edit">' + _pencil + '</button>'
     + '<button class="bs" hidden onclick="doSave(this)">SAVE</button>'
     + '<button class="bc" hidden onclick="doCancel(this)">&#10005;</button>'
+    + note
     + '</div>';
 }
 
