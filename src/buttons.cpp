@@ -1,4 +1,5 @@
 #include "controller.h"
+#include "button_names.h"
 
 static int findSerialStringById(AmidalaParameters &params, uint16_t id) {
   if (id == 0) return -1;
@@ -98,9 +99,12 @@ void AmidalaConsole::processGesture(const char *gesture) {
 
 void AmidalaConsole::processButtonLayer(unsigned num, const char *label,
                                         ButtonAction *actions) {
-  print(label);
-  println(num);
   AmidalaParameters &params = fController->params;
+  // Name the button the way the Controllers page does (issue #227), which
+  // depends on the active controllertype.
+  char name[48];
+  print(label);
+  println(ButtonNames::label(params.controllertype, num, name, sizeof(name)));
   if (num >= 1 && num <= params.getButtonCount())
     process(actions[num - 1]);
 }
