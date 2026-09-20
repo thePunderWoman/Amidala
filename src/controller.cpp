@@ -1,4 +1,5 @@
 #include "controller.h"
+#include "debug.h"
 #include "dome_position_math.h"
 #include "xbee_spi.h"
 #include "bt_gamepad.h"
@@ -91,6 +92,36 @@ void AmidalaController::domeEmergencyStop() {
 #endif
 }
 
+#ifdef HALL_SENSOR_TEST
+// Boot-time wiring check for the dome hall sensor (see include/debug.h).
+// Never returns. Runs from setup() once config.txt is loaded and validated so
+// it watches the pin the user actually assigned Hall to on the Pins page, not
+// the compiled-in default (DOME_HALL_PIN), which would look dead -- with a
+// perfectly good sensor -- after the sensor has been moved to another header.
+static void runHallSensorTest(const PinRoleType roles[11]) {
+  bool assigned = nthPinWithRole(roles, PinRoleType::kHall, 0) != kNoPin;
+  uint8_t pin = hallPinOrFallback(roles, DOME_HALL_PIN);
+  pinMode(pin, INPUT_PULLUP);
+  CONSOLE_SERIAL.print("Hall sensor test — ");
+  if (assigned) {
+    CONSOLE_SERIAL.print("GPIO ");
+    CONSOLE_SERIAL.print(pin);
+    CONSOLE_SERIAL.println(" (the pin assigned Hall Sensor; move magnet past sensor)");
+  } else {
+    CONSOLE_SERIAL.print("no pin is assigned Hall Sensor, watching the default GPIO ");
+    CONSOLE_SERIAL.print(pin);
+    CONSOLE_SERIAL.println(" (move magnet past sensor)");
+  }
+  for (int lastState = -1;;) {
+    int state = digitalRead(pin);
+    if (state != lastState) {
+      CONSOLE_SERIAL.println(state == LOW ? "LOW  <- triggered" : "HIGH <- idle");
+      lastState = state;
+    }
+  }
+}
+#endif
+
 void AmidalaController::setup() {
   fConsole.println(F("Loading config from EEPROM"));
   params.init();
@@ -117,6 +148,9 @@ void AmidalaController::setup() {
   // only sees whatever's been parsed so far -- before anything below reads
   // them into a pinMode()/constructor call.
   fConfig.validatePinAssignments();
+#ifdef HALL_SENSOR_TEST
+  runHallSensorTest(params.pinRole);  // never returns
+#endif
   // Guarantee domeSerialPort/driveSerialPort (issue #147) don't both claim
   // the same physical port before either is read below -- same "config.txt
   // parses in file order" reasoning as validatePinAssignments() above.

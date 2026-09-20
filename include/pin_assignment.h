@@ -234,3 +234,13 @@ inline PinRoleValidationResult applyPinRoleChange(PinRoleType allRoles[11], uint
     if (r.ok) allRoles[pinIndexOf(pin)] = newRole;
     return r;
 }
+
+// The pin the HALL_SENSOR_TEST boot mode (include/debug.h) should watch: the
+// pin currently assigned the Hall role (Pins page), or `fallbackPin` if none
+// is -- e.g. a non-RoboClaw build, where nothing requires a Hall pin. Pure
+// so the "watch the ASSIGNED pin, not the compiled-in default" rule is
+// natively testable.
+inline uint8_t hallPinOrFallback(const PinRoleType allRoles[11], uint8_t fallbackPin) {
+    uint8_t pin = nthPinWithRole(allRoles, PinRoleType::kHall, 0);
+    return pin == kNoPin ? fallbackPin : pin;
+}

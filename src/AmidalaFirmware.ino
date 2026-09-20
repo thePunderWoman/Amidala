@@ -82,17 +82,9 @@ void setup() {
   // init warnings) are visible on the monitor before SD.begin() is called.
   { uint32_t t = millis(); while (!CONSOLE_SERIAL && millis() - t < 3000) delay(10); }
 
-#ifdef HALL_SENSOR_TEST
-  pinMode(DOME_HALL_PIN, INPUT_PULLUP);
-  CONSOLE_SERIAL.println("Hall sensor test — GPIO " + String(DOME_HALL_PIN) + " (move magnet past sensor)");
-  for (int lastState = -1;;) {
-    int state = digitalRead(DOME_HALL_PIN);
-    if (state != lastState) {
-      CONSOLE_SERIAL.println(state == LOW ? "LOW  <- triggered" : "HIGH <- idle");
-      lastState = state;
-    }
-  }
-#endif
+// HALL_SENSOR_TEST (include/debug.h) is handled in AmidalaController::setup()
+// (src/controller.cpp), once config.txt has been loaded -- it has to watch the
+// pin the user assigned Hall to, which isn't known yet at this point.
 
   // XBee serial init omitted — XBee 3 uses SPI (see PR esp32-2).
 #ifdef VMUSIC_SERIAL

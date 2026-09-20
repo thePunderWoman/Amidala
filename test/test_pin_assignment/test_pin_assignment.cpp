@@ -276,6 +276,29 @@ void test_apply_loading_still_rejects_pin_outside_pool() {
     TEST_ASSERT_FALSE(applyPinRoleChange(roles, 8, PinRoleType::kDout, true).ok);
 }
 
+// ---- hallPinOrFallback() -----------------------------------------------
+// HALL_SENSOR_TEST must watch the pin Hall is ASSIGNED to, not the compiled-in
+// default -- otherwise it looks dead after the sensor has been moved.
+
+void test_hall_test_pin_is_the_assigned_pin_not_the_default() {
+    PinRoleType roles[11];
+    hallOnGpio40(roles);
+    applyPinRoleChange(roles, 39, PinRoleType::kHall, false);  // moved 40 -> 39
+    TEST_ASSERT_EQUAL_UINT8(39, hallPinOrFallback(roles, 40));
+}
+
+void test_hall_test_pin_defaults_to_gpio40_when_hall_is_still_there() {
+    PinRoleType roles[11];
+    hallOnGpio40(roles);
+    TEST_ASSERT_EQUAL_UINT8(40, hallPinOrFallback(roles, 42));
+}
+
+void test_hall_test_pin_falls_back_when_no_pin_is_assigned_hall() {
+    PinRoleType roles[11];
+    for (uint8_t i = 0; i < 11; i++) roles[i] = PinRoleType::kDout;
+    TEST_ASSERT_EQUAL_UINT8(40, hallPinOrFallback(roles, 40));
+}
+
 void test_validate_unlimited_dout_count() {
     // No ceiling on DOUT beyond the pool -- even a pin already counted many
     // times over among "others" (impossible in practice since each pin has
@@ -324,6 +347,9 @@ int main(int argc, char** argv) {
     RUN_TEST(test_apply_loading_accepts_second_hall_pending_the_final_sweep);
     RUN_TEST(test_apply_loading_still_rejects_electrically_invalid_role);
     RUN_TEST(test_apply_loading_still_rejects_pin_outside_pool);
+    RUN_TEST(test_hall_test_pin_is_the_assigned_pin_not_the_default);
+    RUN_TEST(test_hall_test_pin_defaults_to_gpio40_when_hall_is_still_there);
+    RUN_TEST(test_hall_test_pin_falls_back_when_no_pin_is_assigned_hall);
     RUN_TEST(test_validate_unlimited_dout_count);
 
     return UNITY_END();

@@ -22,5 +22,8 @@
 // #define USE_HALL_DEBUG
 
 // Uncomment to enter hall-sensor test mode at boot.
-// Skips all normal init and loops forever printing HIGH/LOW transitions on DOME_HALL_PIN.
+// Loads config.txt (so it knows which pin you assigned Hall Sensor to on the
+// Pins page; if none is assigned it falls back to DOME_HALL_PIN), then skips
+// the rest of normal init and loops forever printing HIGH/LOW transitions on
+// that pin. Reflash without the define to return to normal operation.
 // #define HALL_SENSOR_TEST
