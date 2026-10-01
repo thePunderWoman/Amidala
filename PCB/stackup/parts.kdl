@@ -1,0 +1,219 @@
+// Amidala-specific parts that the pinned Stackup library does not provide.
+
+// Espressif ESP32-S3-DevKitC-1, plugged into the shield as a daughterboard on its two 22-pin
+// headers. The firmware supports both the N16R8 and N8R2 variants (see platformio.ini), which
+// share this pinout, so no single MPN is stated.
+//
+// Header pinout per Espressif's ESP32-S3-DevKitC-1 v1.1 user guide ("Header Block", tables J1
+// and J3). J1 positions 1–22 are pads 1–22. J3 is numbered in reverse on this footprint:
+// J3 position n is pad 45−n (J3-1 G is pad 44, J3-2 TX is pad 43, J3-22 G is pad 23).
+part esp32-s3-devkitc-1 {
+    symbol "ExpressIf:ESP32-S3-DevKitC"
+    reference U
+    value "ESP32-S3-DevKitC"
+    datasheet "https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp32-s3-devkitc-1/user_guide_v1.1.html"
+    description "ESP32-S3-DevKitC-1 development board (N16R8 or N8R2), two 22-pin 2.54 mm headers"
+    manufacturer "Espressif Systems"
+
+    // Supply. 3V3 is the output of the DevKitC's own 3.3 V LDO, and powers the shield's 3.3 V
+    // rail. 5V is the DevKitC's 5 V input, fed by the shield's screw terminal.
+    pin "3V3" power_out symbol="3V3"
+    pin "5V" power_in
+    pin GND power_in
+
+    // Reset: the DevKitC has its own EN pull-up and delay capacitor and RST button.
+    pin CHIP_PU input {
+        role reset active=low pull=internal
+    }
+
+    // Straps. The DevKitC biases them itself (BOOT button and pull-up on GPIO0, the module's
+    // internal pulls on GPIO45/46); the board must not override them at reset.
+    pin GPIO0 bidirectional once {
+        role strap sampled=reset pull=internal-up \
+            note="boot mode — high is SPI boot, low is download; the DevKitC pulls it up"
+        require net.rest high
+    }
+    pin GPIO3 bidirectional once symbol="GPIO3/ADC1_CH2" {
+        role strap sampled=reset pull=none \
+            note="JTAG source — read only when the eFuse selects strapping; no bias required"
+    }
+    pin GPIO45 bidirectional once {
+        role strap sampled=reset pull=internal-down \
+            note="VDD_SPI — high selects 1.8 V flash, incompatible with the module"
+        require net.rest not=high
+    }
+    pin GPIO46 bidirectional once {
+        role strap sampled=reset pull=internal-down \
+            note="ROM messages — high with GPIO0 low is an invalid boot combination"
+        require net.rest not=high
+    }
+
+    pin GPIO1 bidirectional once symbol="GPIO1/ADC1_CH0"
+    pin GPIO2 bidirectional once symbol="GPIO2/ADC1_CH1"
+    pin GPIO4 bidirectional once symbol="GPIO4/ADC1_CH3"
+    pin GPIO5 bidirectional once symbol="GPIO5/ADC1_CH4"
+    pin GPIO6 bidirectional once symbol="GPIO6/ADC1_CH5"
+    pin GPIO7 bidirectional once symbol="GPIO7/ADC1_CH6"
+    pin GPIO8 bidirectional once symbol="GPIO8/ADC1_CH7"
+    pin GPIO9 bidirectional once symbol="GPIO9/ADC1_CH8"
+    pin GPIO10 bidirectional once symbol="GPIO10/ADC1_CH9"
+    pin GPIO11 bidirectional once symbol="GPIO11/ADC2_CH0"
+    pin GPIO12 bidirectional once symbol="GPIO12/ADC2_CH1"
+    pin GPIO13 bidirectional once symbol="GPIO13/ADC2_CH2"
+    pin GPIO14 bidirectional once symbol="GPIO14/ADC2_CH3"
+    pin GPIO15 bidirectional once symbol="GPIO15/ADC2_CH4/32K_P"
+    pin GPIO16 bidirectional once symbol="GPIO16/ADC2_CH5/32K_N"
+    pin GPIO17 bidirectional once symbol="GPIO17/ADC2_CH6"
+    pin GPIO18 bidirectional once symbol="GPIO18/ADC2_CH7"
+    pin GPIO19 bidirectional once symbol="GPIO19/USB_D-"
+    pin GPIO20 bidirectional once symbol="GPIO20/USB_D+"
+    pin GPIO21 bidirectional once
+    // GPIO35–37 carry the module's octal PSRAM on R8 variants (N16R8); spare on this board.
+    pin GPIO35 bidirectional once
+    pin GPIO36 bidirectional once
+    pin GPIO37 bidirectional once
+    pin GPIO38 bidirectional once
+    pin GPIO39 bidirectional once symbol="GPIO39/MTCK"
+    pin GPIO40 bidirectional once symbol="GPIO40/MTDO"
+    pin GPIO41 bidirectional once symbol="GPIO41/MTDI"
+    pin GPIO42 bidirectional once symbol="GPIO42/MTMS"
+    pin GPIO43 bidirectional once symbol="GPIO43/U0TXD"
+    pin GPIO44 bidirectional once symbol="GPIO44/U0RXD"
+    pin GPIO47 bidirectional once
+    pin GPIO48 bidirectional once
+
+    port v3v3 type=power {
+        line rail pin="3V3"
+        line gnd pin=GND
+    }
+    port v5 type=power {
+        line rail pin="5V"
+        line gnd pin=GND
+    }
+
+    package devkit footprint="ExpressIf:ESP32-S2-DevKitC-1" {
+        // J1
+        pad "3V3" 1
+        pad "3V3" 2
+        pad CHIP_PU 3
+        pad GPIO4 4
+        pad GPIO5 5
+        pad GPIO6 6
+        pad GPIO7 7
+        pad GPIO15 8
+        pad GPIO16 9
+        pad GPIO17 10
+        pad GPIO18 11
+        pad GPIO8 12
+        pad GPIO3 13
+        pad GPIO46 14
+        pad GPIO9 15
+        pad GPIO10 16
+        pad GPIO11 17
+        pad GPIO12 18
+        pad GPIO13 19
+        pad GPIO14 20
+        pad "5V" 21
+        pad GND 22
+        // J3, reversed: pad 23 is J3-22
+        pad GND 23
+        pad GND 24
+        pad GPIO19 25
+        pad GPIO20 26
+        pad GPIO21 27
+        pad GPIO47 28
+        pad GPIO48 29
+        pad GPIO45 30
+        pad GPIO0 31
+        pad GPIO35 32
+        pad GPIO36 33
+        pad GPIO37 34
+        pad GPIO38 35
+        pad GPIO39 36
+        pad GPIO40 37
+        pad GPIO41 38
+        pad GPIO42 39
+        pad GPIO2 40
+        pad GPIO1 41
+        pad GPIO44 42
+        pad GPIO43 43
+        pad GND 44
+    }
+}
+
+// Hirose DM3AT-SF-PEJM5 push-push microSD socket with card-detect switch. Pin names and the
+// pin-to-pad map follow KiCad's Micro_SD_Card_Det_Hirose_DM3AT symbol and
+// microSD_HC_Hirose_DM3AT-SF-PEJM5 footprint, as on the original schematic. Not re-checked
+// against Hirose's drawing in the Stackup port.
+part microsd-hirose-dm3at {
+    symbol "Connector:Micro_SD_Card_Det_Hirose_DM3AT"
+    reference J
+    value "Micro_SD_Card"
+    description "Micro SD Card Socket with card detection pins"
+    manufacturer "Hirose"
+
+    pin DAT2 bidirectional
+    pin DAT3 bidirectional symbol="DAT3/CD"
+    pin CMD input
+    pin VDD power_in
+    pin CLK input
+    pin VSS power_in
+    pin DAT0 bidirectional
+    pin DAT1 bidirectional
+    pin DET_B passive
+    pin DET_A passive
+    pin SHIELD passive
+
+    port vdd type=power {
+        require net.voltage min="2.7V" max="3.6V"
+        line rail pin=VDD
+        line gnd pin=VSS
+    }
+
+    package dm3at footprint="Connector_Card:microSD_HC_Hirose_DM3AT-SF-PEJM5" {
+        pad DAT2 1
+        pad DAT3 2
+        pad CMD 3
+        pad VDD 4
+        pad CLK 5
+        pad VSS 6
+        pad DAT0 7
+        pad DAT1 8
+        pad DET_B 9
+        pad DET_A 10
+        pad SHIELD 11
+    }
+}
+
+// Two-position 5.08 mm screw terminal (Phoenix MKDS 1,5/2-5,08 footprint): the shield's 5 V
+// power input.
+part screw-terminal-1x2 {
+    symbol "Connector:Screw_Terminal_01x02"
+    reference J
+    value "Screw_Terminal_01x02"
+    description "Generic screw terminal, single row, 01x02"
+    pin 1 passive
+    pin 2 passive
+    port 1 pin=1
+    port 2 pin=2
+    package mkds footprint="TerminalBlock_Phoenix:TerminalBlock_Phoenix_MKDS-1,5-2-5.08_1x02_P5.08mm_Horizontal" {
+        pad 1 1
+        pad 2 2
+    }
+}
+
+// Three-way jumper on a 1x3 2.54 mm header: a shunt joins the common C to A or to B.
+part jumper-3 {
+    symbol "Jumper:Jumper_3_Open"
+    reference JP
+    value "Jumper_3_Open"
+    description "Jumper, 3-pole, both open"
+    pin A passive
+    pin C passive
+    pin B passive
+    package header footprint="Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" {
+        pad A 1
+        pad C 2
+        pad B 3
+    }
+}

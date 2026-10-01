@@ -4,6 +4,12 @@ A custom KiCad PCB shield designed specifically for the [Amidala Firmware](https
 
 **Designed by [thePunderWoman](https://github.com/thePunderWoman)**
 
+The electrical design is written in [Stackup KDL](stackup/board.kdl), using the pinned
+Stackup parts library plus [board-specific parts](stackup/parts.kdl). The
+[KiCad PCB](AmidalaShield.kicad_pcb) is linked to it through `AmidalaShield.stackup_sch`;
+sync it with the Stackup KiCad plugin after changing the design. See
+[stackup/README.md](stackup/README.md).
+
 ---
 
 ## Overview
@@ -50,13 +56,9 @@ The AmidalaShield is a carrier/breakout board for the **ESP32-S3 N16R8 DevKit**.
 
 | File/Folder | Description |
 |---|---|
-| `AmidalaShield.kicad_sch` | Top-level schematic |
-| `comms.kicad_sch` | XBee communications sub-sheet |
-| `io.kicad_sch` | Digital/analog I/O sub-sheet |
-| `power.kicad_sch` | Power distribution sub-sheet |
-| `rc_control.kicad_sch` | RC input sub-sheet |
-| `servos.kicad_sch` | Servo output sub-sheet |
-| `spi.kicad_sch` | SPI header sub-sheet |
+| `stackup/board.kdl` | Electrical design (Stackup KDL), replacing the KiCad schematics |
+| `stackup/parts.kdl` | Parts the Stackup library doesn't have (DevKitC, microSD socket, screw terminal, 3-way jumper) |
+| `AmidalaShield.kicad_pcb` | PCB layout, synced from the Stackup design |
 | `gerbers/` | Production-ready Gerber files |
 | `libraries/` | Project-specific KiCad symbol/footprint libraries |
 | `images/` | Board renders and screenshots |
@@ -66,7 +68,7 @@ The AmidalaShield is a carrier/breakout board for the **ESP32-S3 N16R8 DevKit**.
 ## Getting Started
 
 1. Clone this repo and open `AmidalaShield.kicad_pro` in KiCad 8+.
-2. Review the schematics for pin assignments before assembling.
+2. Review the [Stackup design](stackup/board.kdl) and the GPIO table below for pin assignments before assembling.
 3. Use the Gerber files in `gerbers/` to order PCBs from your preferred fab.
 4. Flash your ESP32-S3 with the [Amidala Firmware](https://github.com/thePunderWoman/AmidalaFirmware).
 5. Place a `config.txt` on the microSD card — see the firmware repo for a full annotated example.
