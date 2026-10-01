@@ -1,0 +1,2 @@
+stackup "0.2"
+library stackup git="https://github.com/stackup-eda/library" rev="9cf54c63f7f95b711e30edf5992a9bd28932d78d"

@@ -54,6 +54,47 @@ jobs:
           path: coverage/
           retention-days: 30
 
+  # ── Stackup hardware design ───────────────────────────────────────────────
+  # The shield's electrical design is PCB/stackup/board.kdl (Stackup KDL), not
+  # KiCad schematics. This checks the design with the Cargo-locked Stackup CLI
+  # (ci/stackup, pinned with the parts library in manifest.kdl), then fails if
+  # syncing the committed PCB from the design would change it — so the KDL and
+  # PCB/AmidalaShield.kicad_pcb can't drift apart. The sync check applies the
+  # Stackup KiCad plugin to the board in memory with KiCad 10's Python and
+  # never saves. No `stackup bom` step yet: the parts carry no MPNs (neither
+  # did the KiCad schematics), so it would fail on every part.
+  stackup:
+    name: Stackup Design + PCB Sync
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Checkout Stackup KiCad plugin
+        uses: actions/checkout@v7
+        with:
+          repository: stackup-eda/stackup
+          ref: v0.2.0
+          path: stackup-tool
+
+      - name: Install Rust 1.96
+        run: rustup toolchain install 1.96.0 --profile minimal
+
+      - name: Check Stackup design
+        run: cargo +1.96.0 run --locked --manifest-path ci/stackup/Cargo.toml -- check PCB/stackup/board.kdl --locked
+
+      - name: Install KiCad 10
+        run: |
+          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
+          sudo apt-get update
+          sudo apt-get install -y --install-recommends kicad
+
+      - name: Check PCB sync
+        run: |
+          /usr/bin/python3 ci/check_pcb_sync.py PCB/AmidalaShield.kicad_pcb \
+            --stackup ci/stackup/target/debug/amidala-stackup-check \
+            --plugin-dir stackup-tool/kicad-plugin
+
   # ── Firmware build verification ───────────────────────────────────────────
   # Compiles the real ESP32-S3 firmware (default DRIVE_SYSTEM/DOME_DRIVE,
   # i.e. exactly what `pio run` builds locally with no -D overrides) for both

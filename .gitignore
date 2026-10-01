@@ -69,3 +69,8 @@ PCB/*.kicad_prl
 
 # Production reports
 PCB/production/misc/*
+
+# Stackup: library cache, local library override, Cargo build output
+.stackup/
+manifest.local.kdl
+ci/stackup/target/

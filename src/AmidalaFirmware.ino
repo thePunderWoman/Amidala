@@ -62,9 +62,9 @@ void setup() {
   // report: pocket remotes intermittently never connect on power-up, but any
   // reset that doesn't remove power from the XBee -- UI or the board's reset
   // button -- fixes it immediately). The XBee3's ~RESET pin has no GPIO
-  // driving it, only a passive R1/C1 RC network (10k/100nF -- see the PCB
-  // schematic), giving a ~1.2ms release delay. The ESP32 reaches this point
-  // in setup() well inside that same order of magnitude, so on a true cold
+  // driving it, only a passive R1/C1 RC network (10k/100nF -- see
+  // PCB/stackup/board.kdl), giving a ~1.2ms release delay. The ESP32
+  // reaches this point in setup() well inside that same order of magnitude, so on a true cold
   // power-on both chips can be racing out of reset together, and this side
   // starts driving CS/SPI before the XBee3's own oscillator/boot sequence
   // (which needs meaningfully longer than 1.2ms) has actually finished. A

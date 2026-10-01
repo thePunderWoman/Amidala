@@ -51,6 +51,14 @@ The correct workflow for any UI change:
 
 `web_dev.py` serves `web/` directly and mocks the firmware REST API, so no hardware is needed to iterate on the UI.
 
+## Hardware design (Stackup)
+
+The shield's electrical design is Stackup KDL — `PCB/stackup/board.kdl` and `PCB/stackup/parts.kdl` — not KiCad schematics (there are none). Hardware work follows the `pcb-design` skill.
+
+- Check the design with `stackup check PCB/stackup/board.kdl --locked` (CLI 0.2.0; CI uses the Cargo-locked copy in `ci/stackup/`). The parts library is pinned by commit in `manifest.kdl`.
+- After any change to the KDL, sync `PCB/AmidalaShield.kicad_pcb` from it with the Stackup KiCad plugin (never edit footprint nets by hand) and commit the PCB with the KDL. CI's `stackup` job fails if a sync would change the committed PCB, and footprints record their `board.kdl` line, so even reordering lines needs a resync.
+- Mounting holes and logos are KiCad `board_only` footprints; the sync leaves them alone.
+
 ## Build verification
 
 CI (`ci.yml`) runs the native unit tests with coverage instrumentation (`scripts/coverage.sh --fail-under 80`, see [Code coverage](#code-coverage)) and compiles the real firmware for both board environments (default `DRIVE_SYSTEM`/`DOME_DRIVE` config only — not the full release matrix) on every push/PR. **Still always verify locally before pushing too** — CI catching it is a safety net, not a substitute for finding out before you open the PR:

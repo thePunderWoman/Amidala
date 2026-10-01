@@ -1,0 +1,128 @@
+// Amidala Shield (rev 1.2) electrical design. A shield for an ESP32-S3-DevKitC-1: servo, I/O,
+// serial, I2C, RC and SPI headers, an XBee3 radio and a microSD socket. Artwork and placement
+// live in ../AmidalaShield.kicad_pcb.
+//
+// Ported 1:1 from the KiCad schematics. Designators and net names are the schematic's, so the
+// routed PCB keeps its copper; comments name the schematic sheet each section came from.
+use "@stackup/connector/header"
+use "@stackup/passives"
+use "@stackup/radio/xbee3"
+use "./parts.kdl"
+
+design amidala_shield {
+    // Root sheet
+    place esp32-s3-devkitc-1 "ESP32-S3" designator="ESP32-S3"
+    set "ESP32-S3.3V3" net.voltage "3.3V"   // the DevKitC's onboard LDO output
+
+    // Power: 5 V screw terminal input, bulk capacitor, and the jumper that picks the digital
+    // and analog headers' supply (VCC_DIG): 3.3 V on A–C, 5 V on B–C.
+    place screw-terminal-1x2 J1 designator="J1"
+    place capacitor C9 designator="C9" footprint="Capacitor_Tantalum_SMD:CP_EIA-3216-18_Kemet-A" \
+        value="100µF" intent=bulk note="polarized tantalum: pad 1 (+) to +5V"
+    place jumper-3 JP1 designator="JP1"
+
+    // Comms: serial and auxiliary I2C headers (GND, 3.3 V, signal, signal)
+    place conn-1x4 I2C1 designator="I2C1" footprint="Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical" value="Aux I2C"
+    place conn-1x4 Serial0 designator="Serial0" footprint="Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical" value="Serial0"
+    place conn-1x4 Serial1 designator="Serial1" footprint="Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical" value="Serial1"
+    place conn-1x4 SWSerial1 designator="SWSerial1" footprint="Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical" value="Serial2"
+
+    // SPI: shared bus to the XBee3, the microSD socket and an expansion header
+    // Known rev 1.2 gap: SPI_ATTN (the XBee3's boot-mode strap) has no pull-up, so it is not
+    // held high at reset. `stackup check` reports it as unverifiable because GPIO16 can drive
+    // the net. Enabling the ESP32's internal pull-up broke XBee cold boot (issue #185), so the
+    // fix is a resistor in the next board revision.
+    place xbee3-zigbee XBee3 designator="XBee3" footprint="Xbee3:XB324Z8UTJ" value="XB3-24Z8UT-J" {
+        without supply     // the board's own C2–C7 decouple the 3.3 V rail
+        without bootmode   // see above: rev 1.2 has no SPI_ATTN pull-up
+    }
+    place microsd-hirose-dm3at J3 designator="J3"
+    place conn-1x6 SPI1 designator="SPI1" footprint="Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical" value="SPI"
+    place capacitor C1 designator="C1" footprint="Capacitor_SMD:C_0603_1608Metric" value="100nF" intent=filter note="XBee3 RESET RC with R1"
+    place capacitor C2 designator="C2" footprint="Capacitor_SMD:C_0603_1608Metric" value="100nF" intent=decouple
+    place capacitor C3 designator="C3" footprint="Capacitor_SMD:C_0603_1608Metric" value="100nF" intent=decouple
+    place capacitor C4 designator="C4" footprint="Capacitor_SMD:C_0805_2012Metric" value="10µF" intent=bulk
+    place capacitor C5 designator="C5" footprint="Capacitor_SMD:C_0603_1608Metric" value="1µF" intent=decouple
+    place capacitor C6 designator="C6" footprint="Capacitor_SMD:C_0603_1608Metric" value="8.2pF" intent=decouple
+    place capacitor C7 designator="C7" footprint="Capacitor_SMD:C_0805_2012Metric" value="10µF" intent=bulk
+    place resistor R1 designator="R1" footprint="Resistor_SMD:R_0603_1608Metric" value="10kΩ" intent=pull-up note="XBee3 RESET pull-up"
+    place resistor R2 designator="R2" footprint="Resistor_SMD:R_0603_1608Metric" value="10kΩ" intent=pull-up note="microSD DAT3/CS pull-up"
+    place resistor R3 designator="R3" footprint="Resistor_SMD:R_0603_1608Metric" value="10kΩ" intent=pull-up note="microSD CMD/MOSI pull-up"
+    place resistor R5 designator="R5" footprint="Resistor_SMD:R_0603_1608Metric" value="10kΩ" intent=pull-up note="microSD DAT0/MISO pull-up"
+
+    // Pins: analog and digital I/O headers (GND, VCC_DIG, signal)
+    place conn-1x3 J_Analog1 designator="J_Analog1" footprint="Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" value="A1"
+    place conn-1x3 J_Analog2 designator="J_Analog2" footprint="Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" value="A2"
+    place conn-1x3 J_Digital1 designator="J_Digital1" footprint="Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" value="D1"
+    place conn-1x3 J_Digital2 designator="J_Digital2" footprint="Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" value="D2"
+    place conn-1x3 J_Digital3 designator="J_Digital3" footprint="Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" value="D3"
+    place conn-1x3 J_Digital4 designator="J_Digital4" footprint="Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" value="D4"
+
+    // RC Control: PPM receiver input (GND, 3.3 V, signal)
+    place conn-1x3 J_PPMIN1 designator="J_PPMIN1" footprint="Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" value="PPMIN"
+
+    // Servos: servo headers (GND, 5 V, signal)
+    place conn-1x3 J_Servo1 designator="J_Servo1" footprint="Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" value="1"
+    place conn-1x3 J_Servo2 designator="J_Servo2" footprint="Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" value="2"
+    place conn-1x3 J_Servo3 designator="J_Servo3" footprint="Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" value="3"
+    place conn-1x3 J_Servo4 designator="J_Servo4" footprint="Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" value="4"
+
+    // Rails
+    circuit "ESP32-S3.3V3" "C2.A" "C3.A" "C4.A" "C5.A" "C6.A" "C7.A" "I2C1.2" "J3.VDD" "JP1.A" "J_PPMIN1.2" "R1.A" "R2.A" "R3.A" "R5.A" "SPI1.2" "SWSerial1.2" "Serial0.2" "Serial1.2" "XBee3.VCC" name="+3.3V"
+    circuit "J1.1" "C9.A" "ESP32-S3.5V" "JP1.B" "J_Servo1.2" "J_Servo2.2" "J_Servo3.2" "J_Servo4.2" name="+5V"
+    circuit "JP1.C" "J_Analog1.2" "J_Analog2.2" "J_Digital1.2" "J_Digital2.2" "J_Digital3.2" "J_Digital4.2" name="VCC_DIG"
+    // XBee3 DTR/SLEEP_RQ is tied low: pin sleep is never requested.
+    circuit "J1.2" "C1.B" "C2.B" "C3.B" "C4.B" "C5.B" "C6.B" "C7.B" "C9.B" "ESP32-S3.GND" "I2C1.1" "J3.SHIELD" "J3.VSS" "J_Analog1.1" "J_Analog2.1" "J_Digital1.1" "J_Digital2.1" "J_Digital3.1" "J_Digital4.1" "J_PPMIN1.1" "J_Servo1.1" "J_Servo2.1" "J_Servo3.1" "J_Servo4.1" "SPI1.1" "SWSerial1.1" "Serial0.1" "Serial1.1" "XBee3.GND" "XBee3.DTR" name="GND"
+
+    // Comms
+    circuit "ESP32-S3.GPIO8" "I2C1.3" name="/Comms/GPIO8"
+    circuit "ESP32-S3.GPIO9" "I2C1.4" name="/Comms/GPIO9"
+    circuit "ESP32-S3.GPIO43" "Serial0.3" name="/Comms/GPIO43"
+    circuit "ESP32-S3.GPIO44" "Serial0.4" name="/Comms/GPIO44"
+    circuit "ESP32-S3.GPIO17" "Serial1.3" name="/Comms/GPIO17"
+    circuit "ESP32-S3.GPIO18" "Serial1.4" name="/Comms/GPIO18"
+    circuit "ESP32-S3.GPIO21" "SWSerial1.3" name="/Comms/GPIO21"
+    circuit "ESP32-S3.GPIO38" "SWSerial1.4" name="/Comms/GPIO38"
+
+    // SPI
+    circuit "ESP32-S3.GPIO10" "J3.DAT3" "R2.B" name="/SPI/GPIO10"
+    circuit "ESP32-S3.GPIO11" "J3.CMD" "R3.B" "SPI1.3" "XBee3.SPI_MOSI" name="/SPI/GPIO11"
+    circuit "ESP32-S3.GPIO12" "J3.CLK" "SPI1.4" "XBee3.SPI_CLK" name="/SPI/GPIO12"
+    circuit "ESP32-S3.GPIO13" "J3.DAT0" "R5.B" "SPI1.5" "XBee3.SPI_MISO" name="/SPI/GPIO13"
+    circuit "ESP32-S3.GPIO14" "SPI1.6" name="/SPI/GPIO14"
+    circuit "ESP32-S3.GPIO7" "XBee3.SPI_SSEL" name="/SPI/GPIO7"
+    circuit "ESP32-S3.GPIO15" "XBee3.ON_SLEEP" name="/SPI/GPIO15"
+    circuit "ESP32-S3.GPIO16" "XBee3.SPI_ATTN" name="/SPI/GPIO16"
+    // The schematic left this net unlabelled; the name is KiCad's generated one, kept so the
+    // PCB's copper does not move.
+    circuit "R1.B" "C1.A" "XBee3.RESET" name="Net-(XBee3-~{RESET})"
+
+    // Pins
+    circuit "ESP32-S3.GPIO1" "J_Analog1.3" name="/Pins/GPIO1"
+    circuit "ESP32-S3.GPIO2" "J_Analog2.3" name="/Pins/GPIO2"
+    circuit "ESP32-S3.GPIO39" "J_Digital1.3" name="/Pins/GPIO39"
+    circuit "ESP32-S3.GPIO40" "J_Digital2.3" name="/Pins/GPIO40"
+    circuit "ESP32-S3.GPIO41" "J_Digital3.3" name="/Pins/GPIO41"
+    circuit "ESP32-S3.GPIO42" "J_Digital4.3" name="/Pins/GPIO42"
+
+    // RC Control
+    circuit "ESP32-S3.GPIO47" "J_PPMIN1.3" name="/RC Control/GPIO47"
+
+    // Servos
+    circuit "ESP32-S3.GPIO3" "J_Servo1.3" name="/Servos/GPIO3"
+    circuit "ESP32-S3.GPIO4" "J_Servo2.3" name="/Servos/GPIO4"
+    circuit "ESP32-S3.GPIO5" "J_Servo3.3" name="/Servos/GPIO5"
+    circuit "ESP32-S3.GPIO6" "J_Servo4.3" name="/Servos/GPIO6"
+
+    // Spare pins, as marked no-connect on the schematic
+    nc "ESP32-S3.CHIP_PU" note="the DevKitC has its own reset circuit"
+    nc "ESP32-S3.GPIO0" "ESP32-S3.GPIO45" "ESP32-S3.GPIO46" note="straps, biased on the DevKitC"
+    nc "ESP32-S3.GPIO19" "ESP32-S3.GPIO20" note="USB D-/D+, used by the DevKitC's USB port"
+    nc "ESP32-S3.GPIO35" "ESP32-S3.GPIO36" "ESP32-S3.GPIO37" note="octal PSRAM on N16R8 DevKitCs"
+    nc "ESP32-S3.GPIO48" note="spare"
+    nc "J3.DAT1" "J3.DAT2" note="unused in SPI mode"
+    nc "J3.DET_A" "J3.DET_B" note="card detect switch unused"
+    nc "XBee3.DOUT" "XBee3.DIN" "XBee3.CTS" "XBee3.RTS" note="UART unused; the host talks SPI"
+    nc "XBee3.AD0" "XBee3.ASSOCIATE" "XBee3.PWM1" "XBee3.RSSI_PWM" note="spare"
+    nc "XBee3.RESERVED1" "XBee3.RESERVED2" note="reserved, do not connect"
+}

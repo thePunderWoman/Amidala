@@ -87,7 +87,7 @@ The Amidala PCB is a purpose-built carrier for the ESP32-S3, designed to consoli
 >
 > Likewise, UART1 and UART2 default to the dome drive and drive system's serial link respectively (matching the reference wiring), but either can be reassigned to the other from the web UI's Serial Ports page — e.g. if your build's wiring swaps which header the RoboClaw is actually connected to. UART0 always carries the primary serial-out / WCB mesh path and isn't reassignable.
 
-> **[PCB details, schematics, and BOM →](PCB/)**
+> **[PCB details, Stackup circuit design, and BOM →](PCB/)**
 
 ---
 
