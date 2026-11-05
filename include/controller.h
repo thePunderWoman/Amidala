@@ -85,6 +85,7 @@ private:
 #include "jevois_console.h"
 #include "rdh_serial.h"
 #include "xbee_remote.h"
+#include "motor_lock.h"
 #include "snips_downlink.h"
 #include "snips_remote.h"
 #include "xbee_at_session.h"
@@ -200,13 +201,55 @@ public:
 
   inline void toggleMute() { fAudio.toggleMute(); }
 
-  // Set by the web UI's E-STOP (and the OTA upload's automatic one) and
-  // cleared by Resume -- see triggerEstop()/triggerResume() in
-  // src/wifi_ap.cpp. The lag-based safety stop and controller-disconnect
-  // stops also call emergencyStop() but recover on their own, so they don't
-  // count. Reported to Snips controllers' status screens.
-  void setEstopActive(bool active) { fEstopActive = active; }
-  bool isEstopActive() const { return fEstopActive; }
+  // E-stop: the web UI's E-STOP, the OTA upload's automatic one, or a
+  // ButtonAction::kEstop button. Stops and disables the drive and dome,
+  // broadcasts the estopstr= commands, and blocks re-enabling (see
+  // motor_lock.h) until resume(). The lag-based safety stop and
+  // controller-disconnect stops also call emergencyStop() but recover on
+  // their own, so they don't count. Reported to Snips controllers' status
+  // screens.
+  void estop() {
+    fMotorLock.setEstop(true);
+    emergencyStop();
+    domeEmergencyStop();
+    for (uint8_t i = 0; i < params.estopCmdCount; i++)
+      sendSerialString(params.EstopCmds[i].str);
+  }
+
+  // Clears the e-stop, broadcasts the resumestr= commands, and re-enables
+  // the drive and dome unless motors are also switched off.
+  void resume() {
+    fMotorLock.setEstop(false);
+    enableController();
+    enableDomeController();
+    for (uint8_t i = 0; i < params.resumeCmdCount; i++)
+      sendSerialString(params.ResumeCmds[i].str);
+  }
+
+  void toggleEstop() {
+    if (isEstopActive()) resume();
+    else estop();
+  }
+
+  bool isEstopActive() const { return fMotorLock.estopActive(); }
+
+  // "Motors on/off" (ButtonAction::kMotorsToggle): stops and disables the
+  // drive and dome without an e-stop broadcast, and keeps them off until
+  // switched back on. Reported to Snips controllers as motors disabled.
+  void setMotorsDisabled(bool disabled) {
+    fMotorLock.setMotorsDisabled(disabled);
+    if (disabled) {
+      emergencyStop();
+      domeEmergencyStop();
+    } else {
+      enableController();
+      enableDomeController();
+    }
+  }
+
+  void toggleMotors() { setMotorsDisabled(!areMotorsDisabled()); }
+
+  bool areMotorsDisabled() const { return fMotorLock.motorsDisabled(); }
 
   // Whether the dome is wandering on its own. Only the RoboClaw dome drive
   // tracks this; the RDH auto dome serial link just toggles it blind, so
@@ -400,7 +443,11 @@ public:
 #endif
   }
 
+  // No-op while an e-stop or motors-off is in effect (see motor_lock.h), so
+  // a reconnecting remote or a recovered safety stop can't bring the drive
+  // back behind it.
   void enableController() {
+    if (!fMotorLock.allowsEnable()) return;
 #ifdef DRIVE_SYSTEM
     fTankDrive->setEnable(true);
 #endif
@@ -416,7 +463,9 @@ public:
   // Defined in src/controller.cpp — references servoDispatch global.
   void emergencyStop();
 
+  // Gated the same way as enableController().
   void enableDomeController() {
+    if (!fMotorLock.allowsEnable()) return;
 #ifdef DOME_DRIVE
     fDomeDrive->setEnable(true);
 #endif
@@ -504,7 +553,7 @@ private:
   bool fMinimal = true;
   bool fAltHeld = false;
   uint32_t fLastMuteBtnUpTime = 0;
-  bool fEstopActive = false;
+  MotorLock fMotorLock;
   bool fDblPressActive[MAX_BUTTONS] = {};
   uint32_t fDblPressTime[MAX_BUTTONS] = {};
   uint32_t fDriveStateMillis = 0;

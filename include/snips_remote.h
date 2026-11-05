@@ -50,6 +50,7 @@
 #include "snips_packet.h"
 
 class AmidalaController;
+class XBeePocketRemote;
 
 class SnipsRemote {
 public:
@@ -80,7 +81,8 @@ public:
 
   // Called once per animate() tick: ages out fConnected if no uplink has
   // arrived within `fst` ms, mirroring DriveController/DomeController's
-  // connect/disconnect lifecycle.
+  // connect/disconnect lifecycle. An uplink flagged kFlagShuttingDown
+  // disconnects straight away instead.
   void checkFailsafe(uint32_t fst);
 
   // Builds this controller's downlink reply: fixed handedness for this
@@ -122,6 +124,13 @@ public:
     return (num <= 8) ? (num - 1) : (SnipsButtons::kLeftUp + (num - 21));
   }
 
+  // The left (dome-bound) controller's stick click starts and ends gestures,
+  // like the XBee dome remote's own stick click (see snips_drive.h), so it's
+  // never dispatched as button 16 and can't be the alt or mute button.
+  static bool isGestureButton(Side side, unsigned bitIndex) {
+    return side == kLeft && bitIndex == SnipsButtons::kStickClick;
+  }
+
 private:
   unsigned buttonNumber(unsigned bitIndex) const { return buttonNumberFor(fSide, bitIndex); }
   bool ownsButtonNumber(unsigned num) const { return ownsButtonNumber(fSide, num); }
@@ -129,6 +138,12 @@ private:
     return bitIndexForButtonNumber(fSide, num);
   }
 
+  // The drive (right) or dome (left) remote this controller's stick feeds.
+  XBeePocketRemote &stickRemote() const;
+
+  // Marks this controller disconnected and clears the alt/mute state it
+  // owns, mirroring DriveController/DomeController::onDisconnect().
+  void disconnect();
 
   AmidalaController *fDriver;
   Side fSide;

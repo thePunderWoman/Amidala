@@ -580,6 +580,8 @@ static void parseButtonAction(ButtonAction& b, const String& value) {
         break;
     }
     case ButtonAction::kHCRMuse:
+    case ButtonAction::kEstop:
+    case ButtonAction::kMotorsToggle:
         b.action = type;
         if (c1 > 0) b.serialid = (uint16_t)value.substring(c1 + 1).toInt();
         break;
@@ -1319,21 +1321,13 @@ static void handleApiConfigPost() {
 static void triggerEstop() {
     monAppend("! EMERGENCY STOP", 'i');
     if (!sCtrl) return;
-    sCtrl->setEstopActive(true);
-    sCtrl->emergencyStop();
-    sCtrl->domeEmergencyStop();
-    for (uint8_t i = 0; i < sCtrl->params.estopCmdCount; i++)
-        sCtrl->sendSerialString(sCtrl->params.EstopCmds[i].str);
+    sCtrl->estop();
 }
 
 static void triggerResume() {
     monAppend("RESUME", 'i');
     if (!sCtrl) return;
-    sCtrl->setEstopActive(false);
-    sCtrl->enableController();
-    sCtrl->enableDomeController();
-    for (uint8_t i = 0; i < sCtrl->params.resumeCmdCount; i++)
-        sCtrl->sendSerialString(sCtrl->params.ResumeCmds[i].str);
+    sCtrl->resume();
 }
 
 static void handleApiEstop() {

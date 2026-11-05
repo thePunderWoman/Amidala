@@ -11620,9 +11620,11 @@ var SNIPS_BTN_NAMES = [
 
 // Which button numbers belong to which physical Snips controller -- see
 // the numbering comment above. Rendered/iterated explicitly (not as a
-// numeric range) since Right's set isn't contiguous.
+// numeric range) since Right's set isn't contiguous. The left controller's
+// Stick Click (16) isn't listed: it starts/ends gesture drawing, like the
+// dome remote's own stick click (SnipsRemote::isGestureButton()).
 var SNIPS_RIGHT_BUTTONS = [1, 2, 3, 4, 5, 6, 7, 8, 21, 22, 23, 24];
-var SNIPS_LEFT_BUTTONS  = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+var SNIPS_LEFT_BUTTONS  = [9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20];
 
 // Single Bluetooth gamepad -- one physical controller, so no Right/Left
 // split. Numbering matches BTGamepad::_dispatchButtons() (src/bt_gamepad.cpp):
@@ -11641,7 +11643,7 @@ var BT_BTN_NAMES = {
 var BT_BUTTONS = [10, 11, 12, 13, 1, 2, 3, 4, 5];
 
 var CTRL_TYPE_NOTES = {
-  '1': 'Button mapping (press/long-press/alt/double-press) is live for Snips Controllers, including the stateful Left/Right Up/Down buttons (Volume/Drive Throttle step, or anything else). Stick/trigger input is not wired up yet.',
+  '1': 'The right controller’s stick drives and the left controller’s stick turns the dome. The left controller’s stick click starts/ends gesture drawing (see the Gestures tab) and isn’t configurable here. Trigger input isn’t wired up yet.',
   '2': 'Right stick click starts/ends gesture drawing exactly like the dome remote’s own stick click (see the Gestures tab) and isn’t configurable here. D-pad, Start/Select/PS, and a few reserved slots aren’t configurable yet.'
 };
 
@@ -11736,6 +11738,10 @@ function actionOptions(sel) {
     });
     h += '</optgroup>';
   }
+  h += '<optgroup label="Safety">';
+  h += opt('12', 'E-stop / Resume', sel);
+  h += opt('13', 'Motors On/Off',   sel);
+  h += '</optgroup>';
   h += '<optgroup label="Special">';
   h += opt('altbtn',     'Set as Alt Modifier', sel);
   h += opt('mutebutton', 'Set as Mute Button',  sel);
@@ -11751,6 +11757,8 @@ function actToVal(act) {
   if (act.t === 9) return '9,' + (act.x || 0);
   if (act.t === 10) return '10,' + (act.x || 0) + ',' + (act.y || 0);
   if (act.t === 11) return '11,' + (act.x || 0);
+  if (act.t === 12) return '12';
+  if (act.t === 13) return '13';
   return '0';
 }
 
@@ -11878,6 +11886,7 @@ function renderButtons() {
   }
 
   if (!isSnips && !isBT) h += '<div class="gest-note" style="font-size:.65rem;margin:0">Left Stick Press (button 10) initiates gesture sequences and is not configurable here.</div>';
+  if (isSnips) h += '<div class="gest-note" style="font-size:.65rem;margin:0">The left Snips controller’s stick click starts and ends gestures; draw them with the left stick.</div>';
 
   h += '</div>';
   document.getElementById('main').innerHTML = h;
