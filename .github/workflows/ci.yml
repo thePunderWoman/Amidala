@@ -7,6 +7,41 @@ on:
     branches: [main]
 
 jobs:
+  # ── Which parts of the repo did this change touch? ────────────────────────
+  # PRs only run the jobs relevant to what they change: a PCB-only PR skips
+  # the firmware tests and builds, a firmware-only PR skips the Stackup check.
+  # Pushes to main always run everything. Editing this workflow counts as both.
+  # Outputs are 'true'/'false' with the push-to-main override already applied.
+  changes:
+    name: Detect Changed Areas
+    runs-on: ubuntu-latest
+    outputs:
+      firmware: ${{ github.event_name != 'pull_request' || steps.filter.outputs.firmware == 'true' }}
+      pcb: ${{ github.event_name != 'pull_request' || steps.filter.outputs.pcb == 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            firmware:
+              - 'src/**'
+              - 'include/**'
+              - 'test/**'
+              - 'lib/**'
+              - 'web/**'
+              - 'scripts/**'
+              - 'partitions/**'
+              - 'platformio.ini'
+              - 'sdkconfig.defaults'
+              - '.github/workflows/ci.yml'
+            pcb:
+              - 'PCB/**'
+              - 'ci/**'
+              - 'manifest.kdl'
+              - '.github/workflows/ci.yml'
+
   # ── Native unit tests + coverage ──────────────────────────────────────────
   # Runs on macOS so the -isysroot path in platformio.ini matches CI and local
   # development without modification. Real firmware compilation is verified
@@ -22,6 +57,8 @@ jobs:
   # coverage improves rather than leaving it as a permanent floor.
   test:
     name: Native Unit Tests + Coverage
+    needs: changes
+    if: needs.changes.outputs.firmware == 'true'
     runs-on: macos-latest
 
     steps:
@@ -65,6 +102,8 @@ jobs:
   # did the KiCad schematics), so it would fail on every part.
   stackup:
     name: Stackup Design + PCB Sync
+    needs: changes
+    if: needs.changes.outputs.pcb == 'true'
     runs-on: ubuntu-24.04
 
     steps:
@@ -113,9 +152,18 @@ jobs:
   # nothing enforced that. Runs on ubuntu-latest, matching
   # build-firmware-matrix.yml (unlike the native job above, cross-compiling
   # for ESP32-S3 doesn't depend on the host OS's sysroot).
+  #
+  # Gated per step rather than per job: these two legs are required status
+  # checks on main, and a matrix job skipped at the job level never expands,
+  # so GitHub would report one skipped "Firmware Build (${{ matrix.board }})"
+  # check and leave the required per-board checks pending forever. Skipping
+  # the steps instead keeps the real check names and reports success.
   build-firmware:
     name: Firmware Build (${{ matrix.board }})
+    needs: changes
     runs-on: ubuntu-latest
+    env:
+      RUN_FIRMWARE: ${{ needs.changes.outputs.firmware }}
     strategy:
       fail-fast: false
       matrix:
@@ -123,12 +171,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        if: env.RUN_FIRMWARE == 'true'
 
       - uses: actions/setup-python@v6
+        if: env.RUN_FIRMWARE == 'true'
         with:
           python-version: "3.11"
 
       - name: Cache PlatformIO
+        if: env.RUN_FIRMWARE == 'true'
         uses: actions/cache@v6
         with:
           path: |
@@ -138,9 +189,15 @@ jobs:
           restore-keys: ${{ runner.os }}-pio-
 
       - name: Install PlatformIO Core
+        if: env.RUN_FIRMWARE == 'true'
         run: pip install --upgrade platformio
 
+      - name: Skipped (no firmware changes)
+        if: env.RUN_FIRMWARE != 'true'
+        run: echo "This PR doesn't touch firmware paths; nothing to build."
+
       - name: Build firmware
+        if: env.RUN_FIRMWARE == 'true'
         run: pio run -e ${{ matrix.board }}
 
   # ── Non-default drive/dome header paths ───────────────────────────────────
@@ -157,6 +214,8 @@ jobs:
   # flash/PSRAM config, not which headers get included.
   build-firmware-combos:
     name: Firmware Build (drive=${{ matrix.drive.slug }} / dome=${{ matrix.dome.slug }})
+    needs: changes
+    if: needs.changes.outputs.firmware == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
