@@ -152,18 +152,11 @@ jobs:
   # nothing enforced that. Runs on ubuntu-latest, matching
   # build-firmware-matrix.yml (unlike the native job above, cross-compiling
   # for ESP32-S3 doesn't depend on the host OS's sysroot).
-  #
-  # Gated per step rather than per job: these two legs are required status
-  # checks on main, and a matrix job skipped at the job level never expands,
-  # so GitHub would report one skipped "Firmware Build (${{ matrix.board }})"
-  # check and leave the required per-board checks pending forever. Skipping
-  # the steps instead keeps the real check names and reports success.
   build-firmware:
     name: Firmware Build (${{ matrix.board }})
     needs: changes
+    if: needs.changes.outputs.firmware == 'true'
     runs-on: ubuntu-latest
-    env:
-      RUN_FIRMWARE: ${{ needs.changes.outputs.firmware }}
     strategy:
       fail-fast: false
       matrix:
@@ -171,15 +164,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-        if: env.RUN_FIRMWARE == 'true'
 
       - uses: actions/setup-python@v6
-        if: env.RUN_FIRMWARE == 'true'
         with:
           python-version: "3.11"
 
       - name: Cache PlatformIO
-        if: env.RUN_FIRMWARE == 'true'
         uses: actions/cache@v6
         with:
           path: |
@@ -189,15 +179,9 @@ jobs:
           restore-keys: ${{ runner.os }}-pio-
 
       - name: Install PlatformIO Core
-        if: env.RUN_FIRMWARE == 'true'
         run: pip install --upgrade platformio
 
-      - name: Skipped (no firmware changes)
-        if: env.RUN_FIRMWARE != 'true'
-        run: echo "This PR doesn't touch firmware paths; nothing to build."
-
       - name: Build firmware
-        if: env.RUN_FIRMWARE == 'true'
         run: pio run -e ${{ matrix.board }}
 
   # ── Non-default drive/dome header paths ───────────────────────────────────
@@ -249,3 +233,27 @@ jobs:
         env:
           PLATFORMIO_BUILD_FLAGS: "-D DRIVE_SYSTEM=${{ matrix.drive.value }} -D DOME_DRIVE=${{ matrix.dome.value }}"
         run: pio run -e esp32s3-n16r8
+
+  # ── Single required check ─────────────────────────────────────────────────
+  # The only status check main's ruleset requires. Jobs above may be skipped
+  # when a PR doesn't touch their area, and a skipped matrix job never reports
+  # its per-leg check names, so requiring those directly would block PRs.
+  # This job always runs, waits for everything, and fails if any job failed
+  # or was cancelled; skipped jobs count as passing. Add every new job to
+  # `needs` or it won't gate merges.
+  ci-result:
+    name: CI Result
+    if: always()
+    needs: [changes, test, stackup, build-firmware, build-firmware-combos]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check job results
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if echo "$RESULTS" | jq -e 'any(.[]; .result == "failure" or .result == "cancelled")' > /dev/null; then
+            echo "::error::One or more CI jobs failed or were cancelled."
+            exit 1
+          fi
