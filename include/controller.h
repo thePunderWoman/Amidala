@@ -85,6 +85,7 @@ private:
 #include "jevois_console.h"
 #include "rdh_serial.h"
 #include "xbee_remote.h"
+#include "snips_downlink.h"
 #include "snips_remote.h"
 #include "xbee_at_session.h"
 #include "params.h"
@@ -198,6 +199,31 @@ public:
   }
 
   inline void toggleMute() { fAudio.toggleMute(); }
+
+  // Set by the web UI's E-STOP (and the OTA upload's automatic one) and
+  // cleared by Resume -- see triggerEstop()/triggerResume() in
+  // src/wifi_ap.cpp. The lag-based safety stop and controller-disconnect
+  // stops also call emergencyStop() but recover on their own, so they don't
+  // count. Reported to Snips controllers' status screens.
+  void setEstopActive(bool active) { fEstopActive = active; }
+  bool isEstopActive() const { return fEstopActive; }
+
+  // Whether the dome is wandering on its own. Only the RoboClaw dome drive
+  // tracks this; the RDH auto dome serial link just toggles it blind, so
+  // it reads false there.
+  bool isAutoDomeOn() const {
+#if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
+    return fDomeDrive && fDomeDrive->isRandomMode();
+#else
+    return false;
+#endif
+  }
+
+  // The last serial string a button or gesture sent, shown on Snips
+  // controllers as the running sequence (see snips_downlink.h) -- unless
+  // it's marked as a utility command (utility=, the Serial Commands page's
+  // "Utility" checkbox).
+  SnipsDownlink::SequenceTracker fSequences;
 
   // Maximum gap between two button-up events to count as a double-press.
   static const uint32_t DOUBLE_PRESS_MS = 400;
@@ -478,6 +504,7 @@ private:
   bool fMinimal = true;
   bool fAltHeld = false;
   uint32_t fLastMuteBtnUpTime = 0;
+  bool fEstopActive = false;
   bool fDblPressActive[MAX_BUTTONS] = {};
   uint32_t fDblPressTime[MAX_BUTTONS] = {};
   uint32_t fDriveStateMillis = 0;

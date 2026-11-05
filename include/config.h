@@ -115,6 +115,7 @@ private:
   bool cfg_sstr(const char *cmd);
   bool cfg_fav(const char *cmd);
   bool cfg_hidden(const char *cmd);
+  bool cfg_utility(const char *cmd);
   bool cfg_cat(const char *cmd);
   bool cfg_estopstr(const char *cmd);
   bool cfg_resumestr(const char *cmd);

@@ -713,14 +713,7 @@ bool AmidalaConfig::cfg_fav(const char *cmd) {
     return false;
   AmidalaParameters &params = fController->params;
   // Favorites: f=1,3,5 (comma-separated 1-based sstr indices)
-  const char* p = cmd; // past "f="
-  params.sstr_fav_cnt = 0;
-  while (*p && params.sstr_fav_cnt < MAX_SSTR_FAVS) {
-    uint16_t v = 0;
-    while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
-    if (v > 0) params.sstr_favs[params.sstr_fav_cnt++] = v;
-    if (*p == ',') p++;
-  }
+  params.sstr_fav_cnt = parseSstrIndexList(cmd, params.sstr_favs, MAX_SSTR_FAVS);
   // No explicit return in the original branch -- preserved fall-through to
   // false (see cfg_sstr()'s comment).
   return false;
@@ -731,17 +724,20 @@ bool AmidalaConfig::cfg_hidden(const char *cmd) {
     return false;
   AmidalaParameters &params = fController->params;
   // Hidden: hidden=2,4 (comma-separated 1-based sstr indices hidden from Droid Control)
-  const char* p = cmd; // past "hidden="
-  params.sstr_hidden_cnt = 0;
-  while (*p && params.sstr_hidden_cnt < MAX_SSTR_HIDDEN) {
-    uint16_t v = 0;
-    while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
-    if (v > 0) params.sstr_hidden[params.sstr_hidden_cnt++] = v;
-    if (*p == ',') p++;
-  }
+  params.sstr_hidden_cnt = parseSstrIndexList(cmd, params.sstr_hidden, MAX_SSTR_HIDDEN);
   // No explicit return in the original branch -- preserved fall-through to
   // false (see cfg_sstr()'s comment).
   return false;
+}
+
+bool AmidalaConfig::cfg_utility(const char *cmd) {
+  if (!startswith(cmd, "utility="))
+    return false;
+  // Utility: utility=1,4 (comma-separated 1-based sstr indices never shown on
+  // Snips controllers as the running sequence)
+  AmidalaParameters &params = fController->params;
+  params.sstr_util_cnt = parseSstrIndexList(cmd, params.sstr_util, MAX_SSTR_UTIL);
+  return true;
 }
 
 bool AmidalaConfig::cfg_cat(const char *cmd) {
@@ -758,14 +754,7 @@ bool AmidalaConfig::cfg_cat(const char *cmd) {
   if (nlen >= sizeof(cat->name)) nlen = sizeof(cat->name) - 1;
   memcpy(cat->name, val, nlen);
   cat->name[nlen] = '\0';
-  cat->cnt = 0;
-  const char* p = pipe + 1;
-  while (*p && cat->cnt < MAX_SSTR_CAT_ENTRIES) {
-    uint16_t v = 0;
-    while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
-    if (v > 0) cat->idx[cat->cnt++] = v;
-    if (*p == ',') p++;
-  }
+  cat->cnt = parseSstrIndexList(pipe + 1, cat->idx, MAX_SSTR_CAT_ENTRIES);
   params.sstr_cat_count++;
   // The original branch returns true on its two early-exit paths above
   // (table full, malformed/no '|') but falls through to false here on a
@@ -1466,6 +1455,7 @@ const AmidalaConfig::ConfigHandler AmidalaConfig::kConfigHandlers[] = {
     &AmidalaConfig::cfg_sstr,
     &AmidalaConfig::cfg_fav,
     &AmidalaConfig::cfg_hidden,
+    &AmidalaConfig::cfg_utility,
     &AmidalaConfig::cfg_cat,
     &AmidalaConfig::cfg_estopstr,
     &AmidalaConfig::cfg_resumestr,

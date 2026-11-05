@@ -21,6 +21,7 @@
 
 #include "arduino_mock.h"
 #include "snips_packet.h"
+#include "snips_downlink.h"
 #include "snips_buttons.h"
 #include "snips_remote.h"
 #include "button_dispatch.h"
@@ -35,13 +36,18 @@ void tearDown(void) {}
 // ---- Fake AmidalaController -------------------------------------------------
 // Mirrors just the surface SnipsRemote's methods use: params.altbtn/
 // mutebutton/volumewheel/altvolumewheel/driveSpeedPct/B[], fAudio's live
-// volume readback, and the button-dispatch/alt/mute methods.
+// volume/mute/muse readback, the e-stop/auto dome/sequence state, and the
+// button-dispatch/alt/mute methods.
 
 struct FakeAudio {
     // Returns a value that encodes which wheel was asked for, so tests can
     // confirm the right wheel selector was passed through without needing
     // to replicate AmidalaAudio's real channel-routing semantics.
     uint8_t getEffectiveVolume(uint8_t wheel) const { return (uint8_t)(40 + wheel); }
+    bool muted = false;
+    bool musing = false;
+    bool isMuted() const { return muted; }
+    bool isMusing() const { return musing; }
 };
 
 struct FakeParams {
@@ -63,6 +69,12 @@ struct FakeDriver {
     int longButtonCount[25] = {0};
     int muteBtnUpCount = 0;
     int resetMuteTimerCount = 0;
+
+    bool estop = false;
+    bool autoDome = false;
+    SnipsDownlink::SequenceTracker fSequences;
+    bool isEstopActive() const { return estop; }
+    bool isAutoDomeOn() const { return autoDome; }
 
     bool isAltHeld() const { return altHeld; }
     void setAltHeld(bool held) { altHeld = held; }
@@ -155,39 +167,26 @@ public:
             fDriver->resetMutePressTimer();
     }
 
-    void fillPairFields(const ButtonAction &action, char *outLabel, char *outValue) const {
-        outLabel[0] = '\0';
-        outValue[0] = '\0';
-        if (!fDriver) return;
-        switch (action.action) {
-        case ButtonAction::kVolumeStep: {
-            uint8_t wheel = (action.volstep.target && fDriver->params.altvolumewheel != 0)
-                                ? fDriver->params.altvolumewheel
-                                : fDriver->params.volumewheel;
-            uint8_t value = fDriver->fAudio.getEffectiveVolume(wheel);
-            snprintf(outLabel, 9, "%s", action.volstep.target ? "AltVol" : "Vol");
-            snprintf(outValue, 9, "%u", value);
-            break;
-        }
-        case ButtonAction::kThrottleStep:
-            snprintf(outLabel, 9, "%s", "Drive");
-            snprintf(outValue, 9, "%u", fDriver->params.driveSpeedPct);
-            break;
-        default:
-            break;
-        }
-    }
-
     Snips::DownlinkPacket buildDownlinkPacket() const {
-        Snips::DownlinkPacket pkt;
-        pkt.handedness = (fSide == SnipsRemote::kRight) ? Snips::DownlinkPacket::Handedness::kRight
-                                                         : Snips::DownlinkPacket::Handedness::kLeft;
-        if (!fDriver) return pkt;
-        unsigned leftUpButton = SnipsRemote::buttonNumberFor(fSide, SnipsButtons::kLeftUp);
-        unsigned rightUpButton = SnipsRemote::buttonNumberFor(fSide, SnipsButtons::kRightUp);
-        fillPairFields(fDriver->params.B[leftUpButton - 1], pkt.leftLabel, pkt.leftValue);
-        fillPairFields(fDriver->params.B[rightUpButton - 1], pkt.rightLabel, pkt.rightValue);
-        return pkt;
+        SnipsDownlink::DroidStatus status;
+        status.rightHand = fSide == SnipsRemote::kRight;
+        if (fDriver) {
+            const FakeParams &params = fDriver->params;
+            const uint8_t wheel = SnipsDownlink::volumeWheelFor(
+                params.B[SnipsRemote::buttonNumberFor(fSide, SnipsButtons::kLeftUp) - 1],
+                params.B[SnipsRemote::buttonNumberFor(fSide, SnipsButtons::kRightUp) - 1],
+                params.volumewheel, params.altvolumewheel);
+            status.volumePercent =
+                fDriver->fAudio.isMuted() ? 0 : fDriver->fAudio.getEffectiveVolume(wheel);
+            status.throttlePercent = params.driveSpeedPct;
+            status.estop = fDriver->isEstopActive();
+            status.muse = fDriver->fAudio.isMusing();
+            status.autoDome = fDriver->isAutoDomeOn();
+            const uint32_t now = millis();
+            status.sequenceId = fDriver->fSequences.id();
+            status.sequenceName = fDriver->fSequences.nameAt(now);
+        }
+        return SnipsDownlink::build(status);
     }
 
 private:
@@ -462,7 +461,7 @@ void test_checkfailsafe_leaves_other_sides_alt_state_alone() {
     TEST_ASSERT_TRUE(driver.isAltHeld());  // untouched
 }
 
-// ---- buildDownlinkPacket() / fillPairFields() (issue #204 phase 2) ----------
+// ---- buildDownlinkPacket() ----------------------------------------------
 
 void test_downlink_handedness_matches_side() {
     FakeDriver driver;
@@ -473,99 +472,80 @@ void test_downlink_handedness_matches_side() {
     TEST_ASSERT_TRUE(Snips::DownlinkPacket::Handedness::kLeft == left.buildDownlinkPacket().handedness);
 }
 
-void test_downlink_unassigned_pair_is_blank() {
-    FakeDriver driver;  // params.B[] all default-constructed to kNone
-    TestSnipsRemote r(&driver, TestSnipsRemote::Side::kRight);
-
+void test_downlink_without_driver_reports_only_handedness() {
+    TestSnipsRemote r(nullptr, TestSnipsRemote::Side::kRight);
     Snips::DownlinkPacket pkt = r.buildDownlinkPacket();
-    TEST_ASSERT_EQUAL_STRING("", pkt.leftLabel);
-    TEST_ASSERT_EQUAL_STRING("", pkt.leftValue);
-    TEST_ASSERT_EQUAL_STRING("", pkt.rightLabel);
-    TEST_ASSERT_EQUAL_STRING("", pkt.rightValue);
+    TEST_ASSERT_TRUE(Snips::DownlinkPacket::Handedness::kRight == pkt.handedness);
+    TEST_ASSERT_EQUAL_UINT8(Snips::DownlinkPacket::kUnknown, pkt.volumePercent);
+    TEST_ASSERT_EQUAL_UINT8(Snips::DownlinkPacket::kUnknown, pkt.throttlePercent);
 }
 
-void test_downlink_volumestep_shows_vol_label_and_live_value() {
+void test_downlink_volume_reads_main_wheel_without_a_volume_button() {
+    FakeDriver driver;  // params.B[] all kNone
+    driver.params.volumewheel = 2;
+    TestSnipsRemote r(&driver, TestSnipsRemote::Side::kRight);
+    TEST_ASSERT_EQUAL_UINT8(42, r.buildDownlinkPacket().volumePercent);  // 40 + wheel(2)
+}
+
+void test_downlink_volume_follows_this_controllers_alt_volume_button() {
     FakeDriver driver;
     driver.params.volumewheel = 2;
-    // Right controller's LeftUp is button 21 (index 20).
-    driver.params.B[20].action = ButtonAction::kVolumeStep;
-    driver.params.B[20].volstep.dir = 1;
-    driver.params.B[20].volstep.target = 0;  // plain
-    TestSnipsRemote r(&driver, TestSnipsRemote::Side::kRight);
-
-    Snips::DownlinkPacket pkt = r.buildDownlinkPacket();
-    TEST_ASSERT_EQUAL_STRING("Vol", pkt.leftLabel);
-    TEST_ASSERT_EQUAL_STRING("42", pkt.leftValue);  // FakeAudio: 40 + wheel(2)
-}
-
-void test_downlink_alt_volumestep_shows_altvol_label_and_routes_altvolumewheel() {
-    FakeDriver driver;
     driver.params.altvolumewheel = 3;
-    driver.params.B[20].action = ButtonAction::kVolumeStep;
-    driver.params.B[20].volstep.target = 1;  // alt
+    // Right controller's RightUp is button 23 (index 22).
+    driver.params.B[22].action = ButtonAction::kVolumeStep;
+    driver.params.B[22].volstep.target = 1;  // alt
     TestSnipsRemote r(&driver, TestSnipsRemote::Side::kRight);
+    TEST_ASSERT_EQUAL_UINT8(43, r.buildDownlinkPacket().volumePercent);  // 40 + wheel(3)
 
-    Snips::DownlinkPacket pkt = r.buildDownlinkPacket();
-    TEST_ASSERT_EQUAL_STRING("AltVol", pkt.leftLabel);
-    TEST_ASSERT_EQUAL_STRING("43", pkt.leftValue);  // FakeAudio: 40 + wheel(3)
+    // The left controller's buttons are 17-20, so it doesn't see button 23.
+    TestSnipsRemote left(&driver, TestSnipsRemote::Side::kLeft);
+    TEST_ASSERT_EQUAL_UINT8(42, left.buildDownlinkPacket().volumePercent);
 }
 
-void test_downlink_alt_volumestep_falls_through_to_volumewheel_when_altvolumewheel_zero() {
-    // Regression test: altvolumewheel==0 (the default) means
-    // AmidalaAudio::setAltVolumeNoResponse() routes via params.volumewheel
-    // instead (see its own fallthrough) -- the echo-back read must resolve
-    // the same channel, not read wheel 0 ("global"/fSavedVolV) while the
-    // write actually landed on whatever volumewheel points at.
+void test_downlink_volume_is_zero_while_muted() {
     FakeDriver driver;
-    driver.params.volumewheel = 2;      // chA
-    driver.params.altvolumewheel = 0;   // fall through to volumewheel
-    driver.params.B[20].action = ButtonAction::kVolumeStep;
-    driver.params.B[20].volstep.target = 1;  // alt
+    driver.fAudio.muted = true;
     TestSnipsRemote r(&driver, TestSnipsRemote::Side::kRight);
-
-    Snips::DownlinkPacket pkt = r.buildDownlinkPacket();
-    TEST_ASSERT_EQUAL_STRING("AltVol", pkt.leftLabel);
-    TEST_ASSERT_EQUAL_STRING("42", pkt.leftValue);  // FakeAudio: 40 + wheel(2), NOT wheel(0)
+    TEST_ASSERT_EQUAL_UINT8(0, r.buildDownlinkPacket().volumePercent);
 }
 
-void test_downlink_throttlestep_shows_drive_label_and_speed_pct() {
+void test_downlink_throttle_is_drive_speed_cap_and_follows_config() {
     FakeDriver driver;
     driver.params.driveSpeedPct = 65;
-    // Right controller's RightUp is button 23 (index 22).
-    driver.params.B[22].action = ButtonAction::kThrottleStep;
-    TestSnipsRemote r(&driver, TestSnipsRemote::Side::kRight);
-
-    Snips::DownlinkPacket pkt = r.buildDownlinkPacket();
-    TEST_ASSERT_EQUAL_STRING("Drive", pkt.rightLabel);
-    TEST_ASSERT_EQUAL_STRING("65", pkt.rightValue);
-}
-
-void test_downlink_reflects_config_change_without_a_button_press() {
-    // The display is recomputed fresh every call from current config +
-    // live state -- no edge-tracking, so a config change alone (e.g. via
-    // the web UI) shows up on the very next downlink with no button press
-    // needed.
-    FakeDriver driver;
-    TestSnipsRemote r(&driver, TestSnipsRemote::Side::kRight);
-    TEST_ASSERT_EQUAL_STRING("", r.buildDownlinkPacket().leftLabel);
-
-    driver.params.B[20].action = ButtonAction::kThrottleStep;
-    driver.params.driveSpeedPct = 80;
-    Snips::DownlinkPacket pkt = r.buildDownlinkPacket();
-    TEST_ASSERT_EQUAL_STRING("Drive", pkt.leftLabel);
-    TEST_ASSERT_EQUAL_STRING("80", pkt.leftValue);
-}
-
-void test_downlink_left_controller_uses_its_own_button_range() {
-    FakeDriver driver;
-    driver.params.driveSpeedPct = 50;
-    // Left controller's LeftUp is button 17 (index 16).
-    driver.params.B[16].action = ButtonAction::kThrottleStep;
     TestSnipsRemote r(&driver, TestSnipsRemote::Side::kLeft);
+    TEST_ASSERT_EQUAL_UINT8(65, r.buildDownlinkPacket().throttlePercent);
+    driver.params.driveSpeedPct = 80;  // e.g. set from the web UI
+    TEST_ASSERT_EQUAL_UINT8(80, r.buildDownlinkPacket().throttlePercent);
+}
+
+void test_downlink_flags_follow_estop_muse_and_auto_dome() {
+    FakeDriver driver;
+    TestSnipsRemote r(&driver, TestSnipsRemote::Side::kRight);
+    TEST_ASSERT_EQUAL_UINT8(0, r.buildDownlinkPacket().flags);
+
+    driver.estop = true;
+    driver.fAudio.musing = true;
+    driver.autoDome = true;
+    TEST_ASSERT_EQUAL_UINT8(Snips::DownlinkPacket::kFlagEstop | Snips::DownlinkPacket::kFlagMuse |
+                                Snips::DownlinkPacket::kFlagAutoDome,
+                            r.buildDownlinkPacket().flags);
+}
+
+void test_downlink_carries_latest_sequence_for_five_seconds() {
+    FakeDriver driver;
+    TestSnipsRemote r(&driver, TestSnipsRemote::Side::kRight);
+    mock_millis_value = 1000;
+    driver.fSequences.start("Leia Sequence", 1000);
 
     Snips::DownlinkPacket pkt = r.buildDownlinkPacket();
-    TEST_ASSERT_EQUAL_STRING("Drive", pkt.leftLabel);
-    TEST_ASSERT_EQUAL_STRING("50", pkt.leftValue);
+    TEST_ASSERT_EQUAL_UINT8(1, pkt.sequenceId);
+    TEST_ASSERT_EQUAL_STRING("Leia Sequence", pkt.sequenceName);
+    TEST_ASSERT_EQUAL_UINT8(Snips::DownlinkPacket::kUnknown, pkt.sequenceProgressPercent);
+
+    mock_millis_value = 1000 + SnipsDownlink::SequenceTracker::kShowMs;
+    pkt = r.buildDownlinkPacket();
+    TEST_ASSERT_EQUAL_UINT8(1, pkt.sequenceId);
+    TEST_ASSERT_EQUAL_STRING("", pkt.sequenceName);
 }
 
 // ---- main -------------------------------------------------------------------
@@ -596,13 +576,13 @@ int main(int argc, char **argv) {
     RUN_TEST(test_checkfailsafe_leaves_other_sides_alt_state_alone);
 
     RUN_TEST(test_downlink_handedness_matches_side);
-    RUN_TEST(test_downlink_unassigned_pair_is_blank);
-    RUN_TEST(test_downlink_volumestep_shows_vol_label_and_live_value);
-    RUN_TEST(test_downlink_alt_volumestep_shows_altvol_label_and_routes_altvolumewheel);
-    RUN_TEST(test_downlink_alt_volumestep_falls_through_to_volumewheel_when_altvolumewheel_zero);
-    RUN_TEST(test_downlink_throttlestep_shows_drive_label_and_speed_pct);
-    RUN_TEST(test_downlink_reflects_config_change_without_a_button_press);
-    RUN_TEST(test_downlink_left_controller_uses_its_own_button_range);
+    RUN_TEST(test_downlink_without_driver_reports_only_handedness);
+    RUN_TEST(test_downlink_volume_reads_main_wheel_without_a_volume_button);
+    RUN_TEST(test_downlink_volume_follows_this_controllers_alt_volume_button);
+    RUN_TEST(test_downlink_volume_is_zero_while_muted);
+    RUN_TEST(test_downlink_throttle_is_drive_speed_cap_and_follows_config);
+    RUN_TEST(test_downlink_flags_follow_estop_muse_and_auto_dome);
+    RUN_TEST(test_downlink_carries_latest_sequence_for_five_seconds);
 
     return UNITY_END();
 }

@@ -310,7 +310,7 @@ static bool rewriteSerialStrings() {
     return true;
 }
 
-// Rewrite f=, hidden=, and cat= lines in config.txt from current params state.
+// Rewrite f=, hidden=, utility= and cat= lines in config.txt from current params state.
 static bool rewriteSstrMeta() {
     if (!sCtrl) return false;
     String path = "/config.txt";
@@ -321,7 +321,8 @@ static bool rewriteSstrMeta() {
         while (f.available()) {
             String line = f.readStringUntil('\n');
             if (line.endsWith("\r")) line.remove(line.length() - 1);
-            if (!line.startsWith("f=") && !line.startsWith("hidden=") && !line.startsWith("cat="))
+            if (!line.startsWith("f=") && !line.startsWith("hidden=") &&
+                !line.startsWith("utility=") && !line.startsWith("cat="))
                 out += line + "\n";
         }
         f.close();
@@ -348,6 +349,16 @@ static bool rewriteSstrMeta() {
         for (uint8_t i = 0; i < p.sstr_hidden_cnt; i++) {
             if (i > 0) meta += ",";
             meta += String(p.sstr_hidden[i]);
+        }
+        meta += "\n";
+    }
+
+    // Utility
+    if (p.sstr_util_cnt > 0) {
+        meta += "utility=";
+        for (uint8_t i = 0; i < p.sstr_util_cnt; i++) {
+            if (i > 0) meta += ",";
+            meta += String(p.sstr_util[i]);
         }
         meta += "\n";
     }
@@ -970,14 +981,7 @@ static void handleApiConfigPost() {
     // sstr_favs — replace entire favorites list; value: "1,3,5"
     if (key == "sstr_favs") {
         AmidalaParameters& p = sCtrl->params;
-        p.sstr_fav_cnt = 0;
-        const char* ptr = value.c_str();
-        while (*ptr && p.sstr_fav_cnt < MAX_SSTR_FAVS) {
-            uint16_t v = 0;
-            while (*ptr >= '0' && *ptr <= '9') v = v * 10 + (*ptr++ - '0');
-            if (v > 0) p.sstr_favs[p.sstr_fav_cnt++] = v;
-            if (*ptr == ',') ptr++;
-        }
+        p.sstr_fav_cnt = parseSstrIndexList(value.c_str(), p.sstr_favs, MAX_SSTR_FAVS);
         bool ok = rewriteSstrMeta();
         sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed");
         return;
@@ -986,14 +990,16 @@ static void handleApiConfigPost() {
     // sstr_hidden — replace entire hidden list; value: "2,4"
     if (key == "sstr_hidden") {
         AmidalaParameters& p = sCtrl->params;
-        p.sstr_hidden_cnt = 0;
-        const char* ptr = value.c_str();
-        while (*ptr && p.sstr_hidden_cnt < MAX_SSTR_HIDDEN) {
-            uint16_t v = 0;
-            while (*ptr >= '0' && *ptr <= '9') v = v * 10 + (*ptr++ - '0');
-            if (v > 0) p.sstr_hidden[p.sstr_hidden_cnt++] = v;
-            if (*ptr == ',') ptr++;
-        }
+        p.sstr_hidden_cnt = parseSstrIndexList(value.c_str(), p.sstr_hidden, MAX_SSTR_HIDDEN);
+        bool ok = rewriteSstrMeta();
+        sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed");
+        return;
+    }
+
+    // sstr_util — replace entire utility list; value: "1,4"
+    if (key == "sstr_util") {
+        AmidalaParameters& p = sCtrl->params;
+        p.sstr_util_cnt = parseSstrIndexList(value.c_str(), p.sstr_util, MAX_SSTR_UTIL);
         bool ok = rewriteSstrMeta();
         sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed");
         return;
@@ -1036,14 +1042,7 @@ static void handleApiConfigPost() {
         String name = value.substring(0, pipe);
         strncpy(cat.name, name.c_str(), sizeof(cat.name) - 1);
         cat.name[sizeof(cat.name) - 1] = '\0';
-        cat.cnt = 0;
-        const char* ptr = value.c_str() + pipe + 1;
-        while (*ptr && cat.cnt < MAX_SSTR_CAT_ENTRIES) {
-            uint16_t v = 0;
-            while (*ptr >= '0' && *ptr <= '9') v = v * 10 + (*ptr++ - '0');
-            if (v > 0) cat.idx[cat.cnt++] = v;
-            if (*ptr == ',') ptr++;
-        }
+        cat.cnt = parseSstrIndexList(value.c_str() + pipe + 1, cat.idx, MAX_SSTR_CAT_ENTRIES);
         bool ok = rewriteSstrMeta();
         sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed");
         return;
@@ -1320,6 +1319,7 @@ static void handleApiConfigPost() {
 static void triggerEstop() {
     monAppend("! EMERGENCY STOP", 'i');
     if (!sCtrl) return;
+    sCtrl->setEstopActive(true);
     sCtrl->emergencyStop();
     sCtrl->domeEmergencyStop();
     for (uint8_t i = 0; i < sCtrl->params.estopCmdCount; i++)
@@ -1329,6 +1329,7 @@ static void triggerEstop() {
 static void triggerResume() {
     monAppend("RESUME", 'i');
     if (!sCtrl) return;
+    sCtrl->setEstopActive(false);
     sCtrl->enableController();
     sCtrl->enableDomeController();
     for (uint8_t i = 0; i < sCtrl->params.resumeCmdCount; i++)

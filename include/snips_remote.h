@@ -36,8 +36,8 @@
 // buttons (kLeftUp/kLeftDown/kRightUp/kRightDown) via
 // ButtonAction::kVolumeStep/kThrottleStep -- these are fully reassignable
 // like any other button, not fixed to a meaning by hardware position.
-// buildDownlinkPacket() derives the OLED echo-back display fresh on every
-// call from current config + live state (see its own comment), and
+// buildDownlinkPacket() derives the controller's status screen data fresh
+// on every call from current config + live state (see its own comment), and
 // xbee_spi.cpp sends the result after every processed uplink -- both to
 // show a changed value and because the physical controller treats a
 // downlink's absence for 5s as "disconnected" regardless of uplink flow.
@@ -50,7 +50,6 @@
 #include "snips_packet.h"
 
 class AmidalaController;
-struct ButtonAction;
 
 class SnipsRemote {
 public:
@@ -85,14 +84,12 @@ public:
   void checkFailsafe(uint32_t fst);
 
   // Builds this controller's downlink reply: fixed handedness for this
-  // Side, plus the Left/Right pair's label+value, freshly recomputed every
-  // call (not edge-tracked) from whichever ButtonAction is currently
-  // assigned to that pair's Up button -- kVolumeStep shows the current
-  // live volume, kThrottleStep the current drive speed cap, anything else
-  // (including unassigned) leaves both fields blank. This makes the
-  // display self-correcting if config changes while connected, with no
-  // separate change-tracking needed. Defined in src/snips_remote.cpp
-  // (needs full AmidalaController for params/live-value getters).
+  // Side plus the droid's live volume (whichever wheel this controller's own
+  // volume step button adjusts -- see SnipsDownlink::volumeWheelFor()),
+  // drive speed cap, e-stop/muse/auto dome state and the latest sequence.
+  // Recomputed every call rather than edge-tracked, so a config change
+  // shows on the very next downlink. Defined in src/snips_remote.cpp (needs
+  // the full AmidalaController); the wire decisions are in snips_downlink.h.
   Snips::DownlinkPacket buildDownlinkPacket() const;
 
   // Button numbering (see the file header comment for why this isn't a
@@ -132,10 +129,6 @@ private:
     return bitIndexForButtonNumber(fSide, num);
   }
 
-  // Fills one pair's label/value fields for buildDownlinkPacket(), based
-  // on `action` (that pair's Up button's currently-assigned press-layer
-  // ButtonAction). Defined in src/snips_remote.cpp.
-  void fillPairFields(const ButtonAction &action, char *outLabel, char *outValue) const;
 
   AmidalaController *fDriver;
   Side fSide;

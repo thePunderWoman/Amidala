@@ -64,45 +64,26 @@ void SnipsRemote::checkFailsafe(uint32_t fst) {
     fDriver->resetMutePressTimer();
 }
 
-void SnipsRemote::fillPairFields(const ButtonAction &action, char *outLabel,
-                                  char *outValue) const {
-  outLabel[0] = '\0';
-  outValue[0] = '\0';
-  if (!fDriver) return;
-
-  switch (action.action) {
-    case ButtonAction::kVolumeStep: {
-      // Must match AmidalaController::stepVolume()'s wheel resolution
-      // exactly (and AmidalaAudio::setAltVolumeNoResponse()'s own
-      // fallthrough) -- see its comment.
-      uint8_t wheel = (action.volstep.target && fDriver->params.altvolumewheel != 0)
-                          ? fDriver->params.altvolumewheel
-                          : fDriver->params.volumewheel;
-      uint8_t value = fDriver->fAudio.getEffectiveVolume(wheel);
-      snprintf(outLabel, Snips::DownlinkPacket::kFieldLength + 1, "%s",
-               action.volstep.target ? "AltVol" : "Vol");
-      snprintf(outValue, Snips::DownlinkPacket::kFieldLength + 1, "%u", value);
-      break;
-    }
-    case ButtonAction::kThrottleStep:
-      snprintf(outLabel, Snips::DownlinkPacket::kFieldLength + 1, "%s", "Drive");
-      snprintf(outValue, Snips::DownlinkPacket::kFieldLength + 1, "%u",
-               fDriver->params.driveSpeedPct);
-      break;
-    default:
-      break;  // not assigned to a step action -- leave both fields blank
-  }
-}
-
 Snips::DownlinkPacket SnipsRemote::buildDownlinkPacket() const {
-  Snips::DownlinkPacket pkt;
-  pkt.handedness = (fSide == kRight) ? Snips::DownlinkPacket::Handedness::kRight
-                                      : Snips::DownlinkPacket::Handedness::kLeft;
-  if (!fDriver) return pkt;
-
-  unsigned leftUpButton = buttonNumber(SnipsButtons::kLeftUp);
-  unsigned rightUpButton = buttonNumber(SnipsButtons::kRightUp);
-  fillPairFields(fDriver->params.B[leftUpButton - 1], pkt.leftLabel, pkt.leftValue);
-  fillPairFields(fDriver->params.B[rightUpButton - 1], pkt.rightLabel, pkt.rightValue);
-  return pkt;
+  SnipsDownlink::DroidStatus status;
+  status.rightHand = fSide == kRight;
+  if (fDriver) {
+    const AmidalaParameters &params = fDriver->params;
+    const uint8_t wheel = SnipsDownlink::volumeWheelFor(
+        params.B[buttonNumber(SnipsButtons::kLeftUp) - 1],
+        params.B[buttonNumber(SnipsButtons::kRightUp) - 1],
+        params.volumewheel, params.altvolumewheel);
+    status.volumePercent =
+        fDriver->fAudio.isMuted() ? 0 : fDriver->fAudio.getEffectiveVolume(wheel);
+    status.throttlePercent = params.driveSpeedPct;
+    status.estop = fDriver->isEstopActive();
+    status.muse = fDriver->fAudio.isMusing();
+    status.autoDome = fDriver->isAutoDomeOn();
+    // No motors-disabled control or droid battery reading exists yet, so
+    // those go out as off and unknown.
+    const uint32_t now = millis();
+    status.sequenceId = fDriver->fSequences.id();
+    status.sequenceName = fDriver->fSequences.nameAt(now);
+  }
+  return SnipsDownlink::build(status);
 }

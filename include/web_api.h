@@ -318,6 +318,14 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     }
     json += "],";
 
+    // Utility list — 1-based sstr indices never shown on Snips controllers
+    json += "\"sstr_util\":[";
+    for (uint8_t i = 0; i < p.sstr_util_cnt; i++) {
+        if (i > 0) json += ",";
+        json += String(p.sstr_util[i]);
+    }
+    json += "],";
+
     // Categories — [{name, idx:[...]}]
     json += "\"sstr_cats\":[";
     for (uint8_t i = 0; i < p.sstr_cat_count; i++) {

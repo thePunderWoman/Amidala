@@ -45,27 +45,46 @@ struct UplinkPacket {
   uint8_t flags = 0;            // bit0 = kFlagShuttingDown
 };
 
-// Amidala -> controller. Handedness is sent once at connect and is static
-// for the session; the Left/Right slot label+value are generic -- Amidala
-// assigns their meaning (volume, throttle, or anything else) and echoes
-// back whatever the current label/value should read. Not yet sent anywhere
-// in Phase 1 (no downlink transmit wiring exists yet) -- encode/decode are
-// implemented now anyway since they're cheap and keep the packet layer
-// self-contained for that follow-up.
+// Amidala -> controller, sent after every processed uplink (see
+// xbee_spi.cpp). Carries what the controller's status screen shows about
+// the droid -- built by SnipsDownlink::build() (snips_downlink.h). A
+// percentage of kUnknown means "nothing to report", shown as "--" (or, for
+// droid battery, left off the screen).
+//
+// Wire format (23 bytes): version, handedness, volume, throttle, flags,
+// droid battery, sequence id, sequence progress, then the sequence name as
+// a fixed 15-byte, zero-padded field. The controller rejects any downlink
+// whose first byte isn't kVersion; kVersion is deliberately not 0-2 so the
+// previous 33-byte format (which started with a handedness byte) never
+// matches it.
 struct DownlinkPacket {
   enum class Handedness : uint8_t { kUnknown = 0, kLeft = 1, kRight = 2 };
 
-  static constexpr size_t kFieldLength = 8;
+  static constexpr uint8_t kVersion = 0x10;
+  static constexpr uint8_t kUnknown = 0xFF;
+
+  static constexpr uint8_t kFlagEstop = 0x01;
+  static constexpr uint8_t kFlagMotorsDisabled = 0x02;
+  static constexpr uint8_t kFlagMuse = 0x04;
+  static constexpr uint8_t kFlagAutoDome = 0x08;
+
+  static constexpr size_t kSequenceNameLength = 15;
 
   Handedness handedness = Handedness::kUnknown;
-  char leftLabel[kFieldLength + 1] = {};
-  char leftValue[kFieldLength + 1] = {};
-  char rightLabel[kFieldLength + 1] = {};
-  char rightValue[kFieldLength + 1] = {};
+  uint8_t volumePercent = kUnknown;
+  uint8_t throttlePercent = kUnknown;  // the drive speed cap, not live speed
+  uint8_t flags = 0;
+  uint8_t droidBatteryPercent = kUnknown;
+  // Incremented each time a sequence starts (wrapping at 255), so the
+  // controller can tell the same sequence started twice from one that's
+  // still being reported.
+  uint8_t sequenceId = 0;
+  uint8_t sequenceProgressPercent = kUnknown;
+  char sequenceName[kSequenceNameLength + 1] = {};  // empty = none
 };
 
 constexpr size_t kUplinkEncodedSize = 8;
-constexpr size_t kDownlinkEncodedSize = 1 + 4 * DownlinkPacket::kFieldLength;  // 33
+constexpr size_t kDownlinkEncodedSize = 8 + DownlinkPacket::kSequenceNameLength;  // 23
 
 // Returns the number of bytes written (always kUplinkEncodedSize), or 0 if
 // outCapacity is too small.
@@ -78,7 +97,8 @@ bool decodeUplink(const uint8_t *buf, size_t length, UplinkPacket *out);
 // outCapacity is too small.
 size_t encodeDownlink(const DownlinkPacket &packet, uint8_t *outBuf, size_t outCapacity);
 
-// Returns false if length is too short to hold a full downlink packet.
+// Returns false if length is too short to hold a full downlink packet, or
+// its version byte isn't DownlinkPacket::kVersion.
 bool decodeDownlink(const uint8_t *buf, size_t length, DownlinkPacket *out);
 
 }  // namespace Snips

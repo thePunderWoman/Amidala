@@ -145,6 +145,7 @@ def parse_example_config(path):
         "sstr":        [],
         "sstr_favs":   [],  # list of 1-based sstr indices that are favorites
         "sstr_hidden": [],  # list of 1-based sstr indices hidden from Droid Control
+        "sstr_util":   [],  # list of 1-based sstr indices never shown on Snips as sequences
         "sstr_cats":   [],  # list of {name, idx: [...]} category objects
         "estop_cmds":  [],
         "resume_cmds": [],
@@ -271,6 +272,11 @@ def parse_example_config(path):
         # Hidden: hidden=2,4
         if key == "hidden":
             cfg["sstr_hidden"] = [int(x) for x in val.split(",") if x.strip().isdigit()]
+            continue
+
+        # Utility: utility=1,4
+        if key == "utility":
+            cfg["sstr_util"] = [int(x) for x in val.split(",") if x.strip().isdigit()]
             continue
 
         # Category: cat=Name|1,3,5
@@ -893,6 +899,9 @@ class _Handler(SimpleHTTPRequestHandler):
         # sstr_hidden — replace full hidden list; value: "2,4"
         elif key == "sstr_hidden":
             _config["sstr_hidden"] = [int(x) for x in value.split(",") if x.strip().isdigit()]
+        # sstr_util — replace full utility list; value: "1,4"
+        elif key == "sstr_util":
+            _config["sstr_util"] = [int(x) for x in value.split(",") if x.strip().isdigit()]
         # sstr_cat_del_N — delete category at index N
         elif key.startswith("sstr_cat_del_"):
             idx = int(key[13:])

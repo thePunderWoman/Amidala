@@ -48,6 +48,8 @@ void AmidalaConsole::process(ButtonAction &button) {
       DEBUG_PRINT("SERIAL: ");
       DEBUG_PRINTLN(params.Str[idx].str);
       fController->sendSerialString(params.Str[idx].str);
+      if (!params.isSstrUtility(idx + 1))
+        fController->fSequences.start(params.Str[idx].name, millis());
     }
     break;
   }
@@ -82,6 +84,8 @@ void AmidalaConsole::process(ButtonAction &button) {
       DEBUG_PRINT("SERIAL (side-effect): ");
       DEBUG_PRINTLN(params.Str[idx].str);
       fController->sendSerialString(params.Str[idx].str);
+      if (!params.isSstrUtility(idx + 1))
+        fController->fSequences.start(params.Str[idx].name, millis());
     }
   }
 }
