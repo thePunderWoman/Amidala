@@ -981,14 +981,7 @@ static void handleApiConfigPost() {
     // sstr_favs — replace entire favorites list; value: "1,3,5"
     if (key == "sstr_favs") {
         AmidalaParameters& p = sCtrl->params;
-        p.sstr_fav_cnt = 0;
-        const char* ptr = value.c_str();
-        while (*ptr && p.sstr_fav_cnt < MAX_SSTR_FAVS) {
-            uint16_t v = 0;
-            while (*ptr >= '0' && *ptr <= '9') v = v * 10 + (*ptr++ - '0');
-            if (v > 0) p.sstr_favs[p.sstr_fav_cnt++] = v;
-            if (*ptr == ',') ptr++;
-        }
+        p.sstr_fav_cnt = parseSstrIndexList(value.c_str(), p.sstr_favs, MAX_SSTR_FAVS);
         bool ok = rewriteSstrMeta();
         sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed");
         return;
@@ -997,14 +990,7 @@ static void handleApiConfigPost() {
     // sstr_hidden — replace entire hidden list; value: "2,4"
     if (key == "sstr_hidden") {
         AmidalaParameters& p = sCtrl->params;
-        p.sstr_hidden_cnt = 0;
-        const char* ptr = value.c_str();
-        while (*ptr && p.sstr_hidden_cnt < MAX_SSTR_HIDDEN) {
-            uint16_t v = 0;
-            while (*ptr >= '0' && *ptr <= '9') v = v * 10 + (*ptr++ - '0');
-            if (v > 0) p.sstr_hidden[p.sstr_hidden_cnt++] = v;
-            if (*ptr == ',') ptr++;
-        }
+        p.sstr_hidden_cnt = parseSstrIndexList(value.c_str(), p.sstr_hidden, MAX_SSTR_HIDDEN);
         bool ok = rewriteSstrMeta();
         sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed");
         return;
@@ -1056,14 +1042,7 @@ static void handleApiConfigPost() {
         String name = value.substring(0, pipe);
         strncpy(cat.name, name.c_str(), sizeof(cat.name) - 1);
         cat.name[sizeof(cat.name) - 1] = '\0';
-        cat.cnt = 0;
-        const char* ptr = value.c_str() + pipe + 1;
-        while (*ptr && cat.cnt < MAX_SSTR_CAT_ENTRIES) {
-            uint16_t v = 0;
-            while (*ptr >= '0' && *ptr <= '9') v = v * 10 + (*ptr++ - '0');
-            if (v > 0) cat.idx[cat.cnt++] = v;
-            if (*ptr == ',') ptr++;
-        }
+        cat.cnt = parseSstrIndexList(value.c_str() + pipe + 1, cat.idx, MAX_SSTR_CAT_ENTRIES);
         bool ok = rewriteSstrMeta();
         sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed");
         return;

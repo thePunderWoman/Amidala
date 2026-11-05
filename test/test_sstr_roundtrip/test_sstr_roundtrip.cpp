@@ -83,27 +83,13 @@ static std::string write_sstr_line(uint16_t id, const char* name, const char* st
 static void parse_favs_line(const char* line, AmidalaParameters& p) {
     const char* cmd = line;
     if (!startswith(cmd, "f=")) return;
-    p.sstr_fav_cnt = 0;
-    const char* ptr = cmd; // past "f="
-    while (*ptr && p.sstr_fav_cnt < MAX_SSTR_FAVS) {
-        uint16_t v = 0;
-        while (*ptr >= '0' && *ptr <= '9') v = v * 10 + (*ptr++ - '0');
-        if (v > 0) p.sstr_favs[p.sstr_fav_cnt++] = v;
-        if (*ptr == ',') ptr++;
-    }
+    p.sstr_fav_cnt = parseSstrIndexList(cmd, p.sstr_favs, MAX_SSTR_FAVS);
 }
 
 static void parse_hidden_line(const char* line, AmidalaParameters& p) {
     const char* cmd = line;
     if (!startswith(cmd, "hidden=")) return;
-    p.sstr_hidden_cnt = 0;
-    const char* ptr = cmd; // past "hidden="
-    while (*ptr && p.sstr_hidden_cnt < MAX_SSTR_HIDDEN) {
-        uint16_t v = 0;
-        while (*ptr >= '0' && *ptr <= '9') v = v * 10 + (*ptr++ - '0');
-        if (v > 0) p.sstr_hidden[p.sstr_hidden_cnt++] = v;
-        if (*ptr == ',') ptr++;
-    }
+    p.sstr_hidden_cnt = parseSstrIndexList(cmd, p.sstr_hidden, MAX_SSTR_HIDDEN);
 }
 
 static void parse_cat_line(const char* line, AmidalaParameters& p) {
@@ -118,14 +104,7 @@ static void parse_cat_line(const char* line, AmidalaParameters& p) {
     if (nlen >= sizeof(cat->name)) nlen = sizeof(cat->name) - 1;
     memcpy(cat->name, val, nlen);
     cat->name[nlen] = '\0';
-    cat->cnt = 0;
-    const char* ptr = pipe + 1;
-    while (*ptr && cat->cnt < MAX_SSTR_CAT_ENTRIES) {
-        uint16_t v = 0;
-        while (*ptr >= '0' && *ptr <= '9') v = v * 10 + (*ptr++ - '0');
-        if (v > 0) cat->idx[cat->cnt++] = v;
-        if (*ptr == ',') ptr++;
-    }
+    cat->cnt = parseSstrIndexList(pipe + 1, cat->idx, MAX_SSTR_CAT_ENTRIES);
     p.sstr_cat_count++;
 }
 
@@ -1096,6 +1075,37 @@ void test_full_sstr_meta_block_roundtrip() {
     TEST_ASSERT_EQUAL_STRING("Periscope", p.sstr_cats[1].name);
 }
 
+// ---- index lists with stray separators (regression) ---------------------------
+// The f=/hidden=/cat= parsers used to skip only commas, so any other
+// character between numbers (a space in a hand-edited config.txt, or a
+// hand-made /api/config POST) stopped the scan from advancing and hung the
+// loop forever. They now share parseSstrIndexList().
+
+void test_parse_hidden_with_space_separator_terminates() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    parse_hidden_line("hidden=1 2", p);
+    TEST_ASSERT_EQUAL(2, (int)p.sstr_hidden_cnt);
+    TEST_ASSERT_EQUAL(1, (int)p.sstr_hidden[0]);
+    TEST_ASSERT_EQUAL(2, (int)p.sstr_hidden[1]);
+}
+
+void test_parse_favs_with_trailing_junk_terminates() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    parse_favs_line("f=3, 5 ", p);
+    TEST_ASSERT_EQUAL(2, (int)p.sstr_fav_cnt);
+    TEST_ASSERT_EQUAL(3, (int)p.sstr_favs[0]);
+    TEST_ASSERT_EQUAL(5, (int)p.sstr_favs[1]);
+}
+
+void test_parse_cat_with_semicolon_separator_terminates() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    parse_cat_line("cat=Dome|1;3", p);
+    TEST_ASSERT_EQUAL(1, (int)p.sstr_cat_count);
+    TEST_ASSERT_EQUAL(2, (int)p.sstr_cats[0].cnt);
+    TEST_ASSERT_EQUAL(1, (int)p.sstr_cats[0].idx[0]);
+    TEST_ASSERT_EQUAL(3, (int)p.sstr_cats[0].idx[1]);
+}
+
 // ---- seq= (Snips sequences) -------------------------------------------------
 
 void test_parse_sstr_index_list() {
@@ -1224,6 +1234,9 @@ int main(int argc, char** argv) {
     RUN_TEST(test_example_config_buildFullConfigJson_first_sstr_name);
     RUN_TEST(test_example_config_buildFullConfigJson_sstr_count_matches);
 
+    RUN_TEST(test_parse_hidden_with_space_separator_terminates);
+    RUN_TEST(test_parse_favs_with_trailing_junk_terminates);
+    RUN_TEST(test_parse_cat_with_semicolon_separator_terminates);
     RUN_TEST(test_parse_sstr_index_list);
     RUN_TEST(test_parse_sstr_index_list_drops_zeros_and_stops_at_max);
     RUN_TEST(test_parse_sstr_index_list_treats_any_non_digit_as_separator);
