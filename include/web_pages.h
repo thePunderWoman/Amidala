@@ -6690,7 +6690,7 @@ function editRow(i, name, s, cat, fav, hid, seq, id) {
     +'<div class="ss-checkrow">'
     +'<label><input type="checkbox" id="ed-fav"'+(fav?' checked':'')+'>&#9733; Favorite</label>'
     +'<label><input type="checkbox" id="ed-hid"'+(hid?' checked':'')+'>Hide from Droid Control</label>'
-    +'<label title="When a button sends this, Snips controllers show its name as the running sequence"><input type="checkbox" id="ed-seq"'+(seq?' checked':'')+'>Snips sequence</label>'
+    +'<label title="When a button sends this, Snips controllers show its name as the running sequence"><input type="checkbox" id="ed-seq"'+(seq?' checked':'')+'>Sequence</label>'
     +'</div>'
     +'</div>'
     +'<div class="ss-acts">'
