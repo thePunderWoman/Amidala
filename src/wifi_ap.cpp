@@ -389,6 +389,46 @@ static bool rewriteSstrMeta() {
     return true;
 }
 
+// Rewrite sbind= lines (Snips analog bindings) in config.txt from params.
+static bool rewriteSnipsBindings() {
+    String path = "/config.txt";
+    File f = SD.open(path, "r");
+    String out;
+    out.reserve(8192);
+    if (f) {
+        while (f.available()) {
+            String line = f.readStringUntil('\n');
+            if (line.endsWith("\r")) line.remove(line.length() - 1);
+            if (!line.startsWith("sbind=")) out += line + "\n";
+        }
+        f.close();
+    } else {
+        out = "#START\n#END\n";
+    }
+
+    String lines;
+    char buf[48];
+    for (int i = 0; i < SnipsBindings::kMaxBindings; i++) {
+        const SnipsBindings::Binding& b = sCtrl->params.sbind[i];
+        if (!b.used) continue;
+        SnipsBindings::formatBinding(b, buf, sizeof(buf));
+        lines += "sbind=" + String(i + 1) + "," + String(buf) + "\n";
+    }
+
+    int endIdx = out.lastIndexOf("#END");
+    if (endIdx >= 0)
+        out = out.substring(0, endIdx) + lines + out.substring(endIdx);
+    else
+        out += lines;
+
+    SD.remove(path);
+    File wf = SD.open(path, "w");
+    if (!wf) return false;
+    wf.print(out);
+    wf.close();
+    return true;
+}
+
 static bool rewriteSafetyCmds() {
     String path = "/config.txt";
     File f = SD.open(path, "r");
@@ -994,6 +1034,24 @@ static void handleApiConfigPost() {
         AmidalaParameters& p = sCtrl->params;
         p.sstr_hidden_cnt = parseSstrIndexList(value.c_str(), p.sstr_hidden, MAX_SSTR_HIDDEN);
         bool ok = rewriteSstrMeta();
+        sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed");
+        return;
+    }
+
+    // sbind_N — Snips analog binding N (0-based); value
+    // "side,source,target,arg,inMin,inMax,invert", or empty to remove it.
+    if (key.startsWith("sbind_")) {
+        int idx = key.substring(6).toInt();
+        if (idx < 0 || idx >= SnipsBindings::kMaxBindings) {
+            sServer.send(400, "text/plain", "binding index out of range"); return;
+        }
+        SnipsBindings::Binding b;
+        if (!value.isEmpty() && !SnipsBindings::parseBinding(value.c_str(), &b)) {
+            sServer.send(400, "text/plain", "invalid binding"); return;
+        }
+        sCtrl->params.sbind[idx] = b;  // a default Binding is unused
+        sCtrl->clearSnipsBindingScales();
+        bool ok = rewriteSnipsBindings();
         sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed");
         return;
     }

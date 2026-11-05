@@ -83,6 +83,11 @@ struct FakeDriver {
     XBeePocketRemote fDriveStick;
     XBeePocketRemote fDomeStick;
 
+    int bindingUplinks[2] = {0, 0};
+    int bindingDisconnects[2] = {0, 0};
+    void applySnipsBindings(uint8_t side, const Snips::UplinkPacket &) { bindingUplinks[side]++; }
+    void snipsSideDisconnected(uint8_t side) { bindingDisconnects[side]++; }
+
     bool isAltHeld() const { return altHeld; }
     void setAltHeld(bool held) { altHeld = held; }
     void noteButtonUp(unsigned num)      { buttonUpCount[num]++; }
@@ -155,6 +160,7 @@ public:
             }
 
             SnipsDrive::applyUplink(pkt, fSide == SnipsRemote::kLeft, now, &stickRemote());
+            fDriver->applySnipsBindings(fSide, pkt);
         }
         fPrevButtonMask = pkt.buttonMask;
         triggerPercent = pkt.triggerPercent;
@@ -186,6 +192,7 @@ public:
         fPrevButtonMask = 0;
         for (ButtonLongPress &lp : fLongPress) lp = ButtonLongPress();
         if (!fDriver) return;
+        fDriver->snipsSideDisconnected(fSide);
         int altbtn = fDriver->params.altbtn;
         if (altbtn > 0 && SnipsRemote::ownsButtonNumber(fSide, (unsigned)altbtn))
             fDriver->setAltHeld(false);
@@ -535,6 +542,21 @@ void test_right_stick_feeds_drive_remote_left_feeds_dome() {
     TEST_ASSERT_TRUE(XBeePocketRemote::kXBee == driver.fDomeStick.type);
 }
 
+void test_uplinks_and_disconnects_reach_bindings_for_this_side() {
+    FakeDriver driver;
+    TestSnipsRemote left(&driver, TestSnipsRemote::Side::kLeft);
+    mock_millis_value = 1000;
+    Snips::UplinkPacket pkt;
+    left.onUplinkReceived(pkt);
+    left.onUplinkReceived(pkt);
+    TEST_ASSERT_EQUAL(2, driver.bindingUplinks[SnipsRemote::kLeft]);
+    TEST_ASSERT_EQUAL(0, driver.bindingUplinks[SnipsRemote::kRight]);
+
+    mock_millis_value = 3000;
+    left.checkFailsafe(500);
+    TEST_ASSERT_EQUAL(1, driver.bindingDisconnects[SnipsRemote::kLeft]);
+}
+
 void test_shutting_down_flag_disconnects_now() {
     FakeDriver driver;
     TestSnipsRemote r(&driver, TestSnipsRemote::Side::kRight);
@@ -683,6 +705,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_checkfailsafe_leaves_other_sides_alt_state_alone);
 
     RUN_TEST(test_right_stick_feeds_drive_remote_left_feeds_dome);
+    RUN_TEST(test_uplinks_and_disconnects_reach_bindings_for_this_side);
     RUN_TEST(test_shutting_down_flag_disconnects_now);
     RUN_TEST(test_button_held_across_disconnect_does_not_fire_on_reconnect);
     RUN_TEST(test_downlink_handedness_matches_side);

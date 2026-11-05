@@ -92,7 +92,7 @@ void test_uplink_encode_rejects_short_buffer() {
 }
 
 void test_uplink_decode_rejects_short_buffer() {
-    uint8_t buf[Snips::kUplinkEncodedSize - 1] = {};
+    uint8_t buf[Snips::kUplinkBaseSize - 1] = {};
     Snips::UplinkPacket out;
     TEST_ASSERT_FALSE(Snips::decodeUplink(buf, sizeof(buf), &out));
 }
@@ -108,6 +108,37 @@ void test_uplink_decode_accepts_oversized_buffer() {
     Snips::UplinkPacket out;
     TEST_ASSERT_TRUE(Snips::decodeUplink(buf, sizeof(buf), &out));
     TEST_ASSERT_EQUAL_UINT8(55, out.batteryPercent);
+}
+
+// ---- Uplink: IMU fields -------------------------------------------------------
+
+void test_uplink_imu_fields_decode() {
+    // Byte layout must match SnipsControllers' include/packet.h.
+    uint8_t buf[Snips::kUplinkEncodedSize] = {0x01, 0x02, 0, 0, 0, 0, 0, 0,
+                                              0x03, 0xD3, 0x5A, 0xF6, 0x3C, 0x00, 0x01, 0x01, 0x2C};
+    Snips::UplinkPacket out;
+    TEST_ASSERT_TRUE(Snips::decodeUplink(buf, sizeof(buf), &out));
+    TEST_ASSERT_EQUAL_HEX16(0x0102, out.buttonMask);
+    TEST_ASSERT_EQUAL_UINT8(0x03, out.imuFlags);
+    TEST_ASSERT_EQUAL_INT8(-45, out.pitchDeg);
+    TEST_ASSERT_EQUAL_INT8(90, out.rollDeg);
+    TEST_ASSERT_EQUAL_INT16(-2500, out.rateDeciDps[0]);
+    TEST_ASSERT_EQUAL_INT16(1, out.rateDeciDps[1]);
+    TEST_ASSERT_EQUAL_INT16(300, out.rateDeciDps[2]);
+
+    uint8_t again[Snips::kUplinkEncodedSize];
+    Snips::encodeUplink(out, again, sizeof(again));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(buf, again, sizeof(buf));
+}
+
+void test_uplink_from_older_controller_firmware_has_no_imu() {
+    // Controller firmware from before the IMU fields sends 8 bytes.
+    uint8_t buf[Snips::kUplinkBaseSize] = {0, 1, 50, 0, 0, 80, 0, 0};
+    Snips::UplinkPacket out;
+    out.imuFlags = 0xFF;
+    TEST_ASSERT_TRUE(Snips::decodeUplink(buf, sizeof(buf), &out));
+    TEST_ASSERT_EQUAL_UINT8(80, out.batteryPercent);
+    TEST_ASSERT_EQUAL_UINT8(0, out.imuFlags);
 }
 
 // ---- Downlink: byte layout and string field handling ------------------------
@@ -216,6 +247,8 @@ int main(int argc, char **argv) {
     RUN_TEST(test_uplink_decode_rejects_short_buffer);
     RUN_TEST(test_uplink_decode_accepts_oversized_buffer);
 
+    RUN_TEST(test_uplink_imu_fields_decode);
+    RUN_TEST(test_uplink_from_older_controller_firmware_has_no_imu);
     RUN_TEST(test_downlink_encode_byte_positions);
     RUN_TEST(test_downlink_round_trip);
     RUN_TEST(test_downlink_name_exactly_field_length_still_terminates);

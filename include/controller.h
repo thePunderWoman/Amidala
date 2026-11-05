@@ -182,9 +182,13 @@ public:
   // AmidalaConfig::cfg_drivespeedpct() (live config-key set), so a future
   // change to the formula (clamping, a non-linear curve, etc.) can't land
   // on only one of the three call sites.
+  //
+  // fDriveAccelScale (0..1) is a Snips drive-accelerator binding's share of
+  // that cap (see snips_bindings.h); 1 with none.
   inline void applyDriveSpeedPct() {
 #ifdef DRIVE_SYSTEM
-    if (fTankDrive) fTankDrive->setMaxSpeed(MAXIMUM_SPEED * (params.driveSpeedPct / 100.0f));
+    if (fTankDrive)
+      fTankDrive->setMaxSpeed(MAXIMUM_SPEED * (params.driveSpeedPct / 100.0f) * fDriveAccelScale);
 #endif
   }
 
@@ -250,6 +254,16 @@ public:
   void toggleMotors() { setMotorsDisabled(!areMotorsDisabled()); }
 
   bool areMotorsDisabled() const { return fMotorLock.motorsDisabled(); }
+
+  // Snips analog bindings (snips_bindings.h): applies what one uplink from
+  // `side` asks for, and lets go of `side`'s bindings when it disconnects
+  // (a bound accelerator or dome speed drops to 0). Defined in
+  // src/snips_bindings_apply.cpp.
+  void applySnipsBindings(uint8_t side, const Snips::UplinkPacket &pkt);
+  void snipsSideDisconnected(uint8_t side);
+  // Back to the unscaled speed cap and dome speed, e.g. after switching
+  // away from Snips controllers.
+  void clearSnipsBindingScales();
 
   // Whether the dome is wandering on its own. Only the RoboClaw dome drive
   // tracks this; the RDH auto dome serial link just toggles it blind, so
@@ -554,6 +568,22 @@ private:
   bool fAltHeld = false;
   uint32_t fLastMuteBtnUpTime = 0;
   MotorLock fMotorLock;
+  SnipsBindings::Evaluator fBindingEval;
+  // Per side (SnipsRemote::Side): a bound accelerator/dome speed's latest
+  // value, or -1 with no such binding on that side.
+  float fSideDriveScale[2] = {-1, -1};
+  float fSideDomeScale[2] = {-1, -1};
+  float fDriveAccelScale = 1.0f;
+  float fDomeAccelScale = 1.0f;
+  // Dome heading a rotation-rate binding steers toward, when a binding last
+  // steered the dome, and the last goToAngle() sent (it's rate-limited).
+  bool fBindingHeadingValid = false;
+  float fBindingHeading = 0;
+  uint32_t fBindingHeadingLastMs = 0;
+  int fBindingHeadingSent = -1;
+  uint32_t fBindingHeadingSentMs = 0;
+  void applyBindingScales();
+  void steerDomeTo(float degrees, uint32_t now);
   bool fDblPressActive[MAX_BUTTONS] = {};
   uint32_t fDblPressTime[MAX_BUTTONS] = {};
   uint32_t fDriveStateMillis = 0;

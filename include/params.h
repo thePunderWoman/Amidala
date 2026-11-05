@@ -32,6 +32,7 @@
 #include "core.h"
 #include "drive_config.h"
 #include "button_actions.h"
+#include "snips_bindings.h"
 #include "pin_assignment.h"
 #include "serial_assignment.h"
 
@@ -68,8 +69,10 @@
 // types because only one type is ever active at runtime: a saved
 // "button 7" means dome-stick "cross" under CONTROLLER_TYPE_XBEE/BLUETOOTH,
 // but Snips right-controller "Bumper" under CONTROLLER_TYPE_SNIPS. See the
-// altbtn/mutebutton comment below for both numbering schemes.
-#define MAX_BUTTONS 24
+// altbtn/mutebutton comment below for both numbering schemes. Slots 25-30
+// are virtual: a Snips analog binding used as a button (see
+// snips_bindings.h) presses button 25 + its index.
+#define MAX_BUTTONS 30
 
 // ---- Auxiliary string count -------------------------------------------------
 
@@ -441,6 +444,11 @@ struct AmidalaParameters {
   uint8_t  sstr_hidden_cnt;
   uint16_t sstr_util[MAX_SSTR_UTIL];
   uint8_t  sstr_util_cnt;
+
+  // ---- Snips analog bindings (sbind=) ----------------------------------------
+  // Trigger/tilt/rotation inputs mapped to droid outputs; see
+  // snips_bindings.h. Unused entries have used == false.
+  SnipsBindings::Binding sbind[SnipsBindings::kMaxBindings];
   SstrCat  sstr_cats[MAX_SSTR_CATS];
   uint8_t  sstr_cat_count;
 

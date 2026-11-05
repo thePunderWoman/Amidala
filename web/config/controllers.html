@@ -37,6 +37,10 @@
 .add-btn{background:none;border:1px solid var(--border);color:var(--text);cursor:pointer;padding:.3rem .9rem;font-size:.72rem;flex-shrink:0;border-radius:4px;transition:border-color .15s,color .15s}
 .add-btn:hover{border-color:var(--accent);color:var(--accent)}
 .empty-note{max-width:820px;margin:0 auto;padding:.8rem 0;font-size:.75rem;color:var(--muted)}
+.bind-row{max-width:820px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;padding:.5rem 0;border-bottom:1px solid var(--border);gap:.4rem}
+.bind-row select,.bind-row input[type=number]{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.25rem .4rem;font-family:inherit;font-size:.75rem;border-radius:4px}
+.bind-row input[type=number]{width:4.2rem}
+.bind-row label{font-size:.7rem;color:var(--muted);display:flex;align-items:center;gap:.25rem}
 .capture-status{max-width:820px;margin:0 auto;display:flex;align-items:center;padding:.7rem 0;gap:.6rem;border-bottom:1px solid var(--border);font-size:.78rem;color:var(--text)}
 .capture-status .cap-seq{font-family:ui-monospace,'SF Mono',Menlo,monospace;color:var(--accent);letter-spacing:.12em;min-width:1.5rem}
 .capture-status .cap-hint{flex:1;color:var(--muted)}
@@ -91,7 +95,8 @@ var SNIPS_BTN_NAMES = [
   'Macro 1', 'Macro 2', 'Macro 3', 'Macro 4', 'Macro 5', 'Macro 6', 'Bumper', 'Stick Click',   // 1-8 Right
   'Macro 1', 'Macro 2', 'Macro 3', 'Macro 4', 'Macro 5', 'Macro 6', 'Bumper', 'Stick Click',   // 9-16 Left
   'Left Up', 'Left Down', 'Right Up', 'Right Down',   // 17-20 Left's stateful
-  'Left Up', 'Left Down', 'Right Up', 'Right Down'    // 21-24 Right's stateful
+  'Left Up', 'Left Down', 'Right Up', 'Right Down',   // 21-24 Right's stateful
+  'Analog 1', 'Analog 2', 'Analog 3', 'Analog 4', 'Analog 5', 'Analog 6'   // 25-30 virtual (analog bindings)
 ];
 
 // Which button numbers belong to which physical Snips controller -- see
@@ -119,7 +124,7 @@ var BT_BTN_NAMES = {
 var BT_BUTTONS = [10, 11, 12, 13, 1, 2, 3, 4, 5];
 
 var CTRL_TYPE_NOTES = {
-  '1': 'The right controller’s stick drives and the left controller’s stick turns the dome. The left controller’s stick click starts/ends gesture drawing (see the Gestures tab) and isn’t configurable here. Trigger input isn’t wired up yet.',
+  '1': 'The right controller’s stick drives and the left controller’s stick turns the dome. The left controller’s stick click starts/ends gesture drawing (see the Gestures tab) and isn’t configurable here. Triggers, tilt and rotation are set under Analog Inputs below.',
   '2': 'Right stick click starts/ends gesture drawing exactly like the dome remote’s own stick click (see the Gestures tab) and isn’t configurable here. D-pad, Start/Select/PS, and a few reserved slots aren’t configurable yet.'
 };
 
@@ -363,9 +368,105 @@ function renderButtons() {
 
   if (!isSnips && !isBT) h += '<div class="gest-note" style="font-size:.65rem;margin:0">Left Stick Press (button 10) initiates gesture sequences and is not configurable here.</div>';
   if (isSnips) h += '<div class="gest-note" style="font-size:.65rem;margin:0">The left Snips controller’s stick click starts and ends gestures; draw them with the left stick.</div>';
+  if (isSnips) h += renderAnalogInputs(showAlt, altbtn, mutebutton, names);
 
   h += '</div>';
   document.getElementById('main').innerHTML = h;
+}
+
+// ---- Snips analog inputs (include/snips_bindings.h) -------------------------
+// Each slot maps one controller's trigger, tilt or rotation rate to a droid
+// output. Saved one slot at a time as key sbind_<i>, value
+// "side,source,target,arg,min,max,invert" (empty removes it). A slot used
+// as a button presses virtual button 25 + i, configured like any other.
+var BIND_SOURCES = ['Trigger', 'Tilt (pitch)', 'Tilt (roll)', 'Rotation X', 'Rotation Y', 'Rotation Z (turn)'];
+var BIND_TARGETS = ['— None —', 'Drive accelerator', 'Dome speed', 'Dome position', 'Servo', 'Button'];
+var BIND_TARGET_BUTTON = 5, BIND_TARGET_SERVO = 4, BIND_TARGET_DOMEPOS = 3;
+var BIND_UNITS = ['%', '°', '°', '°/s', '°/s', '°/s'];
+
+function bindDefaultRange(src) {
+  if (src === 0) return [0, 100];
+  if (src === 1 || src === 2) return [-45, 45];
+  return [-180, 180];
+}
+
+function bindings() { return _cfg.snips_bindings || []; }
+
+function bindCsv(b) {
+  return [b.s, b.src, b.t, b.a, b.min, b.max, b.inv].join(',');
+}
+
+function saveBinding(i, b) { apiPost('sbind_' + i, b ? bindCsv(b) : ''); }
+
+function editBinding(i, field, el) {
+  var b = Object.assign({}, bindings()[i]);
+  var v = el.type === 'checkbox' ? (el.checked ? 1 : 0) : Number(el.value);
+  b[field] = v;
+  if (field === 'src') {
+    var r = bindDefaultRange(v); b.min = r[0]; b.max = r[1];
+  }
+  if (field === 't' && v === BIND_TARGET_SERVO && !b.a) b.a = 1;
+  if (field === 't' && v === BIND_TARGET_DOMEPOS && !b.a) b.a = 90;
+  saveBinding(i, b);
+}
+
+function addBinding() {
+  var list = bindings();
+  for (var i = 0; i < list.length; i++) {
+    if (!list[i].u) {
+      saveBinding(i, {s: 0, src: 0, t: 1, a: 0, min: 0, max: 100, inv: 0});
+      return;
+    }
+  }
+  showToast('All analog input slots are in use', true);
+}
+
+function renderAnalogInputs(showAlt, altbtn, mutebutton, names) {
+  var list = bindings();
+  var h = '<div class="sec-hdr">Analog Inputs</div>';
+  h += '<div class="gest-note" style="font-size:.65rem;margin:0">Bind a controller’s trigger, tilt or rotation to the droid. ' +
+       'Range sets which input values map to 0 and 100%. Tilt and rotation need controller firmware with IMU support. ' +
+       'Dome position needs the RoboClaw dome drive: tilt sweeps the dome ± the given degrees around front, rotation turns it as far as the controller turns.</div>';
+  var any = false;
+  list.forEach(function(b, i) {
+    if (!b.u) return;
+    any = true;
+    var src = Number(b.src), t = Number(b.t);
+    h += '<div class="bind-row">';
+    h += '<select name="bind-' + i + '-side" onchange="editBinding(' + i + ',\'s\',this)">' +
+         opt('0', 'Right', String(b.s)) + opt('1', 'Left', String(b.s)) + '</select>';
+    h += '<select name="bind-' + i + '-src" onchange="editBinding(' + i + ',\'src\',this)">';
+    BIND_SOURCES.forEach(function(l, k) { h += opt(String(k), l, String(src)); });
+    h += '</select>';
+    h += '<select name="bind-' + i + '-tgt" onchange="editBinding(' + i + ',\'t\',this)">';
+    BIND_TARGETS.forEach(function(l, k) {
+      h += opt(String(k), k === BIND_TARGET_BUTTON ? 'Button (Analog ' + (i + 1) + ')' : l, String(t));
+    });
+    h += '</select>';
+    if (t === BIND_TARGET_SERVO) {
+      h += '<label>channel <input type="number" name="bind-' + i + '-arg" min="1" max="8" value="' + b.a + '" onchange="editBinding(' + i + ',\'a\',this)"></label>';
+    }
+    if (t === BIND_TARGET_DOMEPOS && src <= 2) {
+      h += '<label>± <input type="number" name="bind-' + i + '-arg" min="1" max="180" value="' + b.a + '" onchange="editBinding(' + i + ',\'a\',this)">°</label>';
+    }
+    if (!(t === BIND_TARGET_DOMEPOS && src >= 3)) {
+      h += '<label>from <input type="number" name="bind-' + i + '-min" value="' + b.min + '" onchange="editBinding(' + i + ',\'min\',this)"></label>';
+      h += '<label>to <input type="number" name="bind-' + i + '-max" value="' + b.max + '" onchange="editBinding(' + i + ',\'max\',this)">' + BIND_UNITS[src] + '</label>';
+    }
+    h += '<label><input type="checkbox" name="bind-' + i + '-inv"' + (Number(b.inv) ? ' checked' : '') + ' onchange="editBinding(' + i + ',\'inv\',this)">Invert</label>';
+    h += '<button class="gest-del" onclick="saveBinding(' + i + ', null)" title="Remove">&#10005;</button>';
+    h += '</div>';
+  });
+  if (!any) h += '<div class="empty-note">No analog inputs bound.</div>';
+  h += '<div class="add-form"><button class="add-btn" onclick="addBinding()">+ Add Analog Input</button></div>';
+
+  var buttonSlots = [];
+  list.forEach(function(b, i) { if (b.u && Number(b.t) === BIND_TARGET_BUTTON) buttonSlots.push(25 + i); });
+  if (buttonSlots.length) {
+    h += '<div class="sub-hdr">Analog Inputs Used as Buttons</div>';
+    buttonSlots.forEach(function(n) { h += renderBtnCard(n, showAlt, altbtn, mutebutton, names); });
+  }
+  return h;
 }
 
 function renderBtnCard(n, showAlt, altbtn, mutebutton, names) {

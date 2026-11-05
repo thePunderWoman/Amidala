@@ -40,11 +40,19 @@ size_t encodeUplink(const UplinkPacket &packet, uint8_t *outBuf, size_t outCapac
   outBuf[5] = packet.batteryPercent;
   outBuf[6] = static_cast<uint8_t>(packet.chargeState);
   outBuf[7] = packet.flags;
+  outBuf[8] = packet.imuFlags;
+  outBuf[9] = static_cast<uint8_t>(packet.pitchDeg);
+  outBuf[10] = static_cast<uint8_t>(packet.rollDeg);
+  for (int axis = 0; axis < 3; ++axis) {
+    const uint16_t rate = static_cast<uint16_t>(packet.rateDeciDps[axis]);
+    outBuf[11 + 2 * axis] = static_cast<uint8_t>(rate >> 8);
+    outBuf[12 + 2 * axis] = static_cast<uint8_t>(rate & 0xFF);
+  }
   return kUplinkEncodedSize;
 }
 
 bool decodeUplink(const uint8_t *buf, size_t length, UplinkPacket *out) {
-  if (length < kUplinkEncodedSize) {
+  if (length < kUplinkBaseSize) {
     return false;
   }
   out->buttonMask = (static_cast<uint16_t>(buf[0]) << 8) | buf[1];
@@ -54,6 +62,17 @@ bool decodeUplink(const uint8_t *buf, size_t length, UplinkPacket *out) {
   out->batteryPercent = buf[5];
   out->chargeState = static_cast<ChargeState>(buf[6]);
   out->flags = buf[7];
+  if (length < kUplinkEncodedSize) {
+    out->imuFlags = 0;
+    return true;
+  }
+  out->imuFlags = buf[8];
+  out->pitchDeg = static_cast<int8_t>(buf[9]);
+  out->rollDeg = static_cast<int8_t>(buf[10]);
+  for (int axis = 0; axis < 3; ++axis) {
+    out->rateDeciDps[axis] = static_cast<int16_t>(
+        (static_cast<uint16_t>(buf[11 + 2 * axis]) << 8) | buf[12 + 2 * axis]);
+  }
   return true;
 }
 
