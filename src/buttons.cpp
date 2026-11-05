@@ -68,6 +68,14 @@ void AmidalaConsole::process(ButtonAction &button) {
   case button.kThrottleStep:
     fController->stepDriveSpeed(button.throttlestep.dir);
     break;
+  case button.kEstop:
+    println(fController->isEstopActive() ? "RESUME (button)" : "! EMERGENCY STOP (button)");
+    fController->toggleEstop();
+    break;
+  case button.kMotorsToggle:
+    fController->toggleMotors();
+    println(fController->areMotorsDisabled() ? "MOTORS OFF (button)" : "MOTORS ON (button)");
+    break;
   }
   // Play ack emote for non-audio actions when ackon is enabled
   if (button.action != ButtonAction::kNone &&

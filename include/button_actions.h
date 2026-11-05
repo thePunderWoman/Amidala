@@ -43,7 +43,9 @@ struct ButtonAction {
     kHCRMuse   = 8,  // Toggle HCR musing on/off
     kDomeCmd   = 9,  // Dome drive command (subcmd, arg)
     kVolumeStep = 10,   // Step volume up/down by params.snipsVolumeStep (dir, target)
-    kThrottleStep = 11  // Step drive speed cap up/down by params.snipsThrottleStep (dir)
+    kThrottleStep = 11, // Step drive speed cap up/down by params.snipsThrottleStep (dir)
+    kEstop     = 12,  // E-stop, or resume if already e-stopped (no args)
+    kMotorsToggle = 13  // Switch drive and dome motors off/on (no args)
   };
 
   // Sub-commands for kDomeCmd.  Stored in dome.subcmd.
@@ -200,6 +202,12 @@ struct ButtonAction {
     case kThrottleStep:
       stream->print(F("Drive Throttle "));
       stream->print(throttlestep.dir ? F("Up") : F("Down"));
+      break;
+    case kEstop:
+      stream->print(F("E-stop / Resume"));
+      break;
+    case kMotorsToggle:
+      stream->print(F("Motors On/Off"));
       break;
     }
     if (action != kSerialStr && action != kI2CStr && serialid != 0) {

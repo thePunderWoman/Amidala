@@ -1,4 +1,5 @@
 #include "controller.h"
+#include "snips_drive.h"
 #include "debug.h"
 #include "dome_position_math.h"
 #include "xbee_spi.h"
@@ -520,6 +521,12 @@ void AmidalaController::animate() {
     xbeeSPIReceiveAllSnips(snipsRemotes, 2);
     fSnipsRight.checkFailsafe(params.fst);
     fSnipsLeft.checkFailsafe(params.fst);
+    // The Snips sticks feed the same drive/dome remotes the XBee pocket
+    // remotes use (see snips_drive.h), so they get the same per-tick
+    // failsafe check and update().
+    const uint32_t now = millis();
+    SnipsDrive::tick(&fDriveStick, params.fst, now);
+    SnipsDrive::tick(&fDomeStick, params.fst, now);
   } else if (params.controllertype == CONTROLLER_TYPE_RC) {
     // No XBee SPI traffic in this mode -- this board only has a PPM input
     // pin, not a physical RC-select pin, so params.controllertype alone

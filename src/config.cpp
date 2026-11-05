@@ -506,6 +506,8 @@ static bool parseButtonLine(const char *cmd, AmidalaParameters &params,
     b->serialid = (argcount >= 5) ? args[4] : 0;
     break;
   case ButtonAction::kHCRMuse:
+  case ButtonAction::kEstop:
+  case ButtonAction::kMotorsToggle:
     b->serialid = (argcount >= 3) ? args[2] : 0;
     break;
   case ButtonAction::kDomeCmd:
@@ -855,6 +857,8 @@ bool AmidalaConfig::cfg_gesture(const char *cmd) {
         b->serialid = (argcount >= 4) ? args[3] : 0;
         break;
       case ButtonAction::kHCRMuse:
+      case ButtonAction::kEstop:
+      case ButtonAction::kMotorsToggle:
         b->serialid = (argcount >= 2) ? args[1] : 0;
         break;
       case ButtonAction::kDomeCmd:

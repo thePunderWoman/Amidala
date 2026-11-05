@@ -22,6 +22,7 @@
 #include "arduino_mock.h"
 #include "snips_packet.h"
 #include "snips_downlink.h"
+#include "snips_drive.h"
 #include "snips_buttons.h"
 #include "snips_remote.h"
 #include "button_dispatch.h"
@@ -36,8 +37,9 @@ void tearDown(void) {}
 // ---- Fake AmidalaController -------------------------------------------------
 // Mirrors just the surface SnipsRemote's methods use: params.altbtn/
 // mutebutton/volumewheel/altvolumewheel/driveSpeedPct/B[], fAudio's live
-// volume/mute/muse readback, the e-stop/auto dome/sequence state, and the
-// button-dispatch/alt/mute methods.
+// volume/mute/muse readback, the e-stop/motors/auto dome/sequence state, the
+// drive/dome remotes the sticks feed, and the button-dispatch/alt/mute
+// methods.
 
 struct FakeAudio {
     // Returns a value that encodes which wheel was asked for, so tests can
@@ -71,10 +73,15 @@ struct FakeDriver {
     int resetMuteTimerCount = 0;
 
     bool estop = false;
+    bool motorsOff = false;
     bool autoDome = false;
     SnipsDownlink::SequenceTracker fSequences;
     bool isEstopActive() const { return estop; }
+    bool areMotorsDisabled() const { return motorsOff; }
     bool isAutoDomeOn() const { return autoDome; }
+
+    XBeePocketRemote fDriveStick;
+    XBeePocketRemote fDomeStick;
 
     bool isAltHeld() const { return altHeld; }
     void setAltHeld(bool held) { altHeld = held; }
@@ -118,7 +125,8 @@ public:
         addr16 = senderAddr16;
         if (fDriver) {
             int altbtn = fDriver->params.altbtn;
-            bool altbtnInRange = altbtn > 0 && SnipsRemote::ownsButtonNumber(fSide, (unsigned)altbtn);
+            bool altbtnInRange = altbtn > 0 && SnipsRemote::ownsButtonNumber(fSide, (unsigned)altbtn) &&
+                                 !SnipsRemote::isGestureButton(fSide, SnipsRemote::bitIndexForButtonNumber(fSide, (unsigned)altbtn));
             if (altbtnInRange) {
                 unsigned altBit = SnipsRemote::bitIndexForButtonNumber(fSide, (unsigned)altbtn);
                 fDriver->setAltHeld((pkt.buttonMask & (1u << altBit)) != 0);
@@ -126,12 +134,14 @@ public:
             bool altHeld = fDriver->isAltHeld();
 
             int muteBtn = fDriver->params.mutebutton;
-            bool muteBtnInRange = muteBtn > 0 && SnipsRemote::ownsButtonNumber(fSide, (unsigned)muteBtn);
+            bool muteBtnInRange = muteBtn > 0 && SnipsRemote::ownsButtonNumber(fSide, (unsigned)muteBtn) &&
+                                  !SnipsRemote::isGestureButton(fSide, SnipsRemote::bitIndexForButtonNumber(fSide, (unsigned)muteBtn));
             unsigned muteBit = muteBtnInRange
                 ? SnipsRemote::bitIndexForButtonNumber(fSide, (unsigned)muteBtn)
                 : SnipsButtons::kCount;
 
             for (unsigned i = 0; i < SnipsButtons::kCount; i++) {
+                if (SnipsRemote::isGestureButton(fSide, i)) continue;
                 bool prevPressed = (fPrevButtonMask & (1u << i)) != 0;
                 bool pressed = (pkt.buttonMask & (1u << i)) != 0;
                 bool down = !prevPressed && pressed;
@@ -143,6 +153,8 @@ public:
                     fDriver->noteMuteBtnUp();
                 }
             }
+
+            SnipsDrive::applyUplink(pkt, fSide == SnipsRemote::kLeft, now, &stickRemote());
         }
         fPrevButtonMask = pkt.buttonMask;
         triggerPercent = pkt.triggerPercent;
@@ -152,12 +164,27 @@ public:
         chargeState = pkt.chargeState;
         fConnected = true;
         fLastPacket = now;
+
+        if (pkt.flags & Snips::UplinkPacket::kFlagShuttingDown) {
+            if (fDriver) SnipsDrive::markShutDown(&stickRemote());
+            disconnect();
+        }
+    }
+
+    XBeePocketRemote &stickRemote() const {
+        return fSide == SnipsRemote::kRight ? fDriver->fDriveStick : fDriver->fDomeStick;
     }
 
     void checkFailsafe(uint32_t fst) {
         if (!fConnected) return;
         if (fLastPacket + fst >= millis()) return;
+        disconnect();
+    }
+
+    void disconnect() {
         fConnected = false;
+        fPrevButtonMask = 0;
+        for (ButtonLongPress &lp : fLongPress) lp = ButtonLongPress();
         if (!fDriver) return;
         int altbtn = fDriver->params.altbtn;
         if (altbtn > 0 && SnipsRemote::ownsButtonNumber(fSide, (unsigned)altbtn))
@@ -180,6 +207,7 @@ public:
                 fDriver->fAudio.isMuted() ? 0 : fDriver->fAudio.getEffectiveVolume(wheel);
             status.throttlePercent = params.driveSpeedPct;
             status.estop = fDriver->isEstopActive();
+            status.motorsDisabled = fDriver->areMotorsDisabled();
             status.muse = fDriver->fAudio.isMusing();
             status.autoDome = fDriver->isAutoDomeOn();
             const uint32_t now = millis();
@@ -279,16 +307,43 @@ void test_left_macro1_fires_button9() {
     TEST_ASSERT_EQUAL(1, driver.buttonUpCount[9]);
 }
 
-void test_left_stickclick_fires_button16() {
+void test_left_stickclick_is_gesture_not_button16() {
+    // The left controller's stick click starts/ends gestures through the
+    // dome remote, like the XBee dome remote's own stick click.
     FakeDriver driver;
     TestSnipsRemote r(&driver, TestSnipsRemote::Side::kLeft);
 
     Snips::UplinkPacket pkt;
     pkt.buttonMask = (1u << SnipsButtons::kStickClick);
     r.onUplinkReceived(pkt);
+    TEST_ASSERT_TRUE(driver.fDomeStick.button[4]);
     pkt.buttonMask = 0;
     r.onUplinkReceived(pkt);
-    TEST_ASSERT_EQUAL(1, driver.buttonUpCount[16]);
+    TEST_ASSERT_FALSE(driver.fDomeStick.button[4]);
+    TEST_ASSERT_EQUAL(0, driver.buttonUpCount[16]);
+}
+
+void test_left_stickclick_cannot_be_alt_or_mute() {
+    FakeDriver driver;
+    driver.params.altbtn = 16;
+    driver.params.mutebutton = 16;
+    TestSnipsRemote r(&driver, TestSnipsRemote::Side::kLeft);
+
+    Snips::UplinkPacket pkt;
+    pkt.buttonMask = (1u << SnipsButtons::kStickClick);
+    r.onUplinkReceived(pkt);
+    TEST_ASSERT_FALSE(driver.isAltHeld());
+    pkt.buttonMask = 0;
+    r.onUplinkReceived(pkt);
+    TEST_ASSERT_EQUAL(0, driver.muteBtnUpCount);
+}
+
+void test_isGestureButton_only_left_stick_click() {
+    for (unsigned bit = 0; bit < SnipsButtons::kCount; bit++) {
+        TEST_ASSERT_FALSE(SnipsRemote::isGestureButton(SnipsRemote::kRight, bit));
+        TEST_ASSERT_EQUAL(bit == SnipsButtons::kStickClick,
+                          SnipsRemote::isGestureButton(SnipsRemote::kLeft, bit));
+    }
 }
 
 void test_left_rightdown_fires_button20() {
@@ -461,6 +516,55 @@ void test_checkfailsafe_leaves_other_sides_alt_state_alone() {
     TEST_ASSERT_TRUE(driver.isAltHeld());  // untouched
 }
 
+// ---- sticks feed the drive/dome remotes --------------------------------------
+
+void test_right_stick_feeds_drive_remote_left_feeds_dome() {
+    FakeDriver driver;
+    TestSnipsRemote right(&driver, TestSnipsRemote::Side::kRight);
+    TestSnipsRemote left(&driver, TestSnipsRemote::Side::kLeft);
+
+    mock_millis_value = 1234;
+    Snips::UplinkPacket pkt;
+    pkt.stickYPercent = 100;  // pushed forward
+    right.onUplinkReceived(pkt);
+    TEST_ASSERT_TRUE(XBeePocketRemote::kXBee == driver.fDriveStick.type);
+    TEST_ASSERT_EQUAL_UINT32(1234, driver.fDriveStick.lastPacket);
+    TEST_ASSERT_TRUE(XBeePocketRemote::kFailsafe == driver.fDomeStick.type);
+
+    left.onUplinkReceived(pkt);
+    TEST_ASSERT_TRUE(XBeePocketRemote::kXBee == driver.fDomeStick.type);
+}
+
+void test_shutting_down_flag_disconnects_now() {
+    FakeDriver driver;
+    TestSnipsRemote r(&driver, TestSnipsRemote::Side::kRight);
+    Snips::UplinkPacket pkt;
+    r.onUplinkReceived(pkt);
+    TEST_ASSERT_TRUE(r.isConnected());
+
+    pkt.flags = Snips::UplinkPacket::kFlagShuttingDown;
+    r.onUplinkReceived(pkt);
+    TEST_ASSERT_FALSE(r.isConnected());
+    TEST_ASSERT_TRUE(XBeePocketRemote::kFailsafe == driver.fDriveStick.type);
+}
+
+void test_button_held_across_disconnect_does_not_fire_on_reconnect() {
+    FakeDriver driver;
+    TestSnipsRemote r(&driver, TestSnipsRemote::Side::kRight);
+    Snips::UplinkPacket pkt;
+    pkt.buttonMask = (1u << SnipsButtons::kMacro1);
+    mock_millis_value = 1000;
+    r.onUplinkReceived(pkt);
+
+    mock_millis_value = 3000;
+    r.checkFailsafe(500);  // link lost with Macro1 still down
+    TEST_ASSERT_FALSE(r.isConnected());
+
+    pkt.buttonMask = 0;  // released by the time the link is back
+    r.onUplinkReceived(pkt);
+    TEST_ASSERT_EQUAL(0, driver.buttonUpCount[1]);
+}
+
 // ---- buildDownlinkPacket() ----------------------------------------------
 
 void test_downlink_handedness_matches_side() {
@@ -524,10 +628,11 @@ void test_downlink_flags_follow_estop_muse_and_auto_dome() {
     TEST_ASSERT_EQUAL_UINT8(0, r.buildDownlinkPacket().flags);
 
     driver.estop = true;
+    driver.motorsOff = true;
     driver.fAudio.musing = true;
     driver.autoDome = true;
-    TEST_ASSERT_EQUAL_UINT8(Snips::DownlinkPacket::kFlagEstop | Snips::DownlinkPacket::kFlagMuse |
-                                Snips::DownlinkPacket::kFlagAutoDome,
+    TEST_ASSERT_EQUAL_UINT8(Snips::DownlinkPacket::kFlagEstop | Snips::DownlinkPacket::kFlagMotorsDisabled |
+                                Snips::DownlinkPacket::kFlagMuse | Snips::DownlinkPacket::kFlagAutoDome,
                             r.buildDownlinkPacket().flags);
 }
 
@@ -559,7 +664,9 @@ int main(int argc, char **argv) {
     RUN_TEST(test_right_stateful_buttons_fire_21_through_24);
     RUN_TEST(test_no_stateful_button_number_ever_falls_in_1_to_9);
     RUN_TEST(test_left_macro1_fires_button9);
-    RUN_TEST(test_left_stickclick_fires_button16);
+    RUN_TEST(test_left_stickclick_is_gesture_not_button16);
+    RUN_TEST(test_left_stickclick_cannot_be_alt_or_mute);
+    RUN_TEST(test_isGestureButton_only_left_stick_click);
     RUN_TEST(test_left_rightdown_fires_button20);
 
     RUN_TEST(test_alt_button_in_range_suppresses_own_press_and_sets_held);
@@ -575,6 +682,9 @@ int main(int argc, char **argv) {
     RUN_TEST(test_checkfailsafe_clears_alt_and_mute_state_on_disconnect);
     RUN_TEST(test_checkfailsafe_leaves_other_sides_alt_state_alone);
 
+    RUN_TEST(test_right_stick_feeds_drive_remote_left_feeds_dome);
+    RUN_TEST(test_shutting_down_flag_disconnects_now);
+    RUN_TEST(test_button_held_across_disconnect_does_not_fire_on_reconnect);
     RUN_TEST(test_downlink_handedness_matches_side);
     RUN_TEST(test_downlink_without_driver_reports_only_handedness);
     RUN_TEST(test_downlink_volume_reads_main_wheel_without_a_volume_button);
