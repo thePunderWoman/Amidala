@@ -76,6 +76,14 @@ void AmidalaConsole::process(ButtonAction &button) {
     fController->toggleMotors();
     println(fController->areMotorsDisabled() ? "MOTORS OFF (button)" : "MOTORS ON (button)");
     break;
+  case button.kDriveMotorsToggle:
+    fController->toggleDriveMotors();
+    println(fController->areDriveMotorsDisabled() ? "FOOT MOTORS OFF (button)" : "FOOT MOTORS ON (button)");
+    break;
+  case button.kDomeMotorToggle:
+    fController->toggleDomeMotor();
+    println(fController->isDomeMotorDisabled() ? "DOME MOTOR OFF (button)" : "DOME MOTOR ON (button)");
+    break;
   }
   // Play ack emote for non-audio actions when ackon is enabled
   if (button.action != ButtonAction::kNone &&

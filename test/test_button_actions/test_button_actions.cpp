@@ -27,6 +27,10 @@ void test_action_type_constants() {
     TEST_ASSERT_EQUAL(9, ButtonAction::kDomeCmd);
     TEST_ASSERT_EQUAL(10, ButtonAction::kVolumeStep);
     TEST_ASSERT_EQUAL(11, ButtonAction::kThrottleStep);
+    TEST_ASSERT_EQUAL(12, ButtonAction::kEstop);
+    TEST_ASSERT_EQUAL(13, ButtonAction::kMotorsToggle);
+    TEST_ASSERT_EQUAL(14, ButtonAction::kDriveMotorsToggle);
+    TEST_ASSERT_EQUAL(15, ButtonAction::kDomeMotorToggle);
 }
 
 // ---- DomeCmdType sub-command constants --------------------------------------
@@ -435,6 +439,21 @@ void test_print_throttle_step_down() {
     TEST_ASSERT_NOT_NULL(strstr(out.buf, "Down"));
 }
 
+static void assertDescription(uint8_t action, const char* expected) {
+    ButtonAction b;
+    memset(&b, 0, sizeof(b));
+    b.action = action;
+    StringPrint out;
+    b.printDescription(&out);
+    TEST_ASSERT_NOT_NULL(strstr(out.buf, expected));
+}
+
+void test_print_motor_toggles() {
+    assertDescription(ButtonAction::kMotorsToggle, "All Motors On/Off");
+    assertDescription(ButtonAction::kDriveMotorsToggle, "Foot Motors On/Off");
+    assertDescription(ButtonAction::kDomeMotorToggle, "Dome Motor On/Off");
+}
+
 void test_print_does_not_append_serial_for_serial_action() {
     // kSerialStr itself must not double-print ", Serial #".
     ButtonAction b;
@@ -537,6 +556,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_print_alt_volume_step);
     RUN_TEST(test_print_throttle_step_up);
     RUN_TEST(test_print_throttle_step_down);
+    RUN_TEST(test_print_motor_toggles);
     RUN_TEST(test_print_appends_serial_string_for_non_serial_actions);
     RUN_TEST(test_print_does_not_append_serial_for_serial_action);
 

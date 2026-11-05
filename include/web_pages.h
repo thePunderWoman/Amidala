@@ -11745,7 +11745,9 @@ function actionOptions(sel) {
   }
   h += '<optgroup label="Safety">';
   h += opt('12', 'E-stop / Resume', sel);
-  h += opt('13', 'Motors On/Off',   sel);
+  h += opt('13', 'All Motors On/Off',  sel);
+  h += opt('14', 'Foot Motors On/Off', sel);
+  h += opt('15', 'Dome Motor On/Off',  sel);
   h += '</optgroup>';
   h += '<optgroup label="Special">';
   h += opt('altbtn',     'Set as Alt Modifier', sel);
@@ -11764,6 +11766,8 @@ function actToVal(act) {
   if (act.t === 11) return '11,' + (act.x || 0);
   if (act.t === 12) return '12';
   if (act.t === 13) return '13';
+  if (act.t === 14) return '14';
+  if (act.t === 15) return '15';
   return '0';
 }
 

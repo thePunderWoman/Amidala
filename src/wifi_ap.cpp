@@ -622,6 +622,8 @@ static void parseButtonAction(ButtonAction& b, const String& value) {
     case ButtonAction::kHCRMuse:
     case ButtonAction::kEstop:
     case ButtonAction::kMotorsToggle:
+    case ButtonAction::kDriveMotorsToggle:
+    case ButtonAction::kDomeMotorToggle:
         b.action = type;
         if (c1 > 0) b.serialid = (uint16_t)value.substring(c1 + 1).toInt();
         break;
