@@ -921,6 +921,14 @@ void test_diagnostics_page_polls_api_info() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_DIAGNOSTICS, "dome_homed"));
 }
 
+// With Snips controllers, the connectivity rows name them instead of the
+// XBee remotes (xbee_drive/xbee_dome carry their state, see handleApiInfo).
+void test_diagnostics_labels_snips_controllers() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DIAGNOSTICS, "Snips Right"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DIAGNOSTICS, "Snips Left"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_DIAGNOSTICS, "controllertype"));
+}
+
 // ---------------------------------------------------------------------------
 // Board pin labels -- the UI must never show firmware pin numbers
 // ---------------------------------------------------------------------------
@@ -1254,6 +1262,7 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_info_json_has_free_heap);
     RUN_TEST(test_info_json_has_xbee_and_bt_fields_default_false);
     RUN_TEST(test_info_json_xbee_drive_true);
+    RUN_TEST(test_diagnostics_labels_snips_controllers);
     RUN_TEST(test_info_json_bt_connected_true);
     RUN_TEST(test_info_json_dome_homed_and_degrees);
     RUN_TEST(test_info_json_dome_not_homed_default);

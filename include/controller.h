@@ -568,6 +568,10 @@ private:
   bool fAltHeld = false;
   uint32_t fLastMuteBtnUpTime = 0;
   MotorLock fMotorLock;
+  // Last failsafe state reported for each Snips controller (right, left);
+  // starts true, like XBeePocketRemote::failsafeNotice.
+  bool fSnipsFailsafeNotice[2] = {true, true};
+  void reportRemoteFailsafe(unsigned index, bool failsafe, bool *notice, bool newlineFirst);
   SnipsBindings::Evaluator fBindingEval;
   // Per side (SnipsRemote::Side): a bound accelerator/dome speed's latest
   // value, or -1 with no such binding on that side.
