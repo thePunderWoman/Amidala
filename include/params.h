@@ -170,7 +170,7 @@ inline void defaultSerialPorts(SerialPortId &domePort, SerialPortId &drivePort) 
 
 
 // Parses a comma-separated list of 1-based serial string indices ("1,3,5",
-// the value of f=/hidden=/seq= and their /api/config keys) into `out`.
+// the value of f=/hidden=/utility= and their /api/config keys) into `out`.
 // Zeros are dropped and any non-digit counts as a separator (so a stray
 // space or semicolon can't stall the scan); stops at `max` entries.
 // Returns the number stored.
@@ -418,16 +418,16 @@ struct AmidalaParameters {
   SerialPortId domeSerialPort;
   SerialPortId driveSerialPort;
 
-  // ---- Serial string metadata (favorites, hidden, sequences, categories) ----
+  // ---- Serial string metadata (favorites, hidden, utility, categories) ------
   // Stored as separate config blocks; sstr= entries are unchanged.
   //   f=1,3,5          → sstr_favs / sstr_fav_cnt
   //   hidden=2,4       → sstr_hidden / sstr_hidden_cnt
-  //   seq=1,4          → sstr_seq / sstr_seq_cnt (shown on Snips controllers
-  //                      as the running sequence when a button sends them)
+  //   utility=1,4      → sstr_util / sstr_util_cnt (utility commands: never
+  //                      shown on Snips controllers as a running sequence)
   //   cat=Dome|1,3     → sstr_cats / sstr_cat_count (one line per category)
 #define MAX_SSTR_FAVS        64
 #define MAX_SSTR_HIDDEN      64
-#define MAX_SSTR_SEQ         64
+#define MAX_SSTR_UTIL        64
 #define MAX_SSTR_CATS        16
 #define MAX_SSTR_CAT_ENTRIES 64
   struct SstrCat {
@@ -439,8 +439,8 @@ struct AmidalaParameters {
   uint8_t  sstr_fav_cnt;
   uint16_t sstr_hidden[MAX_SSTR_HIDDEN];
   uint8_t  sstr_hidden_cnt;
-  uint16_t sstr_seq[MAX_SSTR_SEQ];
-  uint8_t  sstr_seq_cnt;
+  uint16_t sstr_util[MAX_SSTR_UTIL];
+  uint8_t  sstr_util_cnt;
   SstrCat  sstr_cats[MAX_SSTR_CATS];
   uint8_t  sstr_cat_count;
 
@@ -534,10 +534,10 @@ struct AmidalaParameters {
   constexpr unsigned getSerialStringCount() { return sizeof(Str) / sizeof(Str[0]); }
 
   // True if the serial string at 1-based index `oneBasedIdx` is marked as a
-  // sequence (seq=), the same indexing as sstr_favs/sstr_hidden.
-  bool isSstrSequence(unsigned oneBasedIdx) const {
-    for (uint8_t i = 0; i < sstr_seq_cnt; i++) {
-      if (sstr_seq[i] == oneBasedIdx) return true;
+  // utility command (utility=), the same indexing as sstr_favs/sstr_hidden.
+  bool isSstrUtility(unsigned oneBasedIdx) const {
+    for (uint8_t i = 0; i < sstr_util_cnt; i++) {
+      if (sstr_util[i] == oneBasedIdx) return true;
     }
     return false;
   }

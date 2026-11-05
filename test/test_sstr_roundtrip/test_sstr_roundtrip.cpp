@@ -1106,7 +1106,7 @@ void test_parse_cat_with_semicolon_separator_terminates() {
     TEST_ASSERT_EQUAL(3, (int)p.sstr_cats[0].idx[1]);
 }
 
-// ---- seq= (Snips sequences) -------------------------------------------------
+// ---- utility= (never shown on Snips controllers) ----------------------------
 
 void test_parse_sstr_index_list() {
     uint16_t out[8];
@@ -1133,24 +1133,24 @@ void test_parse_sstr_index_list_treats_any_non_digit_as_separator() {
     TEST_ASSERT_EQUAL(9, out[2]);
 }
 
-void test_is_sstr_sequence() {
+void test_is_sstr_utility() {
     AmidalaParameters p; memset(&p, 0, sizeof(p));
-    TEST_ASSERT_FALSE(p.isSstrSequence(1));
-    p.sstr_seq_cnt = parseSstrIndexList("2,5", p.sstr_seq, MAX_SSTR_SEQ);
-    TEST_ASSERT_TRUE(p.isSstrSequence(2));
-    TEST_ASSERT_TRUE(p.isSstrSequence(5));
-    TEST_ASSERT_FALSE(p.isSstrSequence(3));
+    TEST_ASSERT_FALSE(p.isSstrUtility(1));  // unmarked strings show as sequences
+    p.sstr_util_cnt = parseSstrIndexList("2,5", p.sstr_util, MAX_SSTR_UTIL);
+    TEST_ASSERT_TRUE(p.isSstrUtility(2));
+    TEST_ASSERT_TRUE(p.isSstrUtility(5));
+    TEST_ASSERT_FALSE(p.isSstrUtility(3));
 }
 
-void test_buildFullConfigJson_sstr_seq() {
+void test_buildFullConfigJson_sstr_util() {
     AmidalaParameters p; memset(&p, 0, sizeof(p));
     int vals[64];
     std::string empty(buildFullConfigJson(p).c_str());
-    TEST_ASSERT_EQUAL(0, parseIntArrayFromJson(empty, "sstr_seq", vals, 64));
+    TEST_ASSERT_EQUAL(0, parseIntArrayFromJson(empty, "sstr_util", vals, 64));
 
-    p.sstr_seq[0] = 3; p.sstr_seq[1] = 8; p.sstr_seq_cnt = 2;
+    p.sstr_util[0] = 3; p.sstr_util[1] = 8; p.sstr_util_cnt = 2;
     std::string json(buildFullConfigJson(p).c_str());
-    TEST_ASSERT_EQUAL(2, parseIntArrayFromJson(json, "sstr_seq", vals, 64));
+    TEST_ASSERT_EQUAL(2, parseIntArrayFromJson(json, "sstr_util", vals, 64));
     TEST_ASSERT_EQUAL(3, vals[0]);
     TEST_ASSERT_EQUAL(8, vals[1]);
 }
@@ -1240,7 +1240,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_parse_sstr_index_list);
     RUN_TEST(test_parse_sstr_index_list_drops_zeros_and_stops_at_max);
     RUN_TEST(test_parse_sstr_index_list_treats_any_non_digit_as_separator);
-    RUN_TEST(test_is_sstr_sequence);
-    RUN_TEST(test_buildFullConfigJson_sstr_seq);
+    RUN_TEST(test_is_sstr_utility);
+    RUN_TEST(test_buildFullConfigJson_sstr_util);
     return UNITY_END();
 }
