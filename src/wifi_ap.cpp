@@ -786,14 +786,17 @@ static void handleApiInfo() {
     else serial2Role = drive;
 #endif
 
+    const bool snips = sCtrl->params.controllertype == CONTROLLER_TYPE_SNIPS;
     sServer.send(200, "application/json",
         buildInfoJson(drive, dome, audio,
                       sCtrl->params.wifiSSID,
                       WiFi.softAPIP().toString().c_str(),
                       sCtrl->params.serialcount,
                       ESP.getFreeHeap(),
-                      sCtrl->fDriveStick.isConnected(),
-                      sCtrl->fDomeStick.isConnected(),
+                      // With Snips controllers, the right one is the drive
+                      // controller and the left one the dome controller.
+                      snips ? sCtrl->fSnipsRight.isConnected() : sCtrl->fDriveStick.isConnected(),
+                      snips ? sCtrl->fSnipsLeft.isConnected() : sCtrl->fDomeStick.isConnected(),
                       gBTGamepad.isConnected(),
 #if DOME_DRIVE == DOME_DRIVE_ROBOCLAW
                       sCtrl->fDomeDrive->isHomed(),

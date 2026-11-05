@@ -17640,11 +17640,14 @@ function buildUI(cfg) {
   html += '<div class="row"><div class="row-label">Restart Droid</div>'
         + '<button class="be-action" onclick="_doRestart(this)">Restart</button></div>';
 
+  // /api/info's xbee_drive/xbee_dome report the Snips controllers instead
+  // when they're the controller type: right drives, left turns the dome.
+  var isSnips = !!cfg && Number(cfg.controllertype) === 1;
   html += '<div class="section-label">Connectivity</div>';
-  html += '<div class="row"><div class="row-label">XBee Drive</div>'
+  html += '<div class="row"><div class="row-label">' + (isSnips ? 'Snips Right' : 'XBee Drive') + '</div>'
         + '<div class="pin-led low" id="conn-xd-led">&#9679;</div>'
         + '<div class="pin-state low" id="conn-xd-st">OFFLINE</div></div>';
-  html += '<div class="row"><div class="row-label">XBee Dome</div>'
+  html += '<div class="row"><div class="row-label">' + (isSnips ? 'Snips Left' : 'XBee Dome') + '</div>'
         + '<div class="pin-led low" id="conn-xo-led">&#9679;</div>'
         + '<div class="pin-state low" id="conn-xo-st">OFFLINE</div></div>';
   html += '<div class="row"><div class="row-label">Bluetooth</div>'

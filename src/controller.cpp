@@ -534,6 +534,10 @@ void AmidalaController::animate() {
     const uint32_t now = millis();
     SnipsDrive::tick(&fDriveStick, params.fst, now);
     SnipsDrive::tick(&fDomeStick, params.fst, now);
+    // Same connect/disconnect notice and status pins as the XBee remotes:
+    // J1 is the right (drive) controller, J2 the left (dome) one.
+    for (unsigned i = 0; i < 2; i++)
+      reportRemoteFailsafe(i, snipsRemotes[i]->failsafe(), &fSnipsFailsafeNotice[i], false);
   } else if (params.controllertype == CONTROLLER_TYPE_RC) {
     // No XBee SPI traffic in this mode -- this board only has a PPM input
     // pin, not a physical RC-select pin, so params.controllertype alone
@@ -586,26 +590,33 @@ void AmidalaController::animate() {
     (void)stickActive;
     for (unsigned i = 0; i < sizeof(remote) / sizeof(remote[0]); i++) {
       auto r = remote[i];
-      if (r->failsafe() != r->failsafeNotice) {
-        if (stickActive)
-          fConsole.println();
-        fConsole.print('J');
-        fConsole.print(i + 1);
-        fConsole.print(F(" FS "));
-        fConsole.println(r->failsafe() ? F("ON") : F("OFF"));
-        if (i == 0) {
-#ifdef STATUS_J1_PIN
-          digitalWrite(STATUS_J1_PIN, r->failsafe() ? LOW : HIGH);
-#endif
-        } else if (i == 1) {
-#ifdef STATUS_J2_PIN
-          digitalWrite(STATUS_J2_PIN, r->failsafe() ? LOW : HIGH);
-#endif
-        }
-        r->failsafeNotice = r->failsafe();
-      }
+      reportRemoteFailsafe(i, r->failsafe(), &r->failsafeNotice, stickActive);
     }
   }
+}
+
+// Prints "J<n> FS ON/OFF" and sets that remote's status pin when its
+// failsafe state changes since the last report (`notice`). Index 0 is J1
+// (drive / right Snips controller), 1 is J2 (dome / left).
+void AmidalaController::reportRemoteFailsafe(unsigned index, bool failsafe, bool *notice,
+                                             bool newlineFirst) {
+  if (failsafe == *notice) return;
+  if (newlineFirst)
+    fConsole.println();
+  fConsole.print('J');
+  fConsole.print(index + 1);
+  fConsole.print(F(" FS "));
+  fConsole.println(failsafe ? F("ON") : F("OFF"));
+  if (index == 0) {
+#ifdef STATUS_J1_PIN
+    digitalWrite(STATUS_J1_PIN, failsafe ? LOW : HIGH);
+#endif
+  } else if (index == 1) {
+#ifdef STATUS_J2_PIN
+    digitalWrite(STATUS_J2_PIN, failsafe ? LOW : HIGH);
+#endif
+  }
+  *notice = failsafe;
 }
 
 // ---------------------------------------------------------------------------
