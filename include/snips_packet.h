@@ -32,9 +32,19 @@ enum class ChargeState : uint8_t {
 
 // Controller -> Amidala, sent periodically. Raw per-button state (bit i =
 // SnipsButtons::Index i, see snips_buttons.h) plus calibrated analog and
-// battery/charge status.
+// battery/charge status, then the IMU readings (see snips_bindings.h for
+// the axes).
+//
+// Wire format (17 bytes): button mask (2), trigger, stick X, stick Y,
+// battery, charge state, flags, then IMU flags, pitch, roll and three
+// rotation rates (int16, big endian, tenths of a deg/s). Controller
+// firmware from before the IMU fields sends only the first 8 bytes, which
+// still decode, with imuFlags 0.
 struct UplinkPacket {
   static constexpr uint8_t kFlagShuttingDown = 0x01;
+
+  static constexpr uint8_t kImuTiltValid = 0x01;
+  static constexpr uint8_t kImuRatesValid = 0x02;
 
   uint16_t buttonMask = 0;
   uint8_t triggerPercent = 0;   // 0-100
@@ -43,6 +53,11 @@ struct UplinkPacket {
   uint8_t batteryPercent = 0;   // 0-100
   ChargeState chargeState = ChargeState::kDone;
   uint8_t flags = 0;            // bit0 = kFlagShuttingDown
+
+  uint8_t imuFlags = 0;         // kImuTiltValid | kImuRatesValid
+  int8_t pitchDeg = 0;          // -90..90, + with the stick end raised
+  int8_t rollDeg = 0;           // -90..90, + with the right edge raised
+  int16_t rateDeciDps[3] = {};  // about the controller's X, Y, Z axes
 };
 
 // Amidala -> controller, sent after every processed uplink (see
@@ -83,14 +98,16 @@ struct DownlinkPacket {
   char sequenceName[kSequenceNameLength + 1] = {};  // empty = none
 };
 
-constexpr size_t kUplinkEncodedSize = 8;
+constexpr size_t kUplinkBaseSize = 8;  // before the IMU fields
+constexpr size_t kUplinkEncodedSize = 17;
 constexpr size_t kDownlinkEncodedSize = 8 + DownlinkPacket::kSequenceNameLength;  // 23
 
 // Returns the number of bytes written (always kUplinkEncodedSize), or 0 if
 // outCapacity is too small.
 size_t encodeUplink(const UplinkPacket &packet, uint8_t *outBuf, size_t outCapacity);
 
-// Returns false if length is too short to hold a full uplink packet.
+// Returns false if length is too short to hold the original 8-byte uplink.
+// A packet without the IMU fields decodes with imuFlags 0.
 bool decodeUplink(const uint8_t *buf, size_t length, UplinkPacket *out);
 
 // Returns the number of bytes written (always kDownlinkEncodedSize), or 0 if

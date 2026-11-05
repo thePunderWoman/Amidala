@@ -43,6 +43,19 @@ def _parse_action(parts, offset=0):
     return act
 
 
+def _unused_binding():
+    return {"u": 0, "s": 0, "src": 0, "t": 0, "a": 0, "min": 0, "max": 100, "inv": 0}
+
+
+def _parse_binding(csv):
+    """Parse "side,source,target,arg,min,max,invert" like SnipsBindings::parseBinding()."""
+    try:
+        s, src, t, a, lo, hi, inv = [int(x) for x in csv.split(",")[:7]]
+    except ValueError:
+        return None
+    return {"u": 1, "s": s, "src": src, "t": t, "a": a, "min": lo, "max": hi, "inv": 1 if inv else 0}
+
+
 def _make_button():
     return {"p": {"t": 0}, "l": {"t": 0}, "a": {"t": 0}}
 
@@ -146,6 +159,8 @@ def parse_example_config(path):
         "sstr_favs":   [],  # list of 1-based sstr indices that are favorites
         "sstr_hidden": [],  # list of 1-based sstr indices hidden from Droid Control
         "sstr_util":   [],  # list of 1-based sstr indices never shown on Snips as sequences
+        # Snips analog bindings (include/snips_bindings.h), one per slot.
+        "snips_bindings": [_unused_binding() for _ in range(6)],
         "sstr_cats":   [],  # list of {name, idx: [...]} category objects
         "estop_cmds":  [],
         "resume_cmds": [],
@@ -165,7 +180,7 @@ def parse_example_config(path):
         # buttons) regardless of controllertype, matching params.h/
         # getButtonCount() -- switching controllertype only changes which
         # slots the web UI surfaces, never how many exist.
-        "buttons":  [_make_button() for _ in range(24)],
+        "buttons":  [_make_button() for _ in range(30)],
         "gestures": [],
         "gadgets_cfg": [{"type": 0, "sstr": []} for _ in range(7)],
         "sstr_user_cnt": 0,
@@ -272,6 +287,14 @@ def parse_example_config(path):
         # Hidden: hidden=2,4
         if key == "hidden":
             cfg["sstr_hidden"] = [int(x) for x in val.split(",") if x.strip().isdigit()]
+            continue
+
+        # Snips analog binding: sbind=N,side,source,target,arg,min,max,invert
+        if key == "sbind":
+            b = _parse_binding(val.split(",", 1)[1]) if "," in val else None
+            n = int(val.split(",", 1)[0]) if val.split(",", 1)[0].isdigit() else 0
+            if b and 1 <= n <= 6:
+                cfg["snips_bindings"][n - 1] = b
             continue
 
         # Utility: utility=1,4
@@ -899,6 +922,11 @@ class _Handler(SimpleHTTPRequestHandler):
         # sstr_hidden — replace full hidden list; value: "2,4"
         elif key == "sstr_hidden":
             _config["sstr_hidden"] = [int(x) for x in value.split(",") if x.strip().isdigit()]
+        # sbind_N — Snips analog binding N (0-based); empty removes it
+        elif key.startswith("sbind_"):
+            idx = int(key[6:])
+            if 0 <= idx < 6:
+                _config["snips_bindings"][idx] = _parse_binding(value) if value else _unused_binding()
         # sstr_util — replace full utility list; value: "1,4"
         elif key == "sstr_util":
             _config["sstr_util"] = [int(x) for x in value.split(",") if x.strip().isdigit()]

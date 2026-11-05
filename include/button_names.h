@@ -78,6 +78,14 @@ inline const char *label(uint8_t controllerType, unsigned num, char *out, size_t
     case CONTROLLER_TYPE_SNIPS:
       name = snipsName(num, right);
       family = "Snips Controller";
+      if (!name && num >= 25 && num <= 30) {
+        // Virtual buttons for analog bindings (snips_bindings.h), which
+        // can come from either controller.
+        static const char *const kAnalogNames[] = {
+            "Analog 1", "Analog 2", "Analog 3", "Analog 4", "Analog 5", "Analog 6"};
+        name = kAnalogNames[num - 25];
+        sided = false;
+      }
       break;
     case CONTROLLER_TYPE_BLUETOOTH:
       name = btName(num);

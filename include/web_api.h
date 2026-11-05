@@ -327,6 +327,24 @@ inline String buildFullConfigJson(const AmidalaParameters& p) {
     json += "],";
 
     // Categories — [{name, idx:[...]}]
+    // Snips analog bindings -- [{u, s, src, t, a, min, max, inv}], one per
+    // slot (see snips_bindings.h). u=0 marks an empty slot.
+    json += "\"snips_bindings\":[";
+    for (int i = 0; i < SnipsBindings::kMaxBindings; i++) {
+        const SnipsBindings::Binding& b = p.sbind[i];
+        if (i > 0) json += ",";
+        json += "{\"u\":";   json += b.used ? "1" : "0";
+        json += ",\"s\":";   json += String(b.side);
+        json += ",\"src\":"; json += String((int)b.source);
+        json += ",\"t\":";   json += String((int)b.target);
+        json += ",\"a\":";   json += String(b.arg);
+        json += ",\"min\":"; json += String(b.inMin);
+        json += ",\"max\":"; json += String(b.inMax);
+        json += ",\"inv\":"; json += b.invert ? "1" : "0";
+        json += "}";
+    }
+    json += "],";
+
     json += "\"sstr_cats\":[";
     for (uint8_t i = 0; i < p.sstr_cat_count; i++) {
         if (i > 0) json += ",";

@@ -43,6 +43,8 @@ void SnipsRemote::onUplinkReceived(const Snips::UplinkPacket &pkt, uint16_t send
 
     // Right drives, left turns the dome -- see snips_drive.h.
     SnipsDrive::applyUplink(pkt, fSide == kLeft, now, &stickRemote());
+    // Trigger and IMU, as configured on the Controllers page.
+    fDriver->applySnipsBindings(fSide, pkt);
   }
 
   fPrevButtonMask = pkt.buttonMask;
@@ -80,6 +82,7 @@ void SnipsRemote::disconnect() {
   fPrevButtonMask = 0;
   for (ButtonLongPress &lp : fLongPress) lp = ButtonLongPress();
   if (!fDriver) return;
+  fDriver->snipsSideDisconnected(fSide);
 
   // Clear alt/mute state if this side owns them, mirroring
   // DriveController/DomeController::onDisconnect() in drive_controllers.cpp.

@@ -71,7 +71,13 @@ void test_snips_stateful_buttons_split_by_side() {
 
 void test_snips_out_of_range_falls_back() {
     TEST_ASSERT_EQUAL_STRING("Button 0",  lbl(CONTROLLER_TYPE_SNIPS, 0));
-    TEST_ASSERT_EQUAL_STRING("Button 25", lbl(CONTROLLER_TYPE_SNIPS, 25));
+    TEST_ASSERT_EQUAL_STRING("Button 31", lbl(CONTROLLER_TYPE_SNIPS, 31));
+}
+
+// 25-30 are virtual buttons for analog bindings, from either controller.
+void test_snips_analog_virtual_buttons_have_no_side() {
+    TEST_ASSERT_EQUAL_STRING("Analog 1 (25)", lbl(CONTROLLER_TYPE_SNIPS, 25));
+    TEST_ASSERT_EQUAL_STRING("Analog 6 (30)", lbl(CONTROLLER_TYPE_SNIPS, 30));
 }
 
 // ---- Bluetooth gamepad ------------------------------------------------------
@@ -113,6 +119,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_snips_left_fire_and_forget_buttons);
     RUN_TEST(test_snips_stateful_buttons_split_by_side);
     RUN_TEST(test_snips_out_of_range_falls_back);
+    RUN_TEST(test_snips_analog_virtual_buttons_have_no_side);
     RUN_TEST(test_bt_has_no_side_prefix);
     RUN_TEST(test_bt_reserved_slots_fall_back);
     RUN_TEST(test_label_truncates_instead_of_overflowing);

@@ -732,6 +732,21 @@ bool AmidalaConfig::cfg_hidden(const char *cmd) {
   return false;
 }
 
+bool AmidalaConfig::cfg_sbind(const char *cmd) {
+  if (!startswith(cmd, "sbind="))
+    return false;
+  // Snips analog binding: sbind=N,side,source,target,arg,inMin,inMax,invert
+  // (N 1-based, see snips_bindings.h).
+  char *end = nullptr;
+  long n = strtol(cmd, &end, 10);
+  if (end == cmd || *end != ',' || n < 1 || n > SnipsBindings::kMaxBindings)
+    return true;
+  SnipsBindings::Binding b;
+  if (SnipsBindings::parseBinding(end + 1, &b))
+    fController->params.sbind[n - 1] = b;
+  return true;
+}
+
 bool AmidalaConfig::cfg_utility(const char *cmd) {
   if (!startswith(cmd, "utility="))
     return false;
@@ -1460,6 +1475,7 @@ const AmidalaConfig::ConfigHandler AmidalaConfig::kConfigHandlers[] = {
     &AmidalaConfig::cfg_fav,
     &AmidalaConfig::cfg_hidden,
     &AmidalaConfig::cfg_utility,
+    &AmidalaConfig::cfg_sbind,
     &AmidalaConfig::cfg_cat,
     &AmidalaConfig::cfg_estopstr,
     &AmidalaConfig::cfg_resumestr,

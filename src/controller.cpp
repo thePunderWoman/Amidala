@@ -516,6 +516,13 @@ void AmidalaController::animate() {
   }
   sLastControllerType = params.controllertype;
 
+  // Snips analog bindings scale the drive/dome speed; nothing else does, so
+  // drop any leftover scaling once another controller type is in charge.
+  if (params.controllertype != CONTROLLER_TYPE_SNIPS &&
+      (fDriveAccelScale != 1.0f || fDomeAccelScale != 1.0f)) {
+    clearSnipsBindingScales();
+  }
+
   if (params.controllertype == CONTROLLER_TYPE_SNIPS) {
     SnipsRemote* snipsRemotes[2] = {&fSnipsRight, &fSnipsLeft};
     xbeeSPIReceiveAllSnips(snipsRemotes, 2);
