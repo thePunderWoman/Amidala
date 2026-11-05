@@ -221,7 +221,7 @@ public:
   }
 
   // Clears the e-stop, broadcasts the resumestr= commands, and re-enables
-  // the drive and dome unless motors are also switched off.
+  // the drive and dome, except whichever is also switched off.
   void resume() {
     fMotorLock.setEstop(false);
     enableController();
@@ -237,23 +237,39 @@ public:
 
   bool isEstopActive() const { return fMotorLock.estopActive(); }
 
-  // "Motors on/off" (ButtonAction::kMotorsToggle): stops and disables the
-  // drive and dome without an e-stop broadcast, and keeps them off until
-  // switched back on. Reported to Snips controllers as motors disabled.
-  void setMotorsDisabled(bool disabled) {
-    fMotorLock.setMotorsDisabled(disabled);
-    if (disabled) {
-      emergencyStop();
-      domeEmergencyStop();
-    } else {
-      enableController();
-      enableDomeController();
-    }
+  // Foot motors on/off (ButtonAction::kDriveMotorsToggle): stops and
+  // disables the foot drive without an e-stop broadcast, and keeps it off
+  // until switched back on. The dome is untouched.
+  void setDriveMotorsDisabled(bool disabled) {
+    fMotorLock.setDriveMotorsOff(disabled);
+    if (disabled) emergencyStop();
+    else enableController();
   }
 
-  void toggleMotors() { setMotorsDisabled(!areMotorsDisabled()); }
+  // Dome motor on/off (ButtonAction::kDomeMotorToggle): the same, for the
+  // dome only.
+  void setDomeMotorDisabled(bool disabled) {
+    fMotorLock.setDomeMotorOff(disabled);
+    if (disabled) domeEmergencyStop();
+    else enableDomeController();
+  }
 
-  bool areMotorsDisabled() const { return fMotorLock.motorsDisabled(); }
+  // "Motors On/Off" (ButtonAction::kMotorsToggle): feet and dome together.
+  void setMotorsDisabled(bool disabled) {
+    setDriveMotorsDisabled(disabled);
+    setDomeMotorDisabled(disabled);
+  }
+
+  // If only one is off, the combined toggle switches both off first (see
+  // MotorLock::nextAllMotorsOff()).
+  void toggleMotors() { setMotorsDisabled(fMotorLock.nextAllMotorsOff()); }
+  void toggleDriveMotors() { setDriveMotorsDisabled(!areDriveMotorsDisabled()); }
+  void toggleDomeMotor() { setDomeMotorDisabled(!isDomeMotorDisabled()); }
+
+  // Either one off. Reported to Snips controllers as motors disabled.
+  bool areMotorsDisabled() const { return fMotorLock.anyMotorsOff(); }
+  bool areDriveMotorsDisabled() const { return fMotorLock.driveMotorsOff(); }
+  bool isDomeMotorDisabled() const { return fMotorLock.domeMotorOff(); }
 
   // Snips analog bindings (snips_bindings.h): applies what one uplink from
   // `side` asks for, and lets go of `side`'s bindings when it disconnects
@@ -457,11 +473,11 @@ public:
 #endif
   }
 
-  // No-op while an e-stop or motors-off is in effect (see motor_lock.h), so
-  // a reconnecting remote or a recovered safety stop can't bring the drive
-  // back behind it.
+  // No-op while an e-stop or foot-motors-off is in effect (see
+  // motor_lock.h), so a reconnecting remote or a recovered safety stop
+  // can't bring the drive back behind it.
   void enableController() {
-    if (!fMotorLock.allowsEnable()) return;
+    if (!fMotorLock.allowsDriveEnable()) return;
 #ifdef DRIVE_SYSTEM
     fTankDrive->setEnable(true);
 #endif
@@ -477,9 +493,9 @@ public:
   // Defined in src/controller.cpp — references servoDispatch global.
   void emergencyStop();
 
-  // Gated the same way as enableController().
+  // Gated the same way as enableController(), by e-stop or dome-motor-off.
   void enableDomeController() {
-    if (!fMotorLock.allowsEnable()) return;
+    if (!fMotorLock.allowsDomeEnable()) return;
 #ifdef DOME_DRIVE
     fDomeDrive->setEnable(true);
 #endif

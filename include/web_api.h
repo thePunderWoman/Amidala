@@ -82,7 +82,8 @@ inline String buildInfoJson(const char* drive, const char* dome,
 // ---------------------------------------------------------------------------
 // buttonActionJson — serialize one ButtonAction to a compact JSON object.
 // Only emits the fields that are relevant to the action type:
-//   {t:TYPE}             for kNone / kHCRMuse / kEstop / kMotorsToggle
+//   {t:TYPE}             for kNone / kHCRMuse / kEstop / kMotorsToggle /
+//                        kDriveMotorsToggle / kDomeMotorToggle
 //   {t:5, x:ID}         for kSerialStr   (stable ID of serial string)
 //   {t:7, x:EMO, y:LVL} for kHCREmote
 //   {t:9, x:SUBCMD}     for kDomeCmd

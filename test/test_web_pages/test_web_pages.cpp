@@ -740,6 +740,15 @@ void test_controllers_page_groups_serial_cmds_by_category() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "Serial Commands"));
 }
 
+void test_controllers_page_offers_each_motor_toggle() {
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "'All Motors On/Off'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "opt('14', 'Foot Motors On/Off'"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "opt('15', 'Dome Motor On/Off'"));
+    // Saved actions map back to the right option when the page loads.
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "if (act.t === 14) return '14';"));
+    TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "if (act.t === 15) return '15';"));
+}
+
 void test_controllers_page_has_bluetooth_gamepad_labels() {
     TEST_ASSERT_TRUE(contains(WEB_PAGE_CONTROLLERS, "CONTROLLER_TYPE_BLUETOOTH"));
     // Dual-labeled face buttons so users aren't guessing Xbox vs. PlayStation.
@@ -1136,6 +1145,16 @@ void test_buttonActionJson_kThrottleStep_emits_dir_only() {
     TEST_ASSERT_FALSE(contains(j.c_str(), "\"y\""));
 }
 
+void test_buttonActionJson_motor_toggles_emit_type_only() {
+    uint8_t types[] = {ButtonAction::kMotorsToggle, ButtonAction::kDriveMotorsToggle,
+                       ButtonAction::kDomeMotorToggle};
+    const char* expected[] = {"{\"t\":13}", "{\"t\":14}", "{\"t\":15}"};
+    for (int i = 0; i < 3; i++) {
+        String j = buttonActionJson(makeAction(types[i]));
+        TEST_ASSERT_EQUAL_STRING(expected[i], j.c_str());
+    }
+}
+
 void test_buttonActionJson_wraps_in_braces() {
     ButtonAction b = makeAction(ButtonAction::kNone);
     String j = buttonActionJson(b);
@@ -1210,6 +1229,7 @@ int main(int /*argc*/, char** /*argv*/) {
     // Controllers page
     RUN_TEST(test_controllers_page_uses_config_endpoint);
     RUN_TEST(test_controllers_page_groups_serial_cmds_by_category);
+    RUN_TEST(test_controllers_page_offers_each_motor_toggle);
     RUN_TEST(test_controllers_page_has_bluetooth_gamepad_labels);
 
     // Droid control page
@@ -1288,6 +1308,7 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_buttonActionJson_kVolumeStep_emits_dir_and_target);
     RUN_TEST(test_buttonActionJson_kThrottleStep_emits_dir_only);
     RUN_TEST(test_buttonActionJson_wraps_in_braces);
+    RUN_TEST(test_buttonActionJson_motor_toggles_emit_type_only);
 
     // Board pin labels
     RUN_TEST(test_no_embedded_page_mentions_gpio);
