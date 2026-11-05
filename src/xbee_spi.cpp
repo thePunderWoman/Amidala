@@ -162,8 +162,8 @@ static void xbeeSPISendFrame(const uint8_t *frameData, uint16_t frameLength) {
 // phase 2 downlink). Wraps XBeeTransmitFrame::buildTransmitRequest() and
 // hands the result to xbeeSPISendFrame().
 static void xbeeSPISendPacket(uint16_t dest16, const uint8_t *payload, uint16_t payloadLength) {
-    // Sized for the current Snips::DownlinkPacket (the only caller, 33
-    // bytes + 14-byte Transmit Request header = 47) with headroom -- if the
+    // Sized for the current Snips::DownlinkPacket (the only caller, 23
+    // bytes + 14-byte Transmit Request header = 37) with headroom -- if the
     // packet format ever grows past this, fail loudly at compile time
     // rather than have buildTransmitRequest() silently drop the frame
     // (returns 0 on an undersized output buffer).

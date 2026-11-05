@@ -113,32 +113,35 @@ void test_uplink_decode_accepts_oversized_buffer() {
 // ---- Downlink: byte layout and string field handling ------------------------
 
 void test_downlink_encode_byte_positions() {
+    // Must match SnipsControllers' include/packet.h byte for byte.
     Snips::DownlinkPacket pkt;
     pkt.handedness = Snips::DownlinkPacket::Handedness::kRight;
-    strcpy(pkt.leftLabel, "Vol");
-    strcpy(pkt.leftValue, "50");
-    strcpy(pkt.rightLabel, "Thr");
-    strcpy(pkt.rightValue, "100");
+    pkt.volumePercent = 1;
+    pkt.throttlePercent = 2;
+    pkt.flags = 3;
+    pkt.droidBatteryPercent = 4;
+    pkt.sequenceId = 5;
+    pkt.sequenceProgressPercent = 6;
+    strcpy(pkt.sequenceName, "AB");
 
     uint8_t buf[Snips::kDownlinkEncodedSize];
     size_t n = Snips::encodeDownlink(pkt, buf, sizeof(buf));
     TEST_ASSERT_EQUAL(Snips::kDownlinkEncodedSize, n);
-    TEST_ASSERT_EQUAL(33, Snips::kDownlinkEncodedSize);
+    TEST_ASSERT_EQUAL(23, Snips::kDownlinkEncodedSize);
 
-    TEST_ASSERT_EQUAL_UINT8((uint8_t)Snips::DownlinkPacket::Handedness::kRight, buf[0]);
-    TEST_ASSERT_EQUAL_UINT8('V', buf[1]);
-    TEST_ASSERT_EQUAL_UINT8('o', buf[2]);
-    TEST_ASSERT_EQUAL_UINT8('l', buf[3]);
-    TEST_ASSERT_EQUAL_UINT8(0, buf[4]);  // zero-padded remainder of leftLabel
+    const uint8_t expected[] = {Snips::DownlinkPacket::kVersion, 2, 1, 2, 3, 4, 5, 6,
+                                'A', 'B', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, buf, sizeof(expected));
 }
 
-void test_downlink_round_trip_strings() {
+void test_downlink_round_trip() {
     Snips::DownlinkPacket pkt;
     pkt.handedness = Snips::DownlinkPacket::Handedness::kLeft;
-    strcpy(pkt.leftLabel, "Vol");
-    strcpy(pkt.leftValue, "75");
-    strcpy(pkt.rightLabel, "Thr");
-    strcpy(pkt.rightValue, "20");
+    pkt.volumePercent = 70;
+    pkt.throttlePercent = 65;
+    pkt.flags = Snips::DownlinkPacket::kFlagEstop | Snips::DownlinkPacket::kFlagMuse;
+    pkt.sequenceId = 9;
+    strcpy(pkt.sequenceName, "Leia msg");
 
     uint8_t buf[Snips::kDownlinkEncodedSize];
     Snips::encodeDownlink(pkt, buf, sizeof(buf));
@@ -146,53 +149,45 @@ void test_downlink_round_trip_strings() {
     Snips::DownlinkPacket out;
     TEST_ASSERT_TRUE(Snips::decodeDownlink(buf, sizeof(buf), &out));
     TEST_ASSERT_TRUE(Snips::DownlinkPacket::Handedness::kLeft == out.handedness);
-    TEST_ASSERT_EQUAL_STRING("Vol", out.leftLabel);
-    TEST_ASSERT_EQUAL_STRING("75", out.leftValue);
-    TEST_ASSERT_EQUAL_STRING("Thr", out.rightLabel);
-    TEST_ASSERT_EQUAL_STRING("20", out.rightValue);
+    TEST_ASSERT_EQUAL_UINT8(70, out.volumePercent);
+    TEST_ASSERT_EQUAL_UINT8(65, out.throttlePercent);
+    TEST_ASSERT_EQUAL_UINT8(Snips::DownlinkPacket::kFlagEstop | Snips::DownlinkPacket::kFlagMuse,
+                            out.flags);
+    TEST_ASSERT_EQUAL_UINT8(Snips::DownlinkPacket::kUnknown, out.droidBatteryPercent);
+    TEST_ASSERT_EQUAL_UINT8(9, out.sequenceId);
+    TEST_ASSERT_EQUAL_UINT8(Snips::DownlinkPacket::kUnknown, out.sequenceProgressPercent);
+    TEST_ASSERT_EQUAL_STRING("Leia msg", out.sequenceName);
 }
 
-void test_downlink_field_exactly_kFieldLength_has_no_null_padding_but_still_terminates() {
-    // An 8-char string exactly fills the field with no room for a padding
-    // zero -- decode must still null-terminate at kFieldLength.
+void test_downlink_name_exactly_field_length_still_terminates() {
     Snips::DownlinkPacket pkt;
-    strcpy(pkt.leftLabel, "12345678");  // exactly kFieldLength (8) chars
+    strcpy(pkt.sequenceName, "123456789012345");  // exactly kSequenceNameLength
 
     uint8_t buf[Snips::kDownlinkEncodedSize];
     Snips::encodeDownlink(pkt, buf, sizeof(buf));
 
     Snips::DownlinkPacket out;
     TEST_ASSERT_TRUE(Snips::decodeDownlink(buf, sizeof(buf), &out));
-    TEST_ASSERT_EQUAL_STRING("12345678", out.leftLabel);
+    TEST_ASSERT_EQUAL_STRING("123456789012345", out.sequenceName);
 }
 
-void test_downlink_field_without_null_terminator_does_not_overrun() {
-    // DownlinkPacket's fields are char[kFieldLength+1] -- exercise the
-    // defensive bound in encodeDownlink's field writer directly by filling
-    // all kFieldLength+1 bytes with non-null data (no terminator at all)
-    // and confirming only the first kFieldLength bytes are read.
+void test_downlink_name_without_null_terminator_does_not_overrun() {
     Snips::DownlinkPacket pkt;
-    memset(pkt.rightLabel, 'X', sizeof(pkt.rightLabel));  // no null terminator anywhere
+    memset(pkt.sequenceName, 'X', sizeof(pkt.sequenceName));  // no terminator
 
     uint8_t buf[Snips::kDownlinkEncodedSize];
     Snips::encodeDownlink(pkt, buf, sizeof(buf));
 
     Snips::DownlinkPacket out;
     TEST_ASSERT_TRUE(Snips::decodeDownlink(buf, sizeof(buf), &out));
-    TEST_ASSERT_EQUAL_STRING("XXXXXXXX", out.rightLabel);  // exactly kFieldLength Xs
+    TEST_ASSERT_EQUAL_STRING("XXXXXXXXXXXXXXX", out.sequenceName);
 }
 
-void test_downlink_empty_strings_round_trip() {
-    Snips::DownlinkPacket pkt;  // all fields default-initialized empty
-    uint8_t buf[Snips::kDownlinkEncodedSize];
-    Snips::encodeDownlink(pkt, buf, sizeof(buf));
-
+void test_downlink_decode_rejects_wrong_version() {
+    uint8_t buf[Snips::kDownlinkEncodedSize] = {};
+    buf[0] = 2;  // the old format's first byte was handedness (0-2)
     Snips::DownlinkPacket out;
-    TEST_ASSERT_TRUE(Snips::decodeDownlink(buf, sizeof(buf), &out));
-    TEST_ASSERT_EQUAL_STRING("", out.leftLabel);
-    TEST_ASSERT_EQUAL_STRING("", out.leftValue);
-    TEST_ASSERT_EQUAL_STRING("", out.rightLabel);
-    TEST_ASSERT_EQUAL_STRING("", out.rightValue);
+    TEST_ASSERT_FALSE(Snips::decodeDownlink(buf, sizeof(buf), &out));
 }
 
 void test_downlink_encode_rejects_short_buffer() {
@@ -202,7 +197,7 @@ void test_downlink_encode_rejects_short_buffer() {
 }
 
 void test_downlink_decode_rejects_short_buffer() {
-    uint8_t buf[Snips::kDownlinkEncodedSize - 1] = {};
+    uint8_t buf[Snips::kDownlinkEncodedSize - 1] = {Snips::DownlinkPacket::kVersion};
     Snips::DownlinkPacket out;
     TEST_ASSERT_FALSE(Snips::decodeDownlink(buf, sizeof(buf), &out));
 }
@@ -222,10 +217,10 @@ int main(int argc, char **argv) {
     RUN_TEST(test_uplink_decode_accepts_oversized_buffer);
 
     RUN_TEST(test_downlink_encode_byte_positions);
-    RUN_TEST(test_downlink_round_trip_strings);
-    RUN_TEST(test_downlink_field_exactly_kFieldLength_has_no_null_padding_but_still_terminates);
-    RUN_TEST(test_downlink_field_without_null_terminator_does_not_overrun);
-    RUN_TEST(test_downlink_empty_strings_round_trip);
+    RUN_TEST(test_downlink_round_trip);
+    RUN_TEST(test_downlink_name_exactly_field_length_still_terminates);
+    RUN_TEST(test_downlink_name_without_null_terminator_does_not_overrun);
+    RUN_TEST(test_downlink_decode_rejects_wrong_version);
     RUN_TEST(test_downlink_encode_rejects_short_buffer);
     RUN_TEST(test_downlink_decode_rejects_short_buffer);
 

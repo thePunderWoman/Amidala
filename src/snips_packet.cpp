@@ -61,25 +61,30 @@ size_t encodeDownlink(const DownlinkPacket &packet, uint8_t *outBuf, size_t outC
   if (outCapacity < kDownlinkEncodedSize) {
     return 0;
   }
-  constexpr size_t kF = DownlinkPacket::kFieldLength;
-  outBuf[0] = static_cast<uint8_t>(packet.handedness);
-  writeField(packet.leftLabel, outBuf + 1, kF);
-  writeField(packet.leftValue, outBuf + 1 + kF, kF);
-  writeField(packet.rightLabel, outBuf + 1 + 2 * kF, kF);
-  writeField(packet.rightValue, outBuf + 1 + 3 * kF, kF);
+  outBuf[0] = DownlinkPacket::kVersion;
+  outBuf[1] = static_cast<uint8_t>(packet.handedness);
+  outBuf[2] = packet.volumePercent;
+  outBuf[3] = packet.throttlePercent;
+  outBuf[4] = packet.flags;
+  outBuf[5] = packet.droidBatteryPercent;
+  outBuf[6] = packet.sequenceId;
+  outBuf[7] = packet.sequenceProgressPercent;
+  writeField(packet.sequenceName, outBuf + 8, DownlinkPacket::kSequenceNameLength);
   return kDownlinkEncodedSize;
 }
 
 bool decodeDownlink(const uint8_t *buf, size_t length, DownlinkPacket *out) {
-  if (length < kDownlinkEncodedSize) {
+  if (length < kDownlinkEncodedSize || buf[0] != DownlinkPacket::kVersion) {
     return false;
   }
-  constexpr size_t kF = DownlinkPacket::kFieldLength;
-  out->handedness = static_cast<DownlinkPacket::Handedness>(buf[0]);
-  readField(buf + 1, kF, out->leftLabel);
-  readField(buf + 1 + kF, kF, out->leftValue);
-  readField(buf + 1 + 2 * kF, kF, out->rightLabel);
-  readField(buf + 1 + 3 * kF, kF, out->rightValue);
+  out->handedness = static_cast<DownlinkPacket::Handedness>(buf[1]);
+  out->volumePercent = buf[2];
+  out->throttlePercent = buf[3];
+  out->flags = buf[4];
+  out->droidBatteryPercent = buf[5];
+  out->sequenceId = buf[6];
+  out->sequenceProgressPercent = buf[7];
+  readField(buf + 8, DownlinkPacket::kSequenceNameLength, out->sequenceName);
   return true;
 }
 

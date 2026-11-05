@@ -58,6 +58,10 @@ public:
   // Toggle HCR muse on/off.
   void toggleMuse();
 
+  // Current muse and mute state, for the Snips controller status screen.
+  bool isMusing() const { return fMusing; }
+  bool isMuted() const { return fMuted; }
+
   // Toggle mute on/off.
   // Mute: sets all HCR channels to 0 while remembering the live volumes.
   // Unmute: restores the last-applied per-channel volumes.

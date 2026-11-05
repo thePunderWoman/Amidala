@@ -1320,6 +1320,7 @@ static void handleApiConfigPost() {
 static void triggerEstop() {
     monAppend("! EMERGENCY STOP", 'i');
     if (!sCtrl) return;
+    sCtrl->setEstopActive(true);
     sCtrl->emergencyStop();
     sCtrl->domeEmergencyStop();
     for (uint8_t i = 0; i < sCtrl->params.estopCmdCount; i++)
@@ -1329,6 +1330,7 @@ static void triggerEstop() {
 static void triggerResume() {
     monAppend("RESUME", 'i');
     if (!sCtrl) return;
+    sCtrl->setEstopActive(false);
     sCtrl->enableController();
     sCtrl->enableDomeController();
     for (uint8_t i = 0; i < sCtrl->params.resumeCmdCount; i++)
