@@ -744,6 +744,16 @@ bool AmidalaConfig::cfg_hidden(const char *cmd) {
   return false;
 }
 
+bool AmidalaConfig::cfg_seq(const char *cmd) {
+  if (!startswith(cmd, "seq="))
+    return false;
+  // Sequences: seq=1,4 (comma-separated 1-based sstr indices shown on Snips
+  // controllers as the running sequence)
+  AmidalaParameters &params = fController->params;
+  params.sstr_seq_cnt = parseSstrIndexList(cmd, params.sstr_seq, MAX_SSTR_SEQ);
+  return true;
+}
+
 bool AmidalaConfig::cfg_cat(const char *cmd) {
   if (!startswith(cmd, "cat="))
     return false;
@@ -1466,6 +1476,7 @@ const AmidalaConfig::ConfigHandler AmidalaConfig::kConfigHandlers[] = {
     &AmidalaConfig::cfg_sstr,
     &AmidalaConfig::cfg_fav,
     &AmidalaConfig::cfg_hidden,
+    &AmidalaConfig::cfg_seq,
     &AmidalaConfig::cfg_cat,
     &AmidalaConfig::cfg_estopstr,
     &AmidalaConfig::cfg_resumestr,

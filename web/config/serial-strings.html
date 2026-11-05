@@ -20,6 +20,7 @@
 .ss-badge{font-size:.65rem;letter-spacing:.08em;border-radius:3px;padding:.1rem .4rem;border:1px solid}
 .ss-badge.fav{color:#c8a84b;border-color:#c8a84b;background:rgba(200,168,75,.08)}
 .ss-badge.hidden{color:var(--muted);border-color:var(--border)}
+.ss-badge.seq{color:var(--accent);border-color:var(--accent)}
 .ss-fields input{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.3rem .5rem;font-family:inherit;font-size:.82rem;box-sizing:border-box;border-radius:4px}
 .ss-fields input:focus{outline:none;border-color:var(--accent)}
 .ss-fields input.mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.75rem}
@@ -65,6 +66,7 @@
 var _d = [];           // [{n, s}, ...] — user-defined sstr entries only
 var _favs = [];        // 1-based sstr indices that are favorites
 var _hidden = [];      // 1-based sstr indices hidden from Droid Control
+var _seq = [];         // 1-based sstr indices shown on Snips controllers as sequences
 var _cats = [];        // [{name, idx:[...]}, ...] — categories
 var _serverCatCount = 0;
 var _ed = -1;          // 0-based index of row being edited, -1 = none
@@ -77,6 +79,7 @@ function load() {
     _d = allSstr.slice(0, userCnt).map(function(x){return {id:x.id, n:x.n, s:x.s};});
     _favs   = (d.sstr_favs   || []).slice();
     _hidden = (d.sstr_hidden || []).slice();
+    _seq    = (d.sstr_seq    || []).slice();
     _cats   = (d.sstr_cats   || []).map(function(c){
       return {name:c.name, idx:(c.idx||[]).slice()};
     });
@@ -105,7 +108,7 @@ function catForIdx(ob) {
   return '';
 }
 
-function editRow(i, name, s, cat, fav, hid, id) {
+function editRow(i, name, s, cat, fav, hid, seq, id) {
   var ob = (i >= 0) ? (i+1) : (_d.length+1);
   var onSave = (i >= 0) ? 'saveEdit('+i+')' : 'saveNew()';
   var idLabel = (id !== undefined && id > 0) ? '<span style="font-size:.6rem;color:var(--muted)">#'+id+'</span>' : '';
@@ -118,6 +121,7 @@ function editRow(i, name, s, cat, fav, hid, id) {
     +'<div class="ss-checkrow">'
     +'<label><input type="checkbox" id="ed-fav"'+(fav?' checked':'')+'>&#9733; Favorite</label>'
     +'<label><input type="checkbox" id="ed-hid"'+(hid?' checked':'')+'>Hide from Droid Control</label>'
+    +'<label title="When a button sends this, Snips controllers show its name as the running sequence"><input type="checkbox" id="ed-seq"'+(seq?' checked':'')+'>Snips sequence</label>'
     +'</div>'
     +'</div>'
     +'<div class="ss-acts">'
@@ -148,8 +152,9 @@ function render() {
       var cat = catForIdx(ob);
       var fav = _favs.indexOf(ob) >= 0;
       var hid = _hidden.indexOf(ob) >= 0;
+      var seq = _seq.indexOf(ob) >= 0;
       if (i === _ed && !_isNew) {
-        h += editRow(i, row.n, row.s, cat, fav, hid, row.id);
+        h += editRow(i, row.n, row.s, cat, fav, hid, seq, row.id);
       } else {
         var idBadge = (row.id > 0) ? '<br><span style="font-size:.6rem;color:var(--muted)">#'+row.id+'</span>' : '';
         h += '<div class="ss-row">'
@@ -161,6 +166,7 @@ function render() {
         if (cat) h += '<span class="ss-cat">'+esc(cat)+'</span>';
         if (fav) h += '<span class="ss-badge fav">&#9733; Favorite</span>';
         if (hid) h += '<span class="ss-badge hidden">Hidden</span>';
+        if (seq) h += '<span class="ss-badge seq">Sequence</span>';
         h += '</div>'
           +'</div>'
           +'<div class="ss-acts">'
@@ -173,7 +179,7 @@ function render() {
     });
     if (q && !anyVisible) h += '<div id="empty">No commands match &ldquo;'+esc(q)+'&rdquo;.</div>';
   }
-  if (_isNew) h += editRow(-1,'','','',false,false);
+  if (_isNew) h += editRow(-1,'','','',false,false,false);
   h += '<div class="add-row"><button class="btn-add" onclick="addStr()">+ Add Command</button></div>';
   h += renderCategories();
   document.getElementById('main').innerHTML = h;
@@ -212,6 +218,7 @@ function readForm() {
     cat: (document.getElementById('ed-cat').value||'').trim(),
     fav: document.getElementById('ed-fav').checked,
     hid: document.getElementById('ed-hid').checked,
+    seq: document.getElementById('ed-seq').checked,
   };
 }
 
@@ -235,6 +242,11 @@ function applyHidden(ob, isHid) {
   if (isHid) _hidden.push(ob);
 }
 
+function applySeq(ob, isSeq) {
+  _seq = _seq.filter(function(x){return x!==ob;});
+  if (isSeq) _seq.push(ob);
+}
+
 function applyCat(ob, newName) {
   _cats.forEach(function(cat){
     var p = cat.idx.indexOf(ob);
@@ -253,6 +265,7 @@ function saveMeta() {
   var jobs = [];
   jobs.push(function(){return postConfig('sstr_favs', _favs.join(','));});
   jobs.push(function(){return postConfig('sstr_hidden', _hidden.join(','));});
+  jobs.push(function(){return postConfig('sstr_seq', _seq.join(','));});
 
   var localLen = _cats.length, serverLen = _serverCatCount;
   for (var i=0; i<localLen; i++) {
@@ -284,6 +297,7 @@ function shiftMetaAfterDelete(deletedOb) {
   };
   _favs   = shift(_favs);
   _hidden = shift(_hidden);
+  _seq    = shift(_seq);
   _cats.forEach(function(cat){cat.idx=shift(cat.idx);});
   _cats = _cats.filter(function(cat){return cat.idx.length>0;});
 }
@@ -297,6 +311,7 @@ function saveEdit(i) {
     _d[i] = {id:_d[i].id, n:form.n, s:form.s};
     applyFav(ob, form.fav);
     applyHidden(ob, form.hid);
+    applySeq(ob, form.seq);
     applyCat(ob, form.cat);
     return saveMeta();
   }).then(function(){
@@ -314,6 +329,7 @@ function saveNew() {
     var ob = _d.length;
     applyFav(ob, form.fav);
     applyHidden(ob, form.hid);
+    applySeq(ob, form.seq);
     applyCat(ob, form.cat);
     return saveMeta();
   }).then(function(){

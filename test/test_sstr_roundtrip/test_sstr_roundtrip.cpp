@@ -1096,6 +1096,55 @@ void test_full_sstr_meta_block_roundtrip() {
     TEST_ASSERT_EQUAL_STRING("Periscope", p.sstr_cats[1].name);
 }
 
+// ---- seq= (Snips sequences) -------------------------------------------------
+
+void test_parse_sstr_index_list() {
+    uint16_t out[8];
+    TEST_ASSERT_EQUAL(3, parseSstrIndexList("1,4,12", out, 8));
+    TEST_ASSERT_EQUAL(1, out[0]);
+    TEST_ASSERT_EQUAL(4, out[1]);
+    TEST_ASSERT_EQUAL(12, out[2]);
+    TEST_ASSERT_EQUAL(0, parseSstrIndexList("", out, 8));
+}
+
+void test_parse_sstr_index_list_drops_zeros_and_stops_at_max() {
+    uint16_t out[2];
+    TEST_ASSERT_EQUAL(2, parseSstrIndexList("0,5,6,7", out, 2));
+    TEST_ASSERT_EQUAL(5, out[0]);
+    TEST_ASSERT_EQUAL(6, out[1]);
+}
+
+void test_parse_sstr_index_list_treats_any_non_digit_as_separator() {
+    // A comma-only scan would never get past the space or semicolon.
+    uint16_t out[8];
+    TEST_ASSERT_EQUAL(3, parseSstrIndexList("2 3;9", out, 8));
+    TEST_ASSERT_EQUAL(2, out[0]);
+    TEST_ASSERT_EQUAL(3, out[1]);
+    TEST_ASSERT_EQUAL(9, out[2]);
+}
+
+void test_is_sstr_sequence() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    TEST_ASSERT_FALSE(p.isSstrSequence(1));
+    p.sstr_seq_cnt = parseSstrIndexList("2,5", p.sstr_seq, MAX_SSTR_SEQ);
+    TEST_ASSERT_TRUE(p.isSstrSequence(2));
+    TEST_ASSERT_TRUE(p.isSstrSequence(5));
+    TEST_ASSERT_FALSE(p.isSstrSequence(3));
+}
+
+void test_buildFullConfigJson_sstr_seq() {
+    AmidalaParameters p; memset(&p, 0, sizeof(p));
+    int vals[64];
+    std::string empty(buildFullConfigJson(p).c_str());
+    TEST_ASSERT_EQUAL(0, parseIntArrayFromJson(empty, "sstr_seq", vals, 64));
+
+    p.sstr_seq[0] = 3; p.sstr_seq[1] = 8; p.sstr_seq_cnt = 2;
+    std::string json(buildFullConfigJson(p).c_str());
+    TEST_ASSERT_EQUAL(2, parseIntArrayFromJson(json, "sstr_seq", vals, 64));
+    TEST_ASSERT_EQUAL(3, vals[0]);
+    TEST_ASSERT_EQUAL(8, vals[1]);
+}
+
 // ---- main ------------------------------------------------------------------
 
 int main(int argc, char** argv) {
@@ -1175,5 +1224,10 @@ int main(int argc, char** argv) {
     RUN_TEST(test_example_config_buildFullConfigJson_first_sstr_name);
     RUN_TEST(test_example_config_buildFullConfigJson_sstr_count_matches);
 
+    RUN_TEST(test_parse_sstr_index_list);
+    RUN_TEST(test_parse_sstr_index_list_drops_zeros_and_stops_at_max);
+    RUN_TEST(test_parse_sstr_index_list_treats_any_non_digit_as_separator);
+    RUN_TEST(test_is_sstr_sequence);
+    RUN_TEST(test_buildFullConfigJson_sstr_seq);
     return UNITY_END();
 }

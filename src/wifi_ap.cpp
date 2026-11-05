@@ -310,7 +310,7 @@ static bool rewriteSerialStrings() {
     return true;
 }
 
-// Rewrite f=, hidden=, and cat= lines in config.txt from current params state.
+// Rewrite f=, hidden=, seq= and cat= lines in config.txt from current params state.
 static bool rewriteSstrMeta() {
     if (!sCtrl) return false;
     String path = "/config.txt";
@@ -321,7 +321,8 @@ static bool rewriteSstrMeta() {
         while (f.available()) {
             String line = f.readStringUntil('\n');
             if (line.endsWith("\r")) line.remove(line.length() - 1);
-            if (!line.startsWith("f=") && !line.startsWith("hidden=") && !line.startsWith("cat="))
+            if (!line.startsWith("f=") && !line.startsWith("hidden=") &&
+                !line.startsWith("seq=") && !line.startsWith("cat="))
                 out += line + "\n";
         }
         f.close();
@@ -348,6 +349,16 @@ static bool rewriteSstrMeta() {
         for (uint8_t i = 0; i < p.sstr_hidden_cnt; i++) {
             if (i > 0) meta += ",";
             meta += String(p.sstr_hidden[i]);
+        }
+        meta += "\n";
+    }
+
+    // Sequences
+    if (p.sstr_seq_cnt > 0) {
+        meta += "seq=";
+        for (uint8_t i = 0; i < p.sstr_seq_cnt; i++) {
+            if (i > 0) meta += ",";
+            meta += String(p.sstr_seq[i]);
         }
         meta += "\n";
     }
@@ -994,6 +1005,15 @@ static void handleApiConfigPost() {
             if (v > 0) p.sstr_hidden[p.sstr_hidden_cnt++] = v;
             if (*ptr == ',') ptr++;
         }
+        bool ok = rewriteSstrMeta();
+        sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed");
+        return;
+    }
+
+    // sstr_seq — replace entire sequence list; value: "1,4"
+    if (key == "sstr_seq") {
+        AmidalaParameters& p = sCtrl->params;
+        p.sstr_seq_cnt = parseSstrIndexList(value.c_str(), p.sstr_seq, MAX_SSTR_SEQ);
         bool ok = rewriteSstrMeta();
         sServer.send(ok ? 200 : 500, "text/plain", ok ? "OK" : "SD write failed");
         return;

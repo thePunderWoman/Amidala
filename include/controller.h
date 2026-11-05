@@ -219,8 +219,9 @@ public:
 #endif
   }
 
-  // The last named serial string a button or gesture sent, shown on Snips
-  // controllers as the running sequence (see snips_downlink.h).
+  // The last serial string marked as a sequence (seq=, the Serial Commands
+  // page's "Snips sequence" checkbox) that a button or gesture sent, shown
+  // on Snips controllers as the running sequence (see snips_downlink.h).
   SnipsDownlink::SequenceTracker fSequences;
 
   // Maximum gap between two button-up events to count as a double-press.
